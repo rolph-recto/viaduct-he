@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt};
 use egg::*;
 use std::time::*;
 
@@ -23,11 +23,11 @@ struct OpSizeFunction;
 impl LpCostFunction<HE, HEData> for OpSizeFunction {
     fn node_cost(&mut self, _: &EGraph, _: Id, enode: &HE) -> f64 {
         match enode {
-            HE::Num(_) => 0.0,
+            HE::Num(_) => 0.1,
             HE::Add(_) => 6.0,
             HE::Mul(_) => 15.0,
             HE::Rot(_) => 2.0,
-            HE::Symbol(_) => 0.0
+            HE::Symbol(_) => 0.1
         }
     }
 }
@@ -354,33 +354,66 @@ impl Applier<HE, HEData> for RotateSplit {
     }
 }
 
-enum HENodeRef {
-    NodeRef(String),
+#[derive(Copy, Clone)]
+enum HEOperand {
+    NodeRef(usize),
     ConstSym(Symbol),
     ConstNum(i32),
 }
 
-fn gen_instrs(expr: &RecExpr<HE>) -> Vec<String> {
-    let mut node_map: HashMap<Id, HENodeRef> = HashMap::new();
-    let mut instrs: Vec<String> = Vec::new();
-    let mut instr_index: u32 = 1;
 
-    let node_ref_to_str = |nmap: & HashMap<Id, HENodeRef>, id: &Id| -> String {
-        match &nmap[id] {
-            HENodeRef::NodeRef(ref_name) => ref_name.clone(),
-            HENodeRef::ConstNum(n) => n.to_string(),
-            HENodeRef::ConstSym(sym) => sym.to_string()
+impl fmt::Display for HEOperand {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", match self {
+            HEOperand::NodeRef(i) => format!("i{}", i+1),
+            HEOperand::ConstSym(sym) => sym.to_string(),
+            HEOperand::ConstNum(n) => n.to_string()
+        })
+    }
+}
+
+#[derive(Copy, Clone)]
+enum HEInstruction {
+    Add(HEOperand, HEOperand),
+    Mul(HEOperand, HEOperand),
+    Rot(HEOperand, HEOperand),
+}
+
+impl fmt::Display for HEInstruction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            HEInstruction::Add(op1, op2) => write!(f, "{} + {}", op1, op2),
+            HEInstruction::Mul(op1, op2) => write!(f, "{} * {}", op1, op2),
+            HEInstruction::Rot(op1, op2) => write!(f, "rot {} {}", op1, op2)
         }
-    };
+    }
+}
+
+struct HEProgram { instrs: Vec<HEInstruction> }
+
+impl fmt::Display for HEProgram {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.instrs.iter().enumerate().map(|(i, instr)| {
+            write!(f, "let i{} = {}\n", i+1, instr)
+        }).collect()
+    }
+}
+
+fn gen_program(expr: &RecExpr<HE>) -> HEProgram {
+    let mut node_map: HashMap<Id, HEOperand> = HashMap::new();
+    let mut program: HEProgram = HEProgram { instrs: Vec::new() };
+    let mut instr_index: usize = 0;
 
     let mut op_processor =
-        |nmap: &mut HashMap<Id, HENodeRef>, id: Id, op: &str, op1: &Id, op2: &Id| {
-            let str1 = node_ref_to_str(nmap, &op1);
-            let str2 = node_ref_to_str(nmap, &op2);
-            let instr = format!("c{}", instr_index);
+        | nmap: &mut HashMap<Id, HEOperand>,
+          id: Id, ctor: fn(HEOperand, HEOperand) -> HEInstruction,
+          id_op1: &Id, id_op2: &Id |
+        {
+            let op1 = &nmap[id_op1];
+            let op2 = &nmap[id_op2];
 
-            instrs.push(format!("let {} = {} {} {}", &instr, op, str1, str2));
-            nmap.insert(id, HENodeRef::NodeRef(instr));
+            program.instrs.push(ctor(*op1, *op2));
+            nmap.insert(id, HEOperand::NodeRef(instr_index));
 
             instr_index += 1;
         };
@@ -389,28 +422,28 @@ fn gen_instrs(expr: &RecExpr<HE>) -> Vec<String> {
         let id = Id::from(i);
         match node {
             HE::Num(n) => {
-                node_map.insert(id, HENodeRef::ConstNum(*n));
+                node_map.insert(id, HEOperand::ConstNum(*n));
             },
 
             HE::Symbol(sym) => {
-                node_map.insert(id, HENodeRef::ConstSym(*sym));
+                node_map.insert(id, HEOperand::ConstSym(*sym));
             }
 
             HE::Add([id1, id2]) => {
-                op_processor(&mut node_map, id, "add", id1, id2);
+                op_processor(&mut node_map, id, HEInstruction::Add, id1, id2);
             }
 
             HE::Mul([id1, id2]) => {
-                op_processor(&mut node_map, id, "mul", id1, id2);
+                op_processor(&mut node_map, id, HEInstruction::Mul, id1, id2);
             }
 
             HE::Rot([id1, id2]) => {
-                op_processor(&mut node_map, id, "rot", id1, id2);
+                op_processor(&mut node_map, id, HEInstruction::Rot, id1, id2);
             }
         }
     }
 
-    instrs
+    program
 }
 
 /// parse an expression, simplify it using egg, and pretty print it back out
@@ -433,9 +466,7 @@ fn simplify(s: &str) {
     let root = egraph.add_expr(&expr);
 
     println!("Initial HE program:");
-    for instr in gen_instrs(&expr) {
-        println!("{}", instr);
-    }
+    println!("{}", gen_program(&expr));
 
     let mut lp_extractor = LpExtractor::new(egraph, OpSizeFunction);
     let opt_expr = lp_extractor.solve(root);
@@ -452,13 +483,11 @@ fn simplify(s: &str) {
     );
 
     println!("Optimized HE program:");
-    for instr in gen_instrs(&opt_expr) {
-        println!("{}", instr);
-    }
+    println!("{}", gen_program(&opt_expr));
 }
 
 fn main() {
-    // simplify("(+ (+ (+ (* -1 (rot x -6)) (rot x -4)) (* -2 (rot x -1))) (+ (+ (rot x 6) (* -1 (rot x 4))) (* 2 (rot x 1))))")
-    simplify("(+ (+ (+ (rot x -6) (rot x -4)) (rot x -1)) (+ (+ (rot x 6) (rot x 4)) (rot x 1)))");
+    simplify("(+ (+ (+ (rot x -6) (* -1 (rot x -4))) (* 2 (rot x -1))) (+ (+ (rot x 6) (rot x 4)) (* -2 (rot x 1))))");
+    // simplify("(+ (+ (+ (rot x -6) (rot x -4)) (rot x -1)) (+ (+ (rot x 6) (rot x 4)) (rot x 1)))");
     // simplify("(+ 2 (* 3 2))")
 }
