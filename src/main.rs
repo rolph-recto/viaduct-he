@@ -1,6 +1,5 @@
 use std::{collections::HashMap, fmt};
 use std::time::*;
-use rand::Rng;
 use egg::*;
 
 define_language! {
