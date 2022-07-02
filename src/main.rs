@@ -1,6 +1,7 @@
 use std::{collections::HashMap, fmt};
-use egg::*;
 use std::time::*;
+use rand::Rng;
+use egg::*;
 
 define_language! {
     enum HE {
@@ -446,12 +447,130 @@ fn gen_program(expr: &RecExpr<HE>) -> HEProgram {
     program
 }
 
+#[derive(PartialEq, Eq, Clone)]
+enum HEValue {
+    HEScalar(i32),
+    HEVector(Vec<i32>)
+}
+
+type HESymStore = HashMap<String, HEValue>;
+type HERefStore = HashMap<usize, HEValue>;
+
+fn interp_operand(sym_store: &mut HESymStore, ref_store: &HERefStore, op: &HEOperand, vec_size: usize) -> HEValue {
+    match op {
+        HEOperand::NodeRef(ref_i) => ref_store[ref_i].clone(),
+
+        HEOperand::ConstSym(sym) => {
+            let ssym = sym.as_str();
+            match sym_store.get(ssym) {
+                Some(val) => val.clone(),
+
+                // if there is no value for the symbol, create a random vector
+                None => {
+                    let new_vec: Vec<i32> = 
+                        (0..vec_size).into_iter().map(|_| {
+                            rand::random::<i32>()
+                        }).collect();
+                        
+                    sym_store.insert(ssym.to_string(), HEValue::HEVector(new_vec));
+                    sym_store[ssym].clone()
+                }
+            }
+        }
+
+        HEOperand::ConstNum(n) => HEValue::HEScalar(*n)
+    }
+}
+
+fn interp_instr(sym_store: &mut HESymStore, ref_store: &HERefStore, instr: &HEInstruction, vec_size: usize) -> HEValue {
+    let mut exec_binop = |op1: &HEOperand, op2: &HEOperand, f: fn(&i32, &i32)->i32| -> HEValue {
+        let val1 = interp_operand(sym_store, ref_store, op1, vec_size);
+        let val2 = interp_operand(sym_store, ref_store, op2, vec_size);
+        match (val1, val2) {
+            (HEValue::HEScalar(s1), HEValue::HEScalar(s2)) => {
+                HEValue::HEScalar(f(&s1, &s2))
+            },
+
+            (HEValue::HEScalar(s1), HEValue::HEVector(v2)) => {
+                let new_vec = v2.iter().map(|x| f(x, &s1)).collect();
+                HEValue::HEVector(new_vec)
+            },
+
+            (HEValue::HEVector(v1), HEValue::HEScalar(s2)) => {
+                let new_vec = v1.iter().map(|x| f(x, &s2)).collect();
+                HEValue::HEVector(new_vec)
+            },
+
+            (HEValue::HEVector(v1), HEValue::HEVector(v2)) => {
+                let new_vec = v1.iter().zip(v2).map(|(x1,x2)| f(x1, &x2)).collect();
+                HEValue::HEVector(new_vec)
+            }
+        }
+    };
+
+    match instr {
+        HEInstruction::Add(op1, op2) => {
+            exec_binop(op1, op2, |x1, x2| x1 + x2)
+        },
+
+        HEInstruction::Mul(op1, op2) => {
+            exec_binop(op1, op2, |x1, x2| x1 * x2)
+        }
+
+        HEInstruction::Rot(op1, op2) => {
+            let val1 = interp_operand(sym_store, ref_store, op1, vec_size);
+            let val2 = interp_operand(sym_store, ref_store, op2, vec_size);
+            match (val1, val2) {
+                (HEValue::HEVector(v1), HEValue::HEScalar(s2)) => {
+                    let rot_val = s2 % (vec_size as i32);
+                    let mut new_vec: Vec<i32> = v1.clone();
+                    if rot_val < 0 {
+                        new_vec.rotate_left((-rot_val) as usize)
+
+                    } else {
+                        new_vec.rotate_right(rot_val as usize)
+                    }
+
+                    HEValue::HEVector(new_vec)
+                },
+
+                _ => panic!("Rotate must have vector has 1st operand and scalar as 2nd operand")
+            }
+        }
+    }
+}
+
+/// Validate that two programs are equivalent on random input.
+fn validate_program(p1: &HEProgram, p2: &HEProgram, vec_size: usize) -> bool {
+    let mut sym_store: HESymStore = HashMap::new();
+    let mut ref_store1: HERefStore = HashMap::new();
+    let mut ref_store2: HERefStore = HashMap::new();
+
+    for (i, instr) in p1.instrs.iter().enumerate() {
+        let val = interp_instr(&mut sym_store, &ref_store1, instr, vec_size);
+        ref_store1.insert(i, val);
+    }
+
+    let out1 = &ref_store1[&(ref_store1.len()-1)];
+
+    for (i, instr) in p2.instrs.iter().enumerate() {
+        let val = interp_instr(&mut sym_store, &ref_store2, instr, vec_size);
+        ref_store2.insert(i, val);
+    }
+
+    let out2 = &ref_store2[&(ref_store2.len()-1)];
+
+    // values of the last instructions should be equal
+    *out1 == *out2
+}
+
 /// parse an expression, simplify it using egg, and pretty print it back out
 fn simplify(s: &str) {
     // parse the expression, the type annotation tells it which Language to use
     let expr: RecExpr<HE> = s.parse().unwrap();
 
-    println!("Running equality saturation for 20 seconds...");
+    let timeout: u64 = 20;
+    println!("Running equality saturation for {} seconds...", timeout);
 
     // simplify the expression using a Runner, which creates an e-graph with
     // the given expression and runs the given rules over it
@@ -459,14 +578,15 @@ fn simplify(s: &str) {
         Runner::default()
         .with_explanations_enabled()
         .with_expr(&expr)
-        .with_time_limit(Duration::from_secs(20))
+        .with_time_limit(Duration::from_secs(timeout))
         .run(&make_rules());
 
     let egraph = &mut runner.egraph;
     let root = egraph.add_expr(&expr);
 
+    let init_prog = gen_program(&expr);
     println!("Initial HE program:");
-    println!("{}", gen_program(&expr));
+    println!("{}", init_prog);
 
     let mut lp_extractor = LpExtractor::new(egraph, OpSizeFunction);
     let opt_expr = lp_extractor.solve(root);
@@ -482,9 +602,13 @@ fn simplify(s: &str) {
         expr, expr.as_ref().len(), opt_expr, opt_expr.as_ref().len()
     );
 
+    let opt_prog = gen_program(&opt_expr);
     println!("Optimized HE program:");
-    println!("{}", gen_program(&opt_expr));
+    println!("{}", opt_prog);
+
+    println!("Are programs equivalent? {}", validate_program(&init_prog, &opt_prog, 16));
 }
+
 
 fn main() {
     simplify("(+ (+ (+ (rot x -6) (* -1 (rot x -4))) (* 2 (rot x -1))) (+ (+ (rot x 6) (rot x 4)) (* -2 (rot x 1))))");

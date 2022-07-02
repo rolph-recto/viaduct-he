@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 egg = { version = "0.9.0", features = ["lp"] }
+rand = { version = "0.8.5" }
