@@ -1,6 +1,9 @@
-use std::{collections::HashMap, fmt};
+use std::collections::{ HashMap, HashSet };
+use std::fmt;
+use std::ops::RangeInclusive;
 use std::time::*;
 use egg::*;
+use rand::Rng;
 
 define_language! {
     enum HE {
@@ -373,23 +376,89 @@ impl fmt::Display for HEOperand {
 }
 
 #[derive(Copy, Clone)]
-enum HEInstruction {
+enum HEInstr {
     Add(HEOperand, HEOperand),
     Mul(HEOperand, HEOperand),
     Rot(HEOperand, HEOperand),
 }
 
-impl fmt::Display for HEInstruction {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl HEInstr {
+    fn get_operands(&self) -> [&HEOperand; 2] {
         match self {
-            HEInstruction::Add(op1, op2) => write!(f, "{} + {}", op1, op2),
-            HEInstruction::Mul(op1, op2) => write!(f, "{} * {}", op1, op2),
-            HEInstruction::Rot(op1, op2) => write!(f, "rot {} {}", op1, op2)
+            HEInstr::Add(op1, op2) |
+            HEInstr::Mul(op1, op2) |
+            HEInstr::Rot(op1, op2) => {
+                [op1, op2]
+            },
         }
     }
 }
 
-struct HEProgram { instrs: Vec<HEInstruction> }
+impl fmt::Display for HEInstr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            HEInstr::Add(op1, op2) => write!(f, "{} + {}", op1, op2),
+            HEInstr::Mul(op1, op2) => write!(f, "{} * {}", op1, op2),
+            HEInstr::Rot(op1, op2) => write!(f, "rot {} {}", op1, op2)
+        }
+    }
+}
+
+struct HEProgram { instrs: Vec<HEInstr> }
+
+#[derive(PartialEq, Eq, Clone)]
+enum HEValue {
+    HEScalar(i32),
+    HEVector(Vec<i32>)
+}
+
+impl fmt::Display for HEValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            HEValue::HEScalar(s) => write!(f, "{}", s),
+            HEValue::HEVector(v) => write!(f, "{:?}", v)
+        }
+    }
+}
+
+type HESymStore = HashMap<String, HEValue>;
+type HERefStore = HashMap<usize, HEValue>;
+
+impl HEProgram {
+    /// get the symbols used in this program.
+    fn get_symbols(&self) -> HashSet<Symbol> {
+        let mut symset = HashSet::new();
+
+        for instr in self.instrs.iter() {
+            for op in instr.get_operands() {
+                if let HEOperand::ConstSym(sym) = op {
+                    symset.insert(*sym);
+                }
+            }
+        }
+
+        symset
+    }
+
+    /// generate a random sym store for this program
+    fn gen_sym_store(&self, vec_size: usize, range: RangeInclusive<i32>) -> HESymStore {
+        let symbols = self.get_symbols();
+        let mut sym_store: HESymStore = HashMap::new();
+        let mut rng = rand::thread_rng();
+
+        for symbol in symbols {
+            let new_vec: Vec<i32> = 
+                (0..vec_size).into_iter()
+                .map(|_| rng.gen_range(range.clone()))
+                .collect();
+                
+            sym_store.insert(symbol.to_string(), HEValue::HEVector(new_vec));
+        }
+
+        sym_store
+    }
+
+}
 
 impl fmt::Display for HEProgram {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -406,7 +475,7 @@ fn gen_program(expr: &RecExpr<HE>) -> HEProgram {
 
     let mut op_processor =
         | nmap: &mut HashMap<Id, HEOperand>,
-          id: Id, ctor: fn(HEOperand, HEOperand) -> HEInstruction,
+          id: Id, ctor: fn(HEOperand, HEOperand) -> HEInstr,
           id_op1: &Id, id_op2: &Id |
         {
             let op1 = &nmap[id_op1];
@@ -430,15 +499,15 @@ fn gen_program(expr: &RecExpr<HE>) -> HEProgram {
             }
 
             HE::Add([id1, id2]) => {
-                op_processor(&mut node_map, id, HEInstruction::Add, id1, id2);
+                op_processor(&mut node_map, id, HEInstr::Add, id1, id2);
             }
 
             HE::Mul([id1, id2]) => {
-                op_processor(&mut node_map, id, HEInstruction::Mul, id1, id2);
+                op_processor(&mut node_map, id, HEInstr::Mul, id1, id2);
             }
 
             HE::Rot([id1, id2]) => {
-                op_processor(&mut node_map, id, HEInstruction::Rot, id1, id2);
+                op_processor(&mut node_map, id, HEInstr::Rot, id1, id2);
             }
         }
     }
@@ -446,45 +515,23 @@ fn gen_program(expr: &RecExpr<HE>) -> HEProgram {
     program
 }
 
-#[derive(PartialEq, Eq, Clone)]
-enum HEValue {
-    HEScalar(i32),
-    HEVector(Vec<i32>)
-}
-
-type HESymStore = HashMap<String, HEValue>;
-type HERefStore = HashMap<usize, HEValue>;
-
-fn interp_operand(sym_store: &mut HESymStore, ref_store: &HERefStore, op: &HEOperand, vec_size: usize) -> HEValue {
+fn interp_operand(sym_store: &HESymStore, ref_store: &HERefStore, op: &HEOperand) -> HEValue {
     match op {
-        HEOperand::NodeRef(ref_i) => ref_store[ref_i].clone(),
+        HEOperand::NodeRef(ref_i) =>
+            ref_store[ref_i].clone(),
 
-        HEOperand::ConstSym(sym) => {
-            let ssym = sym.as_str();
-            match sym_store.get(ssym) {
-                Some(val) => val.clone(),
+        HEOperand::ConstSym(sym) =>
+            sym_store[sym.as_str()].clone(),
 
-                // if there is no value for the symbol, create a random vector
-                None => {
-                    let new_vec: Vec<i32> = 
-                        (0..vec_size).into_iter().map(|_| {
-                            rand::random::<i32>()
-                        }).collect();
-                        
-                    sym_store.insert(ssym.to_string(), HEValue::HEVector(new_vec));
-                    sym_store[ssym].clone()
-                }
-            }
-        }
-
-        HEOperand::ConstNum(n) => HEValue::HEScalar(*n)
+        HEOperand::ConstNum(n) =>
+            HEValue::HEScalar(*n)
     }
 }
 
-fn interp_instr(sym_store: &mut HESymStore, ref_store: &HERefStore, instr: &HEInstruction, vec_size: usize) -> HEValue {
-    let mut exec_binop = |op1: &HEOperand, op2: &HEOperand, f: fn(&i32, &i32)->i32| -> HEValue {
-        let val1 = interp_operand(sym_store, ref_store, op1, vec_size);
-        let val2 = interp_operand(sym_store, ref_store, op2, vec_size);
+fn interp_instr(sym_store: &HESymStore, ref_store: &HERefStore, instr: &HEInstr, vec_size: usize) -> HEValue {
+    let exec_binop = |op1: &HEOperand, op2: &HEOperand, f: fn(&i32, &i32)->i32| -> HEValue {
+        let val1 = interp_operand(sym_store, ref_store, op1);
+        let val2 = interp_operand(sym_store, ref_store, op2);
         match (val1, val2) {
             (HEValue::HEScalar(s1), HEValue::HEScalar(s2)) => {
                 HEValue::HEScalar(f(&s1, &s2))
@@ -508,17 +555,17 @@ fn interp_instr(sym_store: &mut HESymStore, ref_store: &HERefStore, instr: &HEIn
     };
 
     match instr {
-        HEInstruction::Add(op1, op2) => {
+        HEInstr::Add(op1, op2) => {
             exec_binop(op1, op2, |x1, x2| x1 + x2)
         },
 
-        HEInstruction::Mul(op1, op2) => {
+        HEInstr::Mul(op1, op2) => {
             exec_binop(op1, op2, |x1, x2| x1 * x2)
         }
 
-        HEInstruction::Rot(op1, op2) => {
-            let val1 = interp_operand(sym_store, ref_store, op1, vec_size);
-            let val2 = interp_operand(sym_store, ref_store, op2, vec_size);
+        HEInstr::Rot(op1, op2) => {
+            let val1 = interp_operand(sym_store, ref_store, op1);
+            let val2 = interp_operand(sym_store, ref_store, op2);
             match (val1, val2) {
                 (HEValue::HEVector(v1), HEValue::HEScalar(s2)) => {
                     let rot_val = s2 % (vec_size as i32);
@@ -539,28 +586,17 @@ fn interp_instr(sym_store: &mut HESymStore, ref_store: &HERefStore, instr: &HEIn
     }
 }
 
-/// Validate that two programs are equivalent on random input.
-fn validate_program(p1: &HEProgram, p2: &HEProgram, vec_size: usize) -> bool {
-    let mut sym_store: HESymStore = HashMap::new();
-    let mut ref_store1: HERefStore = HashMap::new();
-    let mut ref_store2: HERefStore = HashMap::new();
+fn interp_program(sym_store: &HESymStore, program: &HEProgram, vec_size: usize) -> Option<HEValue> {
+    let mut ref_store: HERefStore = HashMap::new();
 
-    for (i, instr) in p1.instrs.iter().enumerate() {
-        let val = interp_instr(&mut sym_store, &ref_store1, instr, vec_size);
-        ref_store1.insert(i, val);
+    let mut last_instr = None;
+    for (i, instr) in program.instrs.iter().enumerate() {
+        let val = interp_instr(&sym_store, &ref_store, instr, vec_size);
+        ref_store.insert(i, val);
+        last_instr = Some(i);
     }
-
-    let out1 = &ref_store1[&(ref_store1.len()-1)];
-
-    for (i, instr) in p2.instrs.iter().enumerate() {
-        let val = interp_instr(&mut sym_store, &ref_store2, instr, vec_size);
-        ref_store2.insert(i, val);
-    }
-
-    let out2 = &ref_store2[&(ref_store2.len()-1)];
-
-    // values of the last instructions should be equal
-    *out1 == *out2
+    
+    last_instr.and_then(|i| ref_store.remove(&i))
 }
 
 /// parse an expression, simplify it using egg, and pretty print it back out
@@ -583,10 +619,6 @@ fn simplify(s: &str) {
     let egraph = &mut runner.egraph;
     let root = egraph.add_expr(&expr);
 
-    let init_prog = gen_program(&expr);
-    println!("Initial HE program:");
-    println!("{}", init_prog);
-
     let mut lp_extractor = LpExtractor::new(egraph, OpSizeFunction);
     let opt_expr = lp_extractor.solve(root);
 
@@ -601,11 +633,24 @@ fn simplify(s: &str) {
         expr, expr.as_ref().len(), opt_expr, opt_expr.as_ref().len()
     );
 
+    let init_prog = gen_program(&expr);
+
+    println!("Initial HE program:");
+    println!("{}", init_prog);
+
     let opt_prog = gen_program(&opt_expr);
     println!("Optimized HE program:");
     println!("{}", opt_prog);
 
-    println!("Are programs equivalent? {}", validate_program(&init_prog, &opt_prog, 16));
+    let vec_size = 16;
+    let sym_store: HESymStore = init_prog.gen_sym_store(vec_size, -10..=10);
+
+    let init_out = interp_program(&sym_store, &init_prog, vec_size);
+    let opt_out = interp_program(&sym_store, &opt_prog, vec_size);
+
+    // values of the last instructions should be equal
+    println!("output for init prog: {}", init_out.unwrap());
+    println!("output for opt prog: {}", opt_out.unwrap());
 }
 
 
