@@ -1,0 +1,3 @@
+{{#each instrs}}
+let i{{this.index}} = {{this.op}} {{opfmt this.op1}} {{opfmt this.op2}}
+{{/each}}

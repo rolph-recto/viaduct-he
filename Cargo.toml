@@ -1,10 +1,16 @@
 [package]
 name = "he-vectorizer"
+author = "Rolph Recto"
+about = "vectorizer for homomorphic encryption circuits"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-egg = { version = "0.9.0", features = ["lp"] }
-rand = { version = "0.8.5" }
+clap = { version = "3.2.16", features = ["derive"] }
+egg = { version = "0.9.0", features = ["lp", "serde-1"] }
+handlebars = "4.3.3"
+rand = "0.8.5"
+serde = { version = "1.0.142", features = ["derive"] }
+serde_json = "1.0.83"
