@@ -1,46 +1,125 @@
 use egg::*;
-use std::time::*;
+use std::{time::*, cmp::max};
 
 use crate::lang::*;
 
 type EGraph = egg::EGraph<HE, HEData>;
 
-#[derive(Default, Clone, Copy)]
-struct HEData;
+#[derive(Debug, Default, Clone, Copy)]
+struct HEData {
+    constval: Option<i32>,
+    muldepth: usize
+}
 
 struct OpSizeFunction;
 impl LpCostFunction<HE, HEData> for OpSizeFunction {
-    fn node_cost(&mut self, _: &EGraph, _: Id, enode: &HE) -> f64 {
+    fn node_cost(&mut self, egraph: &EGraph, id: Id, enode: &HE) -> f64 {
         match enode {
             HE::Num(_) => 0.1,
-            HE::Add(_) => 6.0,
-            HE::Mul(_) => 15.0,
-            HE::Rot(_) => 2.0,
+
+            HE::Add([id1, id2]) => {
+                let d1 = egraph[*id1].data.muldepth;
+                let d2 = egraph[*id2].data.muldepth;
+                let muldepth = max(d1, d2) + 1;
+                6.0 * (muldepth as f64)
+            },
+
+            HE::Mul([id1, id2]) => {
+                let d1 = egraph[*id1].data.muldepth;
+                let d2 = egraph[*id2].data.muldepth;
+                let muldepth = max(d1, d2) + 1;
+                15.0 * (muldepth as f64)
+            },
+
+            HE::Rot([id1, id2]) => {
+                let d1 = egraph[*id1].data.muldepth;
+                let d2 = egraph[*id2].data.muldepth;
+                let muldepth = max(d1, d2) + 1;
+                0.1 * (muldepth as f64)
+            },
+
             HE::Symbol(_) => 0.1,
         }
     }
 }
 
 impl Analysis<HE> for HEData {
-    type Data = Option<i32>;
+    type Data = HEData;
+
+    /*
+    fn pre_union(egraph: &EGraph, id1: Id, id2: Id) {
+        let n1 =
+            egraph[id1].nodes.first().unwrap().build_recexpr(|cid|
+                egraph[cid].nodes.first().unwrap().clone()
+            );
+        let n2 =
+            egraph[id2].nodes.first().unwrap().build_recexpr(|cid|
+                egraph[cid].nodes.first().unwrap().clone()
+            );
+        println!("merging {} {}", n1, n2);
+    }
+    */
 
     fn merge(&mut self, to: &mut Self::Data, from: Self::Data) -> DidMerge {
-        merge_option(to, from, |to2: &mut i32, from2: i32| {
-            if *to2 == from2 {
-                DidMerge { 0: false, 1: false }
-            } else {
-                println!("attmepting to merge numeric exprs with different values");
-                println!("to: {}, from: {}", to2, from2);
-                DidMerge { 0: true, 1: true }
-            }
-        })
+        if to.constval == from.constval {
+            merge_min(&mut to.muldepth, from.muldepth)
+
+        } else {
+            // println!("to: {:?}, from: {:?}", to.constval, from.constval);
+            panic!("attmepting to merge numeric exprs with different values");
+        }
     }
 
-    fn make(_egraph: &EGraph, enode: &HE) -> Self::Data {
-        if let HE::Num(n) = enode {
-            Some(*n)
-        } else {
-            None
+    fn make(egraph: &EGraph, enode: &HE) -> Self::Data {
+        let data = |id: &Id| egraph[*id].data;
+
+        match enode {
+            HE::Num(n) =>
+                HEData { constval: Some(*n), muldepth: 0 },
+
+            HE::Add([id1, id2]) => {
+                let constval: Option<i32> = 
+                    data(id1).constval.and_then(|d1|
+                        data(id2).constval.and_then(|d2|
+                            Some(d1 + d2)
+                        )
+                    );
+
+                let muldepth = max(data(id1).muldepth, data(id2).muldepth);
+
+                HEData { constval, muldepth }
+            },
+
+            HE::Mul([id1, id2]) => {
+                let v1 = data(id1).constval;
+                let v2 = data(id2).constval;
+
+                // special case multiplicative annihilator (0)
+                let constval: Option<i32> = 
+                    match (v1, v2) {
+                        (Some(0), _) => Some(0),
+                        (_, Some(0)) => Some(0),
+                        (Some(d1), Some(d2)) => Some(d1 * d2),
+                        _ => None
+                    };
+
+                // don't count scalar multiplication as muldepth
+                let muldepth =
+                    if constval.is_none() {
+                        max(data(id1).muldepth, data(id2).muldepth) + 1
+                    } else {
+                        0
+                    };
+
+                HEData { constval, muldepth }
+            },
+
+            HE::Rot([id1, id2]) => {
+                let muldepth = max(data(id1).muldepth, data(id2).muldepth);
+                HEData { constval: egraph[*id1].data.constval, muldepth }
+            }
+
+            HE::Symbol(_) => HEData { constval: None, muldepth: 0 }
         }
     }
 }
@@ -140,7 +219,8 @@ fn is_zero(var: &'static str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
 fn can_fold(astr: &'static str, bstr: &'static str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
     let avar = astr.parse().unwrap();
     let bvar = bstr.parse().unwrap();
-    move |egraph, _, subst| egraph[subst[avar]].data.is_some() && egraph[subst[bvar]].data.is_some()
+    move |egraph, _, subst|
+        egraph[subst[avar]].data.constval.is_some() && egraph[subst[bvar]].data.constval.is_some()
 }
 
 fn can_split_factor(
@@ -149,8 +229,8 @@ fn can_split_factor(
 ) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
     let avar = astr.parse().unwrap();
     let bvar = bstr.parse().unwrap();
-    move |egraph, _, subst| match egraph[subst[avar]].data {
-        Some(aval) => aval != 0 && egraph[subst[bvar]].data.is_none(),
+    move |egraph, _, subst| match egraph[subst[avar]].data.constval {
+        Some(aval) => aval != 0 && egraph[subst[bvar]].data.constval.is_none(),
         None => false,
     }
 }
@@ -159,7 +239,7 @@ fn can_split_factor(
 fn beyond_vec_length(var: &'static str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
     let var = var.parse().unwrap();
     move |egraph, _, subst: &Subst| {
-        let val = egraph[subst[var]].data.unwrap();
+        let val = egraph[subst[var]].data.constval.unwrap();
         -VEC_LENGTH <= val && val <= VEC_LENGTH
     }
 }
@@ -171,8 +251,8 @@ fn can_split_rot(
     let l1: Var = l1_str.parse().unwrap();
     let l2: Var = l2_str.parse().unwrap();
     move |egraph: &mut EGraph, _, subst: &Subst| match (
-        egraph[subst[l1]].data,
-        egraph[subst[l2]].data,
+        egraph[subst[l1]].data.constval,
+        egraph[subst[l2]].data.constval,
     ) {
         (Some(l1_val), Some(l2_val)) => (l1_val < 0 && l2_val < 0) || (l1_val > 0 && l2_val > 0),
 
@@ -196,8 +276,8 @@ impl Applier<HE, HEData> for ConstantFold {
         _: Option<&PatternAst<HE>>,
         _: Symbol,
     ) -> Vec<Id> {
-        let aval: i32 = egraph[subst[self.a]].data.unwrap();
-        let bval: i32 = egraph[subst[self.b]].data.unwrap();
+        let aval: i32 = egraph[subst[self.a]].data.constval.unwrap();
+        let bval: i32 = egraph[subst[self.b]].data.constval.unwrap();
 
         let folded_val = if self.is_add {
             aval + bval
@@ -229,7 +309,7 @@ impl Applier<HE, HEData> for FactorSplit {
         _: Option<&PatternAst<HE>>,
         _: Symbol,
     ) -> Vec<Id> {
-        let factor: i32 = egraph[subst[self.a]].data.unwrap();
+        let factor: i32 = egraph[subst[self.a]].data.constval.unwrap();
 
         let mut acc: Id = egraph.add(HE::Num(0));
         let mut cur_val = factor;
@@ -268,7 +348,7 @@ impl Applier<HE, HEData> for RotateWrap {
         _: Symbol,
     ) -> Vec<Id> {
         let xclass: Id = subst[self.x];
-        let lval = egraph[subst[self.l]].data.unwrap();
+        let lval = egraph[subst[self.l]].data.constval.unwrap();
 
         let wrapped_lval = egraph.add(HE::Num(lval % VEC_LENGTH));
         let wrapped_rot: Id = egraph.add(HE::Rot([xclass, wrapped_lval]));
@@ -297,8 +377,8 @@ impl Applier<HE, HEData> for RotateSquash {
         _: Symbol,
     ) -> Vec<Id> {
         let xclass: Id = subst[self.x];
-        let l1_val = egraph[subst[self.l1]].data.unwrap();
-        let l2_val = egraph[subst[self.l2]].data.unwrap();
+        let l1_val = egraph[subst[self.l1]].data.constval.unwrap();
+        let l2_val = egraph[subst[self.l2]].data.constval.unwrap();
 
         let lval_sum = egraph.add(HE::Num((l1_val + l2_val) % VEC_LENGTH));
         let rot_sum: Id = egraph.add(HE::Rot([xclass, lval_sum]));
@@ -332,8 +412,8 @@ impl Applier<HE, HEData> for RotateSplit {
         let x1_class: Id = subst[self.x1];
         let x2_class: Id = subst[self.x2];
 
-        let l1_val = egraph[subst[self.l1]].data.unwrap();
-        let l2_val = egraph[subst[self.l2]].data.unwrap();
+        let l1_val = egraph[subst[self.l1]].data.constval.unwrap();
+        let l2_val = egraph[subst[self.l2]].data.constval.unwrap();
 
         let dir: i32 = if l1_val < 0 { 1 } else { -1 };
         let (mut cur_l1, mut cur_l2) = (l1_val + dir, l2_val + dir);
