@@ -1,6 +1,7 @@
 use egg::*;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use std::cmp::max;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::ops::RangeInclusive;
@@ -95,6 +96,56 @@ pub(crate) type HESymStore = HashMap<String, HEValue>;
 pub(crate) type HERefStore = HashMap<usize, HEValue>;
 
 impl HEProgram {
+    /// calculate the multiplicative depth of the program.
+    pub(crate) fn get_muldepth(&self) -> usize {
+        let mut max_depth: usize = 0;
+        let mut depth_list: Vec<usize> = vec![];
+        let mut i: usize = 0;
+
+        let get_opdepth = |dlist: &Vec<usize>, op: &HEOperand| -> usize {
+            match op {
+                HEOperand::NodeRef(r) => dlist[*r],
+                HEOperand::ConstSym(_) => 0,
+                HEOperand::ConstNum(_) => 0,
+            }
+        };
+
+        for instr in self.instrs.iter() {
+            let dlist: &Vec<usize> = &depth_list;
+            let depth: usize =
+                match instr {
+                    HEInstr::Add { index, op1, op2 } => {
+                        let op1_depth = get_opdepth(dlist, op1);
+                        let op2_depth: usize = get_opdepth(dlist, op2);
+                        max(op1_depth, op2_depth)
+                    },
+                    HEInstr::Mul { index, op1, op2 } => {
+                        let op1_depth = get_opdepth(dlist, op1);
+                        let op2_depth: usize = get_opdepth(dlist, op2);
+
+                        match (op1, op2) {
+                            (HEOperand::ConstNum(_), _) | (_, HEOperand::ConstNum(_)) =>
+                                max(op1_depth, op2_depth),
+
+                            _ => max(op1_depth, op2_depth) + 1
+                        }
+                    },
+                    HEInstr::Rot { index, op1, op2 } => {
+                        let op1_depth = get_opdepth(dlist, op1);
+                        let op2_depth: usize = get_opdepth(dlist, op2);
+                        max(op1_depth, op2_depth)
+                    },
+                };
+
+            if depth > max_depth {
+                max_depth = depth;
+            }
+            depth_list.push(depth);
+            i += 1;
+        }
+        max_depth
+    }
+
     /// get the symbols used in this program.
     fn get_symbols(&self) -> HashSet<String> {
         let mut symset = HashSet::new();
@@ -172,7 +223,9 @@ pub(crate) fn gen_program(expr: &RecExpr<HE>) -> HEProgram {
             HE::Add([id1, id2]) => {
                 op_processor(
                     &mut node_map, id, 
-                    |index, op1, op2| HEInstr::Add { index, op1, op2 },
+                    |index, op1, op2| {
+                        HEInstr::Add { index, op1, op2 }
+                    },
                     id1, id2);
             }
 

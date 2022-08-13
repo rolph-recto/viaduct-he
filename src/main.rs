@@ -58,11 +58,13 @@ fn main() {
 
     println!("Initial HE cost: {}", init_cost);
     println!("Initial HE expr:\n{}", init_expr.pretty(80));
-    println!("Initial HE program:\n{}", handlebars.render("t", &init_prog).unwrap());
+    println!("Initial HE program (muldepth {}):\n{}",
+        init_prog.get_muldepth(), handlebars.render("t", &init_prog).unwrap());
     
     println!("Optimized HE cost: {}", opt_cost);
     println!("Optimized HE expr:\n{}", opt_expr.pretty(80));
-    println!("Optimized HE program:\n{}", handlebars.render("t", &opt_prog).unwrap());
+    println!("Optimized HE program (muldepth {}):\n{}",
+        opt_prog.get_muldepth(), handlebars.render("t", &opt_prog).unwrap());
 
     let vec_size = 16;
     let sym_store: HESymStore = init_prog.gen_sym_store(vec_size, -10..=10);
