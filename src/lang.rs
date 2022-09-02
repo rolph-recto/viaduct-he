@@ -18,28 +18,31 @@ define_language! {
 }
 
 #[derive(Clone, Deserialize, Serialize)]
-pub(crate) enum HEOperand {
+#[serde(untagged)]
+pub(crate) enum HERef {
     NodeRef(usize),
-    ConstSym(String),
+    ConstSym(String)
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub(crate) enum HEOperand {
+    Ref(HERef),
     ConstNum(i32),
 }
 
 impl fmt::Display for HEOperand {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
+        write!(f, "{}",
             match self {
-                HEOperand::NodeRef(i) => format!("i{}", i),
-                HEOperand::ConstSym(sym) => sym.to_string(),
+                HEOperand::Ref(HERef::NodeRef(i)) => format!("i{}", i),
+                HEOperand::Ref(HERef::ConstSym(sym)) => sym.to_string(),
                 HEOperand::ConstNum(n) => n.to_string(),
             }
         )
     }
 }
 
-#[derive(Clone, Serialize)]
-#[serde(tag = "op")]
+#[derive(Clone)]
 pub(crate) enum HEInstr {
     Add { index: usize, op1: HEOperand, op2: HEOperand },
     Mul{ index: usize, op1: HEOperand, op2: HEOperand },
@@ -72,7 +75,6 @@ impl fmt::Display for HEInstr {
     }
 }
 
-#[derive(Serialize)]
 pub(crate) struct HEProgram {
     instrs: Vec<HEInstr>,
 }
@@ -104,8 +106,8 @@ impl HEProgram {
 
         let get_opdepth = |dlist: &Vec<usize>, op: &HEOperand| -> usize {
             match op {
-                HEOperand::NodeRef(r) => dlist[*r],
-                HEOperand::ConstSym(_) => 0,
+                HEOperand::Ref(HERef::NodeRef(r)) => dlist[*r],
+                HEOperand::Ref(HERef::ConstSym(_)) => 0,
                 HEOperand::ConstNum(_) => 0,
             }
         };
@@ -146,13 +148,50 @@ impl HEProgram {
         max_depth
     }
 
+    /// calculate the latency of a program
+    pub fn get_latency(&self) -> f64 {
+        let mut latency = 0.0;
+        for instr in self.instrs.iter() {
+            match instr {
+                HEInstr::Add { index, op1, op2 } => {
+                    match (op1, op2) {
+                        (HEOperand::ConstNum(_), _) | (_, HEOperand::ConstNum(_)) =>  {
+                            latency += crate::optimizer::ADD_PLAIN_LATENCY
+                        },
+
+                        _ => {
+                            latency += crate::optimizer::ADD_LATENCY
+                        }
+                    }
+                },
+
+                HEInstr::Mul { index, op1, op2 } => {
+                    match (op1, op2) {
+                        (HEOperand::ConstNum(_), _) | (_, HEOperand::ConstNum(_)) =>  {
+                            latency += crate::optimizer::MUL_PLAIN_LATENCY
+                        },
+
+                        _ => {
+                            latency += crate::optimizer::MUL_LATENCY
+                        }
+                    }
+                },
+                
+                HEInstr::Rot { index, op1, op2 } => {
+                    latency += crate::optimizer::ROT_LATENCY
+                }
+            }
+        }
+        latency
+    }
+
     /// get the symbols used in this program.
     fn get_symbols(&self) -> HashSet<String> {
         let mut symset = HashSet::new();
 
         for instr in self.instrs.iter() {
             for op in instr.get_operands() {
-                if let HEOperand::ConstSym(sym) = op {
+                if let HEOperand::Ref(HERef::ConstSym(sym)) = op {
                     symset.insert(sym.to_string());
                 }
             }
@@ -204,7 +243,7 @@ pub(crate) fn gen_program(expr: &RecExpr<HE>) -> HEProgram {
         let op2 = &nmap[id_op2];
 
         program.instrs.push(ctor(cur_instr, op1.clone(), op2.clone()));
-        nmap.insert(id, HEOperand::NodeRef(cur_instr));
+        nmap.insert(id, HEOperand::Ref(HERef::NodeRef(cur_instr)));
 
         cur_instr += 1;
     };
@@ -217,7 +256,7 @@ pub(crate) fn gen_program(expr: &RecExpr<HE>) -> HEProgram {
             }
 
             HE::Symbol(sym) => {
-                node_map.insert(id, HEOperand::ConstSym(sym.to_string()));
+                node_map.insert(id, HEOperand::Ref(HERef::ConstSym(sym.to_string())));
             }
 
             HE::Add([id1, id2]) => {
@@ -250,9 +289,9 @@ pub(crate) fn gen_program(expr: &RecExpr<HE>) -> HEProgram {
 
 pub(crate) fn interp_operand(sym_store: &HESymStore, ref_store: &HERefStore, op: &HEOperand) -> HEValue {
     match op {
-        HEOperand::NodeRef(ref_i) => ref_store[ref_i].clone(),
+        HEOperand::Ref(HERef::NodeRef(ref_i)) => ref_store[ref_i].clone(),
 
-        HEOperand::ConstSym(sym) => sym_store[sym.as_str()].clone(),
+        HEOperand::Ref(HERef::ConstSym(sym)) => sym_store[sym.as_str()].clone(),
 
         HEOperand::ConstNum(n) => HEValue::HEScalar(*n),
     }
@@ -327,4 +366,115 @@ pub(crate) fn interp_program(sym_store: &HESymStore, program: &HEProgram, vec_si
     }
 
     last_instr.and_then(|i| ref_store.remove(&i))
+}
+
+type HELoweredOperand = String;
+
+#[derive(Clone, Serialize)]
+#[serde(tag = "op")]
+pub(crate) enum HELoweredInstr {
+    Add { index: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
+    // AddInplace { op1: NodeRefIndex, op2: NodeRefIndex },
+    AddPlain { index: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
+    // AddPlainInplace { op1: NodeRefIndex, op2: i32 },
+    Mul { index: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
+    MulPlain { index: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
+    // MulPlainInplace { index: usize, op1: NodeRefIndex, op2: HEOperand },
+    Rot { index: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand } ,
+    // Relinearize { index: usize, op: NodeRefIndex, op2: HEOperand} ,
+    // RelinearizeInplace { index: usize, op1: HEOperand, op2: HEOperand} ,
+}
+
+#[derive(Serialize)]
+pub(crate) struct HELoweredProgram {
+    instrs: Vec<HELoweredInstr>,
+}
+
+pub(crate) fn lower_operand(op: &HEOperand) -> String {
+    match op {
+        HEOperand::Ref(HERef::NodeRef(nr)) => format!("i{}", nr),
+        HEOperand::Ref(HERef::ConstSym(sym)) => sym.clone(),
+        HEOperand::ConstNum(n) => n.to_string(),
+    }
+}
+
+pub(crate) fn lower_program(prog: &HEProgram) -> HELoweredProgram {
+    let mut instrs: Vec<HELoweredInstr> = Vec::new();
+    for instr in prog.instrs.iter() {
+        match instr {
+            HEInstr::Add { index, op1, op2 } => {
+                let lindex = format!("i{}", index);
+                let lop1 = lower_operand(op1);
+                let lop2 = lower_operand(op2);
+                match (op1, op2) {
+                    (HEOperand::Ref(_), HEOperand::Ref(_)) => {
+                        instrs.push(
+                            HELoweredInstr::Add { index: lindex, op1: lop1, op2: lop2 }
+                        )
+                    },
+
+                    (HEOperand::Ref(_), HEOperand::ConstNum(_)) => {
+                        instrs.push(
+                            HELoweredInstr::AddPlain { index: lindex, op1: lop1, op2: lop2 }
+                        )
+                    },
+
+                    (HEOperand::ConstNum(_), HEOperand::Ref(_)) => {
+                        instrs.push(
+                            HELoweredInstr::AddPlain { index: lindex, op1: lop2, op2: lop1 }
+                        )
+                    },
+
+                    (HEOperand::ConstNum(_), HEOperand::ConstNum(_)) => {
+                        panic!("attempting to add two plaintexts---this should be constant folded")
+                    }
+                }
+            },
+
+            HEInstr::Mul { index, op1, op2 } => {
+                let lindex = format!("i{}", index);
+                let lop1 = lower_operand(op1);
+                let lop2 = lower_operand(op2);
+                match (op1, op2) {
+                    (HEOperand::Ref(_), HEOperand::Ref(_)) => {
+                        instrs.push(
+                            HELoweredInstr::Mul { index: lindex, op1: lop1, op2: lop2 }
+                        )
+                    },
+
+                    (HEOperand::Ref(_), HEOperand::ConstNum(_)) => {
+                        instrs.push(
+                            HELoweredInstr::MulPlain { index: lindex, op1: lop1, op2: lop2 }
+                        )
+                    },
+
+                    (HEOperand::ConstNum(_), HEOperand::Ref(_)) => {
+                        instrs.push(
+                            HELoweredInstr::MulPlain { index: lindex, op1: lop2, op2: lop1 }
+                        )
+                    },
+
+                    (HEOperand::ConstNum(_), HEOperand::ConstNum(_)) => {
+                        panic!("attempting to multiply two plaintexts---this should be constant folded")
+                    }
+                }
+            },
+            
+            HEInstr::Rot { index, op1, op2 } => {
+                let lindex = format!("i{}", index);
+                let lop1 = lower_operand(op1);
+                let lop2 = lower_operand(op2);
+                match (op1, op2) {
+                    (HEOperand::Ref(_), HEOperand::ConstNum(_)) => {
+                        instrs.push(
+                            HELoweredInstr::Rot { index: lindex, op1: lop1, op2: lop2 }
+                        )
+                    }
+
+                    _ => panic!("must rotate ciphertext with constant value")
+                }
+            }
+        }
+    }
+    HELoweredProgram { instrs }
 }

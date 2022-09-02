@@ -1,3 +1,4 @@
+def main():
 {{#each instrs}}
-let i{{this.index}} = {{this.op}} {{opfmt this.op1}} {{opfmt this.op2}}
+    {{this.index}} = {{this.op}}({{this.op1}}, {{this.op2}})
 {{/each}}

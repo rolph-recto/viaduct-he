@@ -25,8 +25,8 @@ struct Arguments {
 }
 
 handlebars_helper!(opfmt: |op: HEOperand| match op {
-    HEOperand::NodeRef(r) => format!("i{}", r),
-    HEOperand::ConstSym(sym) => format!("{}", sym),
+    HEOperand::Ref(HERef::NodeRef(r)) => format!("i{}", r),
+    HEOperand::Ref(HERef::ConstSym(sym)) => format!("{}", sym),
     HEOperand::ConstNum(i) => format!("{}", i),
 });
 
@@ -58,13 +58,19 @@ fn main() {
 
     println!("Initial HE cost: {}", init_cost);
     println!("Initial HE expr:\n{}", init_expr.pretty(80));
-    println!("Initial HE program (muldepth {}):\n{}",
-        init_prog.get_muldepth(), handlebars.render("t", &init_prog).unwrap());
+    println!("Initial HE program (muldepth {}, latency {}ms):\n{}",
+        init_prog.get_muldepth(),
+        init_prog.get_latency(),
+        handlebars.render("t", &lower_program(&init_prog)).unwrap()
+    );
     
-    println!("Optimized HE cost: {}", opt_cost);
+    println!("Optimized HE cost: {}", opt_cost.muldepth);
     println!("Optimized HE expr:\n{}", opt_expr.pretty(80));
-    println!("Optimized HE program (muldepth {}):\n{}",
-        opt_prog.get_muldepth(), handlebars.render("t", &opt_prog).unwrap());
+    println!("Optimized HE program (muldepth {}, latency {}ms):\n{}",
+        opt_prog.get_muldepth(),
+        opt_prog.get_latency(),
+        handlebars.render("t", &lower_program(&opt_prog)).unwrap()
+    );
 
     let vec_size = 16;
     let sym_store: HESymStore = init_prog.gen_sym_store(vec_size, -10..=10);

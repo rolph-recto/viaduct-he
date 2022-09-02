@@ -1,7 +1,15 @@
 use egg::*;
-use std::{time::*, cmp::max};
+use std::{time::*, cmp::max, collections::HashSet};
 
 use crate::lang::*;
+
+pub const MUL_LATENCY: f64 = 15.0;
+pub const MUL_PLAIN_LATENCY: f64 = 6.0;
+pub const ADD_LATENCY: f64 = 6.0;
+pub const ADD_PLAIN_LATENCY: f64 = 3.0;
+pub const ROT_LATENCY: f64 = 0.1;
+pub const SYM_LATENCY: f64 = 0.1;
+pub const NUM_LATENCY: f64 = 0.1;
 
 type EGraph = egg::EGraph<HE, HEData>;
 
@@ -9,6 +17,73 @@ type EGraph = egg::EGraph<HE, HEData>;
 struct HEData {
     constval: Option<i32>,
     muldepth: usize
+}
+
+#[derive(Debug,Clone,PartialEq,PartialOrd)]
+pub struct HECost {
+    pub muldepth: usize,
+    pub latency: f64
+}
+
+struct HECostFunction<'a> {
+    egraph: &'a EGraph
+}
+
+impl<'a> CostFunction<HE> for HECostFunction<'a> {
+    type Cost = HECost;
+
+    fn cost<C>(&mut self, enode: &HE, mut costs: C) -> Self::Cost
+        where C: FnMut(Id) -> Self::Cost
+    {
+        let id = self.egraph.lookup(enode.clone()).unwrap();
+        let self_data = self.egraph[id].data;
+        
+        let mut self_cost = HECost { muldepth: 0, latency: 0.0 };
+        let mut seen: HashSet<Id> = HashSet::new();
+        for child in enode.children() {
+            if !seen.contains(child) {
+                seen.insert(*child);
+                self_cost.muldepth = max(self_cost.muldepth, costs(*child).muldepth);
+                self_cost.latency += costs(*child).latency
+            }
+        }
+
+        match *enode {
+            HE::Add(_) => {
+                if self_data.constval.is_some() {
+                    self_cost.latency += ADD_PLAIN_LATENCY;
+
+                } else {
+                    self_cost.latency += ADD_LATENCY;
+                }
+            },
+
+            HE::Mul(_) => {
+                if self_data.constval.is_some() {
+                    self_cost.latency += MUL_PLAIN_LATENCY;
+
+                } else {
+                    self_cost.muldepth += 1;
+                    self_cost.latency += MUL_LATENCY;
+                }
+            },
+
+
+            HE::Num(_) => {
+                self_cost.latency += NUM_LATENCY;
+            },
+
+            HE::Rot(_) => {
+                self_cost.latency += ROT_LATENCY;
+            }
+
+            HE::Symbol(_) => {
+                self_cost.latency += SYM_LATENCY;
+            }
+        }
+
+        self_cost
+    }
 }
 
 struct OpSizeFunction;
@@ -452,7 +527,7 @@ impl Applier<HE, HEData> for RotateSplit {
     }
 }
 
-pub(crate) fn optimize(expr: &RecExpr<HE>, timeout: u64) -> (usize, RecExpr<HE>) {
+pub(crate) fn optimize(expr: &RecExpr<HE>, timeout: u64) -> (HECost, RecExpr<HE>) {
     // simplify the expression using a Runner, which creates an e-graph with
     // the given expression and runs the given rules over it
     let mut runner = Runner::default()
@@ -464,11 +539,11 @@ pub(crate) fn optimize(expr: &RecExpr<HE>, timeout: u64) -> (usize, RecExpr<HE>)
     let egraph = &mut runner.egraph;
     let root = egraph.add_expr(&expr);
 
-    // let mut extractor = Extractor::new(egraph, AstSize);
-    // let (opt_cost, opt_expr) = extractor.find_best(root);
+    let extractor = Extractor::new(egraph, HECostFunction { egraph });
+    let (opt_cost, opt_expr) = extractor.find_best(root);
 
-    let mut lp_extractor = LpExtractor::new(egraph, OpSizeFunction);
-    let opt_expr = lp_extractor.solve(root);
+    // let mut lp_extractor = LpExtractor::new(egraph, OpSizeFunction);
+    // let opt_expr = lp_extractor.solve(root);
 
-    return (0, opt_expr);
+    return (opt_cost, opt_expr);
 }
