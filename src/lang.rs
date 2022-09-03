@@ -17,10 +17,12 @@ define_language! {
     }
 }
 
+type NodeId = usize;
+
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(untagged)]
 pub(crate) enum HERef {
-    NodeRef(usize),
+    NodeRef(NodeId),
     ConstSym(String)
 }
 
@@ -44,17 +46,17 @@ impl fmt::Display for HEOperand {
 
 #[derive(Clone)]
 pub(crate) enum HEInstr {
-    Add { index: usize, op1: HEOperand, op2: HEOperand },
-    Mul{ index: usize, op1: HEOperand, op2: HEOperand },
-    Rot { index: usize, op1: HEOperand, op2: HEOperand} ,
+    Add { id: NodeId, op1: HEOperand, op2: HEOperand },
+    Mul{ id: NodeId, op1: HEOperand, op2: HEOperand },
+    Rot { id: NodeId, op1: HEOperand, op2: HEOperand} ,
 }
 
 impl HEInstr {
     fn get_operands(&self) -> [&HEOperand; 2] {
         match self {
-            HEInstr::Add { index: _, op1, op2 }|
-            HEInstr::Mul { index: _, op1, op2 } |
-            HEInstr::Rot { index: _, op1, op2 } =>
+            HEInstr::Add { id: _, op1, op2 }|
+            HEInstr::Mul { id: _, op1, op2 } |
+            HEInstr::Rot { id: _, op1, op2 } =>
                 [op1, op2],
         }
     }
@@ -63,13 +65,13 @@ impl HEInstr {
 impl fmt::Display for HEInstr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            HEInstr::Add { index, op1, op2 } =>
+            HEInstr::Add { id: _, op1, op2 } =>
                 write!(f, "{} + {}", op1, op2),
 
-            HEInstr::Mul { index, op1, op2 } =>
+            HEInstr::Mul { id: _, op1, op2 } =>
                 write!(f, "{} * {}", op1, op2),
 
-            HEInstr::Rot { index, op1, op2 } =>
+            HEInstr::Rot { id: _, op1, op2 } =>
                 write!(f, "rot {} {}", op1, op2),
         }
     }
@@ -95,14 +97,13 @@ impl fmt::Display for HEValue {
 }
 
 pub(crate) type HESymStore = HashMap<String, HEValue>;
-pub(crate) type HERefStore = HashMap<usize, HEValue>;
+pub(crate) type HERefStore = HashMap<NodeId, HEValue>;
 
 impl HEProgram {
     /// calculate the multiplicative depth of the program.
     pub(crate) fn get_muldepth(&self) -> usize {
         let mut max_depth: usize = 0;
         let mut depth_list: Vec<usize> = vec![];
-        let mut i: usize = 0;
 
         let get_opdepth = |dlist: &Vec<usize>, op: &HEOperand| -> usize {
             match op {
@@ -116,12 +117,12 @@ impl HEProgram {
             let dlist: &Vec<usize> = &depth_list;
             let depth: usize =
                 match instr {
-                    HEInstr::Add { index, op1, op2 } => {
+                    HEInstr::Add { id: _, op1, op2 } => {
                         let op1_depth = get_opdepth(dlist, op1);
                         let op2_depth: usize = get_opdepth(dlist, op2);
                         max(op1_depth, op2_depth)
                     },
-                    HEInstr::Mul { index, op1, op2 } => {
+                    HEInstr::Mul { id: _, op1, op2 } => {
                         let op1_depth = get_opdepth(dlist, op1);
                         let op2_depth: usize = get_opdepth(dlist, op2);
 
@@ -132,7 +133,7 @@ impl HEProgram {
                             _ => max(op1_depth, op2_depth) + 1
                         }
                     },
-                    HEInstr::Rot { index, op1, op2 } => {
+                    HEInstr::Rot { id: _, op1, op2 } => {
                         let op1_depth = get_opdepth(dlist, op1);
                         let op2_depth: usize = get_opdepth(dlist, op2);
                         max(op1_depth, op2_depth)
@@ -143,7 +144,6 @@ impl HEProgram {
                 max_depth = depth;
             }
             depth_list.push(depth);
-            i += 1;
         }
         max_depth
     }
@@ -153,7 +153,7 @@ impl HEProgram {
         let mut latency = 0.0;
         for instr in self.instrs.iter() {
             match instr {
-                HEInstr::Add { index, op1, op2 } => {
+                HEInstr::Add { id: _, op1, op2 } => {
                     match (op1, op2) {
                         (HEOperand::ConstNum(_), _) | (_, HEOperand::ConstNum(_)) =>  {
                             latency += crate::optimizer::ADD_PLAIN_LATENCY
@@ -165,7 +165,7 @@ impl HEProgram {
                     }
                 },
 
-                HEInstr::Mul { index, op1, op2 } => {
+                HEInstr::Mul { id: _, op1, op2 } => {
                     match (op1, op2) {
                         (HEOperand::ConstNum(_), _) | (_, HEOperand::ConstNum(_)) =>  {
                             latency += crate::optimizer::MUL_PLAIN_LATENCY
@@ -177,7 +177,7 @@ impl HEProgram {
                     }
                 },
                 
-                HEInstr::Rot { index, op1, op2 } => {
+                HEInstr::Rot { id: _, op1: _, op2: _ } => {
                     latency += crate::optimizer::ROT_LATENCY
                 }
             }
@@ -232,7 +232,7 @@ impl fmt::Display for HEProgram {
 pub(crate) fn gen_program(expr: &RecExpr<HE>) -> HEProgram {
     let mut node_map: HashMap<Id, HEOperand> = HashMap::new();
     let mut program: HEProgram = HEProgram { instrs: Vec::new() };
-    let mut cur_instr: usize = 0;
+    let mut cur_instr: NodeId = 0;
 
     let mut op_processor =
         |nmap: &mut HashMap<Id, HEOperand>, id: Id,
@@ -263,7 +263,7 @@ pub(crate) fn gen_program(expr: &RecExpr<HE>) -> HEProgram {
                 op_processor(
                     &mut node_map, id, 
                     |index, op1, op2| {
-                        HEInstr::Add { index, op1, op2 }
+                        HEInstr::Add { id: index, op1, op2 }
                     },
                     id1, id2);
             }
@@ -271,14 +271,14 @@ pub(crate) fn gen_program(expr: &RecExpr<HE>) -> HEProgram {
             HE::Mul([id1, id2]) => {
                 op_processor(
                     &mut node_map, id, 
-                    |index, op1, op2| HEInstr::Mul { index, op1, op2 }, 
+                    |index, op1, op2| HEInstr::Mul { id: index, op1, op2 }, 
                     id1, id2);
             }
 
             HE::Rot([id1, id2]) => {
                 op_processor(
                     &mut node_map, id, 
-                    |index, op1, op2| HEInstr::Rot { index, op1, op2 }, 
+                    |index, op1, op2| HEInstr::Rot { id: index, op1, op2 }, 
                     id1, id2);
             }
         }
@@ -327,13 +327,13 @@ pub(crate) fn interp_instr(
     };
 
     match instr {
-        HEInstr::Add { index, op1, op2 }=>
+        HEInstr::Add { id: _, op1, op2 }=>
             exec_binop(op1, op2, |x1, x2| x1 + x2),
 
-        HEInstr::Mul { index, op1, op2 }=>
+        HEInstr::Mul { id: _, op1, op2 }=>
             exec_binop(op1, op2, |x1, x2| x1 * x2),
 
-        HEInstr::Rot { index, op1, op2 }=> {
+        HEInstr::Rot { id: _, op1, op2 }=> {
             let val1 = interp_operand(sym_store, ref_store, op1);
             let val2 = interp_operand(sym_store, ref_store, op2);
             match (val1, val2) {
@@ -373,28 +373,21 @@ type HELoweredOperand = String;
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(tag = "op")]
 pub(crate) enum HELoweredInstr {
-    Add { index: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
+    Add { id: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
     AddInplace { op1: HELoweredOperand, op2: HELoweredOperand },
-    AddPlain { index: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
+    AddPlain { id: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
     AddPlainInplace { op1: HELoweredOperand, op2: HELoweredOperand },
-    Mul { index: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
-    MulPlain { index: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
+    Mul { id: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
+    MulInplace { op1: HELoweredOperand, op2: HELoweredOperand },
+    MulPlain { id: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
     MulPlainInplace { op1: HELoweredOperand, op2: HELoweredOperand },
-    Rot { index: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
+    Rot { id: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
     RelinearizeInplace { op1: HELoweredOperand },
 }
 
 #[derive(Serialize)]
 pub(crate) struct HELoweredProgram {
     instrs: Vec<HELoweredInstr>,
-}
-
-pub(crate) fn lower_operand(op: &HEOperand) -> String {
-    match op {
-        HEOperand::Ref(HERef::NodeRef(nr)) => format!("i{}", nr),
-        HEOperand::Ref(HERef::ConstSym(sym)) => sym.clone(),
-        HEOperand::ConstNum(n) => n.to_string(),
-    }
 }
 
 /// compute the required vectors at every program point
@@ -407,9 +400,9 @@ pub(crate) fn analyze_use(prog: &HEProgram) -> Vec<HashSet<usize>> {
     for instr in prog.instrs.iter().rev() {
         let mut new_use: HashSet<usize> = uses.last().unwrap().clone();
         match instr {
-            HEInstr::Add { index: _, op1, op2 } |
-            HEInstr::Mul { index: _, op1, op2 } |
-            HEInstr::Rot { index: _, op1, op2 } => {
+            HEInstr::Add { id: _, op1, op2 } |
+            HEInstr::Mul { id: _, op1, op2 } |
+            HEInstr::Rot { id: _, op1, op2 } => {
                 match op1 {
                     HEOperand::Ref(HERef::NodeRef(nr)) => {
                         new_use.insert(*nr);
@@ -433,43 +426,92 @@ pub(crate) fn analyze_use(prog: &HEProgram) -> Vec<HashSet<usize>> {
     uses
 }
 
+pub(crate) fn resolve_inplace_indirection(inplace_map: &HashMap<NodeId,NodeId>, id: NodeId) -> NodeId {
+    let mut cur_id = id;
+    while inplace_map.contains_key(&cur_id) {
+        cur_id = inplace_map[&cur_id];
+    }
+    cur_id
+}
+
+pub(crate) fn lower_operand(inplace_map: &HashMap<NodeId,NodeId>, op: &HEOperand) -> String {
+    match op {
+        HEOperand::Ref(HERef::NodeRef(nr)) => {
+            let resolved_nr = resolve_inplace_indirection(inplace_map, *nr);
+            format!("i{}", resolved_nr)
+        },
+        HEOperand::Ref(HERef::ConstSym(sym)) => sym.clone(),
+        HEOperand::ConstNum(n) => n.to_string(),
+    }
+}
+
 pub(crate) fn lower_program(prog: &HEProgram) -> HELoweredProgram {
     let uses = analyze_use(prog);
-    let mut inplace_map: HashMap<usize, usize> = HashMap::new();
+    let mut inplace_map: HashMap<NodeId, NodeId> = HashMap::new();
     let mut instrs: Vec<HELoweredInstr> = Vec::new();
     for instr in prog.instrs.iter() {
         match instr {
-            HEInstr::Add { index, op1, op2 } => {
-                let lindex = format!("i{}", index);
-                let lop1 = lower_operand(op1);
-                let lop2 = lower_operand(op2);
+            HEInstr::Add { id, op1, op2 } => {
+                let lid = format!("i{}", id);
+                let lop1 = lower_operand(&inplace_map, op1);
+                let lop2 = lower_operand(&inplace_map, op2);
                 match (op1, op2) {
-                    (HEOperand::Ref(_), HEOperand::Ref(_)) => {
-                        instrs.push(
-                            HELoweredInstr::Add { index: lindex, op1: lop1, op2: lop2 }
-                        )
-                    },
-
-                    (HEOperand::Ref(r1), HEOperand::ConstNum(_)) => {
-                        match r1 {
-                            HERef::NodeRef(nr1) if !uses[index+1].contains(nr1) => {
+                    (HEOperand::Ref(r1), HEOperand::Ref(r2)) => {
+                        match (r1, r2) {
+                            (HERef::NodeRef(nr1), HERef::NodeRef(_)) if !uses[id+1].contains(nr1) => {
                                 instrs.push(
-                                    HELoweredInstr::AddPlainInplace { op1: lop1, op2: lop2 }
+                                    HELoweredInstr::AddInplace { op1: lop1, op2: lop2 }
                                 );
-                                inplace_map.insert(*index, *nr1);
+                                inplace_map.insert(*id, *nr1);
                             },
+
+                            (HERef::NodeRef(_), HERef::NodeRef(nr2)) if !uses[id+1].contains(nr2) => {
+                                instrs.push(
+                                    HELoweredInstr::AddInplace { op1: lop2, op2: lop1 }
+                                );
+                                inplace_map.insert(*id, *nr2);
+                            },
+
                             _ => {
                                 instrs.push(
-                                    HELoweredInstr::AddPlain { index: lindex, op1: lop1, op2: lop2 }
+                                    HELoweredInstr::Add { id: lid, op1: lop1, op2: lop2 }
                                 )
                             }
                         }
                     },
 
-                    (HEOperand::ConstNum(_), HEOperand::Ref(_)) => {
-                        instrs.push(
-                            HELoweredInstr::AddPlain { index: lindex, op1: lop2, op2: lop1 }
-                        )
+                    (HEOperand::Ref(r1), HEOperand::ConstNum(_)) => {
+                        match r1 {
+                            HERef::NodeRef(nr1) if !uses[id+1].contains(nr1) => {
+                                instrs.push(
+                                    HELoweredInstr::AddPlainInplace { op1: lop1, op2: lop2 }
+                                );
+                                inplace_map.insert(*id, *nr1);
+                            },
+
+                            _ => {
+                                instrs.push(
+                                    HELoweredInstr::AddPlain { id: lid, op1: lop1, op2: lop2 }
+                                )
+                            }
+                        }
+                    },
+
+                    (HEOperand::ConstNum(_), HEOperand::Ref(r2)) => {
+                        match r2 {
+                            HERef::NodeRef(nr2) if !uses[id+1].contains(nr2) => {
+                                instrs.push(
+                                    HELoweredInstr::AddPlainInplace { op1: lop2, op2: lop1 }
+                                );
+                                inplace_map.insert(*id, *nr2);
+                            },
+
+                            _ => {
+                                instrs.push(
+                                    HELoweredInstr::AddPlain { id: lid, op1: lop2, op2: lop1 }
+                                )
+                            }
+                        }
                     },
 
                     (HEOperand::ConstNum(_), HEOperand::ConstNum(_)) => {
@@ -478,26 +520,26 @@ pub(crate) fn lower_program(prog: &HEProgram) -> HELoweredProgram {
                 }
             },
 
-            HEInstr::Mul { index, op1, op2 } => {
-                let lindex = format!("i{}", index);
-                let lop1 = lower_operand(op1);
-                let lop2 = lower_operand(op2);
+            HEInstr::Mul { id, op1, op2 } => {
+                let lid = format!("i{}", id);
+                let lop1 = lower_operand(&inplace_map, op1);
+                let lop2 = lower_operand(&inplace_map, op2);
                 match (op1, op2) {
                     (HEOperand::Ref(_), HEOperand::Ref(_)) => {
                         instrs.push(
-                            HELoweredInstr::Mul { index: lindex.clone(), op1: lop1, op2: lop2 }
+                            HELoweredInstr::Mul { id: lid.clone(), op1: lop1, op2: lop2 }
                         );
                     },
 
                     (HEOperand::Ref(_), HEOperand::ConstNum(_)) => {
                         instrs.push(
-                            HELoweredInstr::MulPlain { index: lindex.clone(), op1: lop1, op2: lop2 }
+                            HELoweredInstr::MulPlain { id: lid.clone(), op1: lop1, op2: lop2 }
                         )
                     },
 
                     (HEOperand::ConstNum(_), HEOperand::Ref(_)) => {
                         instrs.push(
-                            HELoweredInstr::MulPlain { index: lindex.clone(), op1: lop2, op2: lop1 }
+                            HELoweredInstr::MulPlain { id: lid.clone(), op1: lop2, op2: lop1 }
                         )
                     },
 
@@ -509,21 +551,21 @@ pub(crate) fn lower_program(prog: &HEProgram) -> HELoweredProgram {
                 // relinearize at every multiplication, except for outputs;
                 // outputs will not be used in the future,
                 // so there's no need to minimize noise for them
-                if uses[index+1].contains(index) {
+                if uses[id+1].contains(id) {
                     instrs.push(
-                        HELoweredInstr::RelinearizeInplace { op1: lindex }
+                        HELoweredInstr::RelinearizeInplace { op1: lid }
                     )
                 }
             },
             
-            HEInstr::Rot { index, op1, op2 } => {
-                let lindex = format!("i{}", index);
-                let lop1 = lower_operand(op1);
-                let lop2 = lower_operand(op2);
+            HEInstr::Rot { id: index, op1, op2 } => {
+                let lid = format!("i{}", index);
+                let lop1 = lower_operand(&inplace_map, op1);
+                let lop2 = lower_operand(&inplace_map, op2);
                 match (op1, op2) {
                     (HEOperand::Ref(_), HEOperand::ConstNum(_)) => {
                         instrs.push(
-                            HELoweredInstr::Rot { index: lindex, op1: lop1, op2: lop2 }
+                            HELoweredInstr::Rot { id: lid, op1: lop1, op2: lop2 }
                         )
                     }
 

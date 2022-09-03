@@ -8,9 +8,9 @@ def main():
     {{/if}}
     {{else}}
     {{#if (instr_is_binary instr) }}
-    {{instr.index}} = {{instr.op}}({{instr.op1}}, {{instr.op2}})
+    {{instr.id}} = {{instr.op}}({{instr.op1}}, {{instr.op2}})
     {{else}}
-    {{instr.index}} = {{instr.op}}({{instr.op1}})
+    {{instr.id}} = {{instr.op}}({{instr.op1}})
     {{/if}}
     {{/if}}
 {{/each}}

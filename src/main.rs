@@ -25,20 +25,28 @@ struct Arguments {
 }
 
 handlebars_helper!(instr_is_binary: |instr: HELoweredInstr| match instr {
-    HELoweredInstr::Add { index: _, op1: _, op2: _} => true,
-    HELoweredInstr::AddPlain { index: _, op1: _, op2: _ } => true,
-    HELoweredInstr::Mul { index: _, op1: _, op2: _ } => true,
-    HELoweredInstr::MulPlain { index: _, op1: _, op2: _ } => true,
-    HELoweredInstr::Rot { index: _, op1: _, op2: _ } => true,
+    HELoweredInstr::Add { id: _, op1: _, op2: _} => true,
+    HELoweredInstr::AddInplace { op1: _, op2: _} => true,
+    HELoweredInstr::AddPlain { id: _, op1: _, op2: _ } => true,
+    HELoweredInstr::AddPlainInplace { op1: _, op2: _ } => true,
+    HELoweredInstr::Mul { id: _, op1: _, op2: _ } => true,
+    HELoweredInstr::MulInplace { op1: _, op2: _ } => true,
+    HELoweredInstr::MulPlain { id: _, op1: _, op2: _ } => true,
+    HELoweredInstr::MulPlainInplace { op1: _, op2: _ } => true,
+    HELoweredInstr::Rot { id: _, op1: _, op2: _ } => true,
     HELoweredInstr::RelinearizeInplace { op1: _ } => false
 });
 
 handlebars_helper!(instr_is_inplace: |instr: HELoweredInstr| match instr {
-    HELoweredInstr::Add { index: _, op1: _, op2: _} => false,
-    HELoweredInstr::AddPlain { index: _, op1: _, op2: _ } => false,
-    HELoweredInstr::Mul { index: _, op1: _, op2: _ } => false,
-    HELoweredInstr::MulPlain { index: _, op1: _, op2: _ } => false,
-    HELoweredInstr::Rot { index: _, op1: _, op2: _ } => false,
+    HELoweredInstr::Add { id: _, op1: _, op2: _} => false,
+    HELoweredInstr::AddInplace { op1: _, op2: _} => true,
+    HELoweredInstr::AddPlain { id: _, op1: _, op2: _ } => false,
+    HELoweredInstr::AddPlainInplace { op1: _, op2: _ } => true,
+    HELoweredInstr::Mul { id: _, op1: _, op2: _ } => false,
+    HELoweredInstr::MulInplace { op1: _, op2: _ } => true,
+    HELoweredInstr::MulPlain { id: _, op1: _, op2: _ } => false,
+    HELoweredInstr::MulPlainInplace { op1: _, op2: _ } => true,
+    HELoweredInstr::Rot { id: _, op1: _, op2: _ } => false,
     HELoweredInstr::RelinearizeInplace { op1: _ } => true
 });
 
