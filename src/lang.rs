@@ -370,19 +370,18 @@ pub(crate) fn interp_program(sym_store: &HESymStore, program: &HEProgram, vec_si
 
 type HELoweredOperand = String;
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(tag = "op")]
 pub(crate) enum HELoweredInstr {
     Add { index: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
-    // AddInplace { op1: NodeRefIndex, op2: NodeRefIndex },
+    AddInplace { op1: HELoweredOperand, op2: HELoweredOperand },
     AddPlain { index: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
-    // AddPlainInplace { op1: NodeRefIndex, op2: i32 },
+    AddPlainInplace { op1: HELoweredOperand, op2: HELoweredOperand },
     Mul { index: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
     MulPlain { index: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
-    // MulPlainInplace { index: usize, op1: NodeRefIndex, op2: HEOperand },
-    Rot { index: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand } ,
-    // Relinearize { index: usize, op: NodeRefIndex, op2: HEOperand} ,
-    // RelinearizeInplace { index: usize, op1: HEOperand, op2: HEOperand} ,
+    MulPlainInplace { op1: HELoweredOperand, op2: HELoweredOperand },
+    Rot { index: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
+    RelinearizeInplace { op1: HELoweredOperand },
 }
 
 #[derive(Serialize)]
@@ -398,7 +397,45 @@ pub(crate) fn lower_operand(op: &HEOperand) -> String {
     }
 }
 
+/// compute the required vectors at every program point
+/// this is used in the lowering pass for computing when relinearizations
+/// and in-place operations can be used
+pub(crate) fn analyze_use(prog: &HEProgram) -> Vec<HashSet<usize>> {
+    let mut uses: Vec<HashSet<usize>> = Vec::new();
+    uses.push(HashSet::new());
+
+    for instr in prog.instrs.iter().rev() {
+        let mut new_use: HashSet<usize> = uses.last().unwrap().clone();
+        match instr {
+            HEInstr::Add { index: _, op1, op2 } |
+            HEInstr::Mul { index: _, op1, op2 } |
+            HEInstr::Rot { index: _, op1, op2 } => {
+                match op1 {
+                    HEOperand::Ref(HERef::NodeRef(nr)) => {
+                        new_use.insert(*nr);
+                    }
+                    _ => ()
+                };
+
+                match op2 {
+                    HEOperand::Ref(HERef::NodeRef(nr)) => {
+                        new_use.insert(*nr);
+                    }
+                    _ => ()
+                };
+            }
+        }
+
+        uses.push(new_use);
+    }
+
+    uses.reverse();
+    uses
+}
+
 pub(crate) fn lower_program(prog: &HEProgram) -> HELoweredProgram {
+    let uses = analyze_use(prog);
+    let mut inplace_map: HashMap<usize, usize> = HashMap::new();
     let mut instrs: Vec<HELoweredInstr> = Vec::new();
     for instr in prog.instrs.iter() {
         match instr {
@@ -413,10 +450,20 @@ pub(crate) fn lower_program(prog: &HEProgram) -> HELoweredProgram {
                         )
                     },
 
-                    (HEOperand::Ref(_), HEOperand::ConstNum(_)) => {
-                        instrs.push(
-                            HELoweredInstr::AddPlain { index: lindex, op1: lop1, op2: lop2 }
-                        )
+                    (HEOperand::Ref(r1), HEOperand::ConstNum(_)) => {
+                        match r1 {
+                            HERef::NodeRef(nr1) if !uses[index+1].contains(nr1) => {
+                                instrs.push(
+                                    HELoweredInstr::AddPlainInplace { op1: lop1, op2: lop2 }
+                                );
+                                inplace_map.insert(*index, *nr1);
+                            },
+                            _ => {
+                                instrs.push(
+                                    HELoweredInstr::AddPlain { index: lindex, op1: lop1, op2: lop2 }
+                                )
+                            }
+                        }
                     },
 
                     (HEOperand::ConstNum(_), HEOperand::Ref(_)) => {
@@ -438,25 +485,34 @@ pub(crate) fn lower_program(prog: &HEProgram) -> HELoweredProgram {
                 match (op1, op2) {
                     (HEOperand::Ref(_), HEOperand::Ref(_)) => {
                         instrs.push(
-                            HELoweredInstr::Mul { index: lindex, op1: lop1, op2: lop2 }
-                        )
+                            HELoweredInstr::Mul { index: lindex.clone(), op1: lop1, op2: lop2 }
+                        );
                     },
 
                     (HEOperand::Ref(_), HEOperand::ConstNum(_)) => {
                         instrs.push(
-                            HELoweredInstr::MulPlain { index: lindex, op1: lop1, op2: lop2 }
+                            HELoweredInstr::MulPlain { index: lindex.clone(), op1: lop1, op2: lop2 }
                         )
                     },
 
                     (HEOperand::ConstNum(_), HEOperand::Ref(_)) => {
                         instrs.push(
-                            HELoweredInstr::MulPlain { index: lindex, op1: lop2, op2: lop1 }
+                            HELoweredInstr::MulPlain { index: lindex.clone(), op1: lop2, op2: lop1 }
                         )
                     },
 
                     (HEOperand::ConstNum(_), HEOperand::ConstNum(_)) => {
                         panic!("attempting to multiply two plaintexts---this should be constant folded")
                     }
+                }
+
+                // relinearize at every multiplication, except for outputs;
+                // outputs will not be used in the future,
+                // so there's no need to minimize noise for them
+                if uses[index+1].contains(index) {
+                    instrs.push(
+                        HELoweredInstr::RelinearizeInplace { op1: lindex }
+                    )
                 }
             },
             

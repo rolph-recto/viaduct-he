@@ -24,10 +24,22 @@ struct Arguments {
     duration: u64
 }
 
-handlebars_helper!(opfmt: |op: HEOperand| match op {
-    HEOperand::Ref(HERef::NodeRef(r)) => format!("i{}", r),
-    HEOperand::Ref(HERef::ConstSym(sym)) => format!("{}", sym),
-    HEOperand::ConstNum(i) => format!("{}", i),
+handlebars_helper!(instr_is_binary: |instr: HELoweredInstr| match instr {
+    HELoweredInstr::Add { index: _, op1: _, op2: _} => true,
+    HELoweredInstr::AddPlain { index: _, op1: _, op2: _ } => true,
+    HELoweredInstr::Mul { index: _, op1: _, op2: _ } => true,
+    HELoweredInstr::MulPlain { index: _, op1: _, op2: _ } => true,
+    HELoweredInstr::Rot { index: _, op1: _, op2: _ } => true,
+    HELoweredInstr::RelinearizeInplace { op1: _ } => false
+});
+
+handlebars_helper!(instr_is_inplace: |instr: HELoweredInstr| match instr {
+    HELoweredInstr::Add { index: _, op1: _, op2: _} => false,
+    HELoweredInstr::AddPlain { index: _, op1: _, op2: _ } => false,
+    HELoweredInstr::Mul { index: _, op1: _, op2: _ } => false,
+    HELoweredInstr::MulPlain { index: _, op1: _, op2: _ } => false,
+    HELoweredInstr::Rot { index: _, op1: _, op2: _ } => false,
+    HELoweredInstr::RelinearizeInplace { op1: _ } => true
 });
 
 fn main() {
@@ -52,7 +64,8 @@ fn main() {
     let opt_prog: HEProgram = gen_program(&opt_expr);
 
     let mut handlebars = Handlebars::new();
-    handlebars.register_helper("opfmt", Box::new(opfmt));
+    handlebars.register_helper("instr_is_inplace", Box::new(instr_is_inplace));
+    handlebars.register_helper("instr_is_binary", Box::new(instr_is_binary));
     handlebars.register_template_string("t", template_str)
         .expect("Could not register template");
 

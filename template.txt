@@ -1,4 +1,16 @@
 def main():
-{{#each instrs}}
-    {{this.index}} = {{this.op}}({{this.op1}}, {{this.op2}})
+{{#each instrs as |instr|}}
+    {{#if (instr_is_inplace instr) }}
+    {{#if (instr_is_binary instr) }}
+    {{instr.op}}({{instr.op1}}, {{instr.op2}})
+    {{else}}
+    {{instr.op}}({{instr.op1}})
+    {{/if}}
+    {{else}}
+    {{#if (instr_is_binary instr) }}
+    {{instr.index}} = {{instr.op}}({{instr.op1}}, {{instr.op2}})
+    {{else}}
+    {{instr.index}} = {{instr.op}}({{instr.op1}})
+    {{/if}}
+    {{/if}}
 {{/each}}
