@@ -50,6 +50,19 @@ handlebars_helper!(instr_is_inplace: |instr: HELoweredInstr| match instr {
     HELoweredInstr::RelinearizeInplace { op1: _ } => true
 });
 
+handlebars_helper!(instr_name: |instr: HELoweredInstr| match instr {
+    HELoweredInstr::Add { id: _, op1: _, op2: _} => "add",
+    HELoweredInstr::AddInplace { op1: _, op2: _} => "add_inplace",
+    HELoweredInstr::AddPlain { id: _, op1: _, op2: _ } => "add_plain",
+    HELoweredInstr::AddPlainInplace { op1: _, op2: _ } => "add_plain_inplace",
+    HELoweredInstr::Mul { id: _, op1: _, op2: _ } => "mul",
+    HELoweredInstr::MulInplace { op1: _, op2: _ } => "mul_inplace",
+    HELoweredInstr::MulPlain { id: _, op1: _, op2: _ } => "mul_plain",
+    HELoweredInstr::MulPlainInplace { op1: _, op2: _ } => "mul_plain_inplace",
+    HELoweredInstr::Rot { id: _, op1: _, op2: _ } => "rotate",
+    HELoweredInstr::RelinearizeInplace { op1: _ } => "relinearize_inplace"
+});
+
 fn main() {
     let args = Arguments::parse();
     let input_str =
@@ -74,6 +87,7 @@ fn main() {
     let mut handlebars = Handlebars::new();
     handlebars.register_helper("instr_is_inplace", Box::new(instr_is_inplace));
     handlebars.register_helper("instr_is_binary", Box::new(instr_is_binary));
+    handlebars.register_helper("instr_name", Box::new(instr_name));
     handlebars.register_template_string("t", template_str)
         .expect("Could not register template");
 

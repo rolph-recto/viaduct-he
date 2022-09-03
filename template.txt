@@ -2,15 +2,15 @@ def main():
 {{#each instrs as |instr|}}
     {{#if (instr_is_inplace instr) }}
     {{#if (instr_is_binary instr) }}
-    {{instr.op}}({{instr.op1}}, {{instr.op2}})
+    evaluator.{{instr_name instr}}({{instr.op1}}, {{instr.op2}})
     {{else}}
-    {{instr.op}}({{instr.op1}})
+    evaluator.{{instr_name instr}}({{instr.op1}})
     {{/if}}
     {{else}}
     {{#if (instr_is_binary instr) }}
-    {{instr.id}} = {{instr.op}}({{instr.op1}}, {{instr.op2}})
+    {{instr.id}} = evaluator.{{instr_name instr}}({{instr.op1}}, {{instr.op2}})
     {{else}}
-    {{instr.id}} = {{instr.op}}({{instr.op1}})
+    {{instr.id}} = evaluator.{{instr_name instr}}({{instr.op1}})
     {{/if}}
     {{/if}}
 {{/each}}
