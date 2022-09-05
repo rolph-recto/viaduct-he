@@ -149,8 +149,8 @@ impl HEProgram {
     }
 
     /// calculate the latency of a program
-    pub fn get_latency(&self) -> f64 {
-        let mut latency = 0.0;
+    pub fn get_latency(&self) -> usize {
+        let mut latency: usize = 0;
         for instr in self.instrs.iter() {
             match instr {
                 HEInstr::Add { id: _, op1, op2 } => {

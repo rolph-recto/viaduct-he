@@ -1,15 +1,15 @@
 use egg::*;
-use std::{time::*, cmp::max, collections::HashSet};
+use std::{time::*, cmp::max, collections::HashMap};
 
-use crate::lang::*;
+use crate::{lang::*, toposort_extractor::ToposortExtractor};
 
-pub const MUL_LATENCY: f64 = 15.0;
-pub const MUL_PLAIN_LATENCY: f64 = 6.0;
-pub const ADD_LATENCY: f64 = 6.0;
-pub const ADD_PLAIN_LATENCY: f64 = 3.0;
-pub const ROT_LATENCY: f64 = 0.1;
-pub const SYM_LATENCY: f64 = 0.1;
-pub const NUM_LATENCY: f64 = 0.1;
+pub const MUL_LATENCY: usize = 20;
+pub const MUL_PLAIN_LATENCY: usize = 8;
+pub const ADD_LATENCY: usize = 8;
+pub const ADD_PLAIN_LATENCY: usize = 4;
+pub const ROT_LATENCY: usize = 1;
+pub const SYM_LATENCY: usize = 0;
+pub const NUM_LATENCY: usize = 0;
 
 type EGraph = egg::EGraph<HE, HEData>;
 
@@ -19,14 +19,41 @@ struct HEData {
     muldepth: usize
 }
 
-#[derive(Debug,Clone,PartialEq,PartialOrd)]
+#[derive(Debug, Clone)]
 pub struct HECost {
     pub muldepth: usize,
-    pub latency: f64
+    pub latency_map: HashMap<Id, usize>,
+    pub cost: usize
+}
+
+impl HECost {
+    fn calculate_cost(&mut self) -> usize {
+        let mut total_latency: usize = 0;
+        for v in self.latency_map.values() {
+            total_latency += v;
+        }
+
+        self.cost = total_latency * self.muldepth;
+        // self.cost = self.muldepth;
+        self.cost
+    }
+}
+
+impl PartialEq for HECost {
+    fn eq(&self, other: &Self) -> bool {
+        self.cost.eq(&other.cost)
+    }
+}
+
+impl PartialOrd for HECost {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.cost.partial_cmp(&other.cost)
+    }
 }
 
 struct HECostFunction<'a> {
-    egraph: &'a EGraph
+    egraph: &'a EGraph,
+    count: usize
 }
 
 impl<'a> CostFunction<HE> for HECostFunction<'a> {
@@ -35,53 +62,62 @@ impl<'a> CostFunction<HE> for HECostFunction<'a> {
     fn cost<C>(&mut self, enode: &HE, mut costs: C) -> Self::Cost
         where C: FnMut(Id) -> Self::Cost
     {
-        let id = self.egraph.lookup(enode.clone()).unwrap();
+        let id = self.egraph.find(self.egraph.lookup(enode.clone()).unwrap());
         let self_data = self.egraph[id].data;
         
-        let mut self_cost = HECost { muldepth: 0, latency: 0.0 };
-        let mut seen: HashSet<Id> = HashSet::new();
+        let mut self_cost = HECost { muldepth: 0, latency_map: HashMap::new(), cost: 0 };
         for child in enode.children() {
-            if !seen.contains(child) {
-                seen.insert(*child);
-                self_cost.muldepth = max(self_cost.muldepth, costs(*child).muldepth);
-                self_cost.latency += costs(*child).latency
+            let child_id = self.egraph.find(*child);
+            let child_cost = costs(child_id);
+
+            self_cost.muldepth = max(self_cost.muldepth, child_cost.muldepth);
+
+            for (k, v) in child_cost.latency_map.iter() {
+                if !self_cost.latency_map.contains_key(k) {
+                    self_cost.latency_map.insert(*k, *v);
+
+                } else if self_cost.latency_map[k] > *v {
+                    self_cost.latency_map.insert(*k, *v);
+                }
             }
         }
 
         match *enode {
             HE::Add(_) => {
                 if self_data.constval.is_some() {
-                    self_cost.latency += ADD_PLAIN_LATENCY;
+                    self_cost.latency_map.insert(id, ADD_PLAIN_LATENCY);
 
                 } else {
-                    self_cost.latency += ADD_LATENCY;
+                    self_cost.latency_map.insert(id, ADD_LATENCY);
                 }
             },
 
             HE::Mul(_) => {
                 if self_data.constval.is_some() {
-                    self_cost.latency += MUL_PLAIN_LATENCY;
+                    self_cost.latency_map.insert(id, MUL_PLAIN_LATENCY);
 
                 } else {
+                    self_cost.latency_map.insert(id, MUL_LATENCY);
                     self_cost.muldepth += 1;
-                    self_cost.latency += MUL_LATENCY;
                 }
             },
 
 
             HE::Num(_) => {
-                self_cost.latency += NUM_LATENCY;
+                self_cost.latency_map.insert(id, NUM_LATENCY);
             },
 
             HE::Rot(_) => {
-                self_cost.latency += ROT_LATENCY;
+                self_cost.latency_map.insert(id, ROT_LATENCY);
             }
 
             HE::Symbol(_) => {
-                self_cost.latency += SYM_LATENCY;
+                self_cost.latency_map.insert(id, SYM_LATENCY);
             }
         }
 
+        self_cost.calculate_cost();
+        self.count += 1;
         self_cost
     }
 }
@@ -120,20 +156,6 @@ impl LpCostFunction<HE, HEData> for OpSizeFunction {
 
 impl Analysis<HE> for HEData {
     type Data = HEData;
-
-    /*
-    fn pre_union(egraph: &EGraph, id1: Id, id2: Id) {
-        let n1 =
-            egraph[id1].nodes.first().unwrap().build_recexpr(|cid|
-                egraph[cid].nodes.first().unwrap().clone()
-            );
-        let n2 =
-            egraph[id2].nodes.first().unwrap().build_recexpr(|cid|
-                egraph[cid].nodes.first().unwrap().clone()
-            );
-        println!("merging {} {}", n1, n2);
-    }
-    */
 
     fn merge(&mut self, to: &mut Self::Data, from: Self::Data) -> DidMerge {
         if to.constval == from.constval {
@@ -204,7 +226,7 @@ const VEC_LENGTH: i32 = 16;
 fn make_rules() -> Vec<Rewrite<HE, HEData>> {
     let mut rules: Vec<Rewrite<HE, HEData>> = vec![
         // bidirectional addition rules
-        rewrite!("add-identity"; "(+ ?a 0)" <=> "?a"),
+        // rewrite!("add-identity"; "(+ ?a 0)" <=> "?a"),
         rewrite!("add-assoc"; "(+ ?a (+ ?b ?c))" <=> "(+ (+ ?a ?b) ?c)"),
         rewrite!("add-commute"; "(+ ?a ?b)" <=> "(+ ?b ?a)"),
         // bidirectional multiplication rules
@@ -220,7 +242,7 @@ fn make_rules() -> Vec<Rewrite<HE, HEData>> {
 
     rules.extend(vec![
         // unidirectional rules
-        rewrite!("mul-annihilator"; "(* ?a 0)" => "0"),
+        // rewrite!("mul-annihilator"; "(* ?a 0)" => "0"),
         // constant folding
         rewrite!("add-fold"; "(+ ?a ?b)" => {
             ConstantFold {
@@ -539,11 +561,12 @@ pub(crate) fn optimize(expr: &RecExpr<HE>, timeout: u64) -> (HECost, RecExpr<HE>
     let egraph = &mut runner.egraph;
     let root = egraph.add_expr(&expr);
 
-    let extractor = Extractor::new(egraph, HECostFunction { egraph });
+    let extractor = ToposortExtractor::new(egraph, HECostFunction { egraph, count: 0 });
+    // let extractor = Extractor::new(egraph, HECostFunction { egraph, count: 0 });
     let (opt_cost, opt_expr) = extractor.find_best(root);
 
     // let mut lp_extractor = LpExtractor::new(egraph, OpSizeFunction);
     // let opt_expr = lp_extractor.solve(root);
 
-    return (opt_cost, opt_expr);
+    return (HECost { muldepth: 0, latency_map: HashMap::new(), cost: 0 }, opt_expr);
 }

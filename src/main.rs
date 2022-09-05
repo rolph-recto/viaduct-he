@@ -8,6 +8,7 @@ use crate::{lang::*, optimizer::optimize};
 
 mod lang;
 mod optimizer;
+mod toposort_extractor;
 
 #[derive(Parser)]
 #[clap(author, version, about = "optimizer for for vectorized homomorphic encryption circuits", long_about = None)]

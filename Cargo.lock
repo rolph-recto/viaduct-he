@@ -232,6 +232,7 @@ dependencies = [
  "clap",
  "egg",
  "handlebars",
+ "log",
  "rand",
  "serde",
  "serde_json",
