@@ -4,6 +4,8 @@
 use clap::Parser;
 use handlebars::{Handlebars, handlebars_helper};
 use egg::{RecExpr, AstSize, CostFunction};
+use log::*;
+
 use crate::{lang::*, optimizer::optimize};
 
 mod lang;
@@ -65,6 +67,8 @@ handlebars_helper!(instr_name: |instr: HELoweredInstr| match instr {
 });
 
 fn main() {
+    env_logger::init();
+
     let args = Arguments::parse();
     let input_str =
         std::fs::read_to_string(&args.file)
@@ -78,11 +82,8 @@ fn main() {
     // parse the expression, the type annotation tells it which Language to use
     let init_expr: RecExpr<HE> = input_str.parse().unwrap();
     let init_prog = gen_program(&init_expr);
-    let init_cost: usize = AstSize.cost_rec(&init_expr);
 
-    println!("Running equality saturation for {} seconds...", args.duration);
-
-    let (opt_cost, opt_expr ) = optimize(&init_expr, args.duration);
+    let opt_expr = optimize(&init_expr, args.duration);
     let opt_prog: HEProgram = gen_program(&opt_expr);
 
     let mut handlebars = Handlebars::new();
@@ -92,17 +93,15 @@ fn main() {
     handlebars.register_template_string("t", template_str)
         .expect("Could not register template");
 
-    println!("Initial HE cost: {}", init_cost);
-    println!("Initial HE expr:\n{}", init_expr.pretty(80));
-    println!("Initial HE program (muldepth {}, latency {}ms):\n{}",
+    info!("Initial HE expr:\n{}", init_expr.pretty(80));
+    info!("Initial HE program (muldepth {}, latency {}ms):\n{}",
         init_prog.get_muldepth(),
         init_prog.get_latency(),
         handlebars.render("t", &lower_program(&init_prog)).unwrap()
     );
     
-    println!("Optimized HE cost: {}", opt_cost.muldepth);
-    println!("Optimized HE expr:\n{}", opt_expr.pretty(80));
-    println!("Optimized HE program (muldepth {}, latency {}ms):\n{}",
+    info!("Optimized HE expr:\n{}", opt_expr.pretty(80));
+    info!("Optimized HE program (muldepth {}, latency {}ms):\n{}",
         opt_prog.get_muldepth(),
         opt_prog.get_latency(),
         handlebars.render("t", &lower_program(&opt_prog)).unwrap()
@@ -114,6 +113,6 @@ fn main() {
     let opt_out = interp_program(&sym_store, &opt_prog, vec_size);
 
     // values of the last instructions should be equal
-    println!("output for init prog: {}", init_out.unwrap());
-    println!("output for opt prog: {}", opt_out.unwrap());
+    info!("output for init prog: {}", init_out.unwrap());
+    info!("output for opt prog: {}", opt_out.unwrap());
 }

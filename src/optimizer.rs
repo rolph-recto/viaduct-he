@@ -1,4 +1,5 @@
 use egg::*;
+use log::*;
 use std::{time::*, cmp::max, collections::HashMap};
 
 use crate::{lang::*, toposort_extractor::ToposortExtractor};
@@ -226,7 +227,7 @@ const VEC_LENGTH: i32 = 16;
 fn make_rules() -> Vec<Rewrite<HE, HEData>> {
     let mut rules: Vec<Rewrite<HE, HEData>> = vec![
         // bidirectional addition rules
-        // rewrite!("add-identity"; "(+ ?a 0)" <=> "?a"),
+        rewrite!("add-identity"; "(+ ?a 0)" <=> "?a"),
         rewrite!("add-assoc"; "(+ ?a (+ ?b ?c))" <=> "(+ (+ ?a ?b) ?c)"),
         rewrite!("add-commute"; "(+ ?a ?b)" <=> "(+ ?b ?a)"),
         // bidirectional multiplication rules
@@ -242,7 +243,7 @@ fn make_rules() -> Vec<Rewrite<HE, HEData>> {
 
     rules.extend(vec![
         // unidirectional rules
-        // rewrite!("mul-annihilator"; "(* ?a 0)" => "0"),
+        rewrite!("mul-annihilator"; "(* ?a 0)" => "0"),
         // constant folding
         rewrite!("add-fold"; "(+ ?a ?b)" => {
             ConstantFold {
@@ -549,7 +550,9 @@ impl Applier<HE, HEData> for RotateSplit {
     }
 }
 
-pub(crate) fn optimize(expr: &RecExpr<HE>, timeout: u64) -> (HECost, RecExpr<HE>) {
+pub(crate) fn optimize(expr: &RecExpr<HE>, timeout: u64) -> RecExpr<HE> {
+    info!("running equality saturation for {} seconds...", timeout);
+
     // simplify the expression using a Runner, which creates an e-graph with
     // the given expression and runs the given rules over it
     let mut runner = Runner::default()
@@ -563,10 +566,10 @@ pub(crate) fn optimize(expr: &RecExpr<HE>, timeout: u64) -> (HECost, RecExpr<HE>
 
     let extractor = ToposortExtractor::new(egraph, HECostFunction { egraph, count: 0 });
     // let extractor = Extractor::new(egraph, HECostFunction { egraph, count: 0 });
-    let (opt_cost, opt_expr) = extractor.find_best(root);
+    let (_, opt_expr) = extractor.find_best(root);
 
     // let mut lp_extractor = LpExtractor::new(egraph, OpSizeFunction);
     // let opt_expr = lp_extractor.solve(root);
 
-    return (HECost { muldepth: 0, latency_map: HashMap::new(), cost: 0 }, opt_expr);
+    return opt_expr;
 }
