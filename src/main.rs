@@ -5,6 +5,7 @@ use clap::Parser;
 use handlebars::{Handlebars, handlebars_helper};
 use egg::{RecExpr, AstSize, CostFunction};
 use log::*;
+use std::fs::File;
 
 use crate::{lang::*, optimizer::optimize};
 
@@ -21,6 +22,9 @@ struct Arguments {
 
     #[clap(short = 'p', long = "template", value_parser, value_name = "template", default_value = "template.txt")]
     template: String,
+
+    #[clap(short = 'o', long = "outfile", value_parser, value_name = "outfile", default_value = "")]
+    outfile: String,
 
     /// duration in seconds to run equality saturation until timeout
     #[clap(short = 'd', long = "duration", value_parser, value_name = "duration", default_value_t = 20)]
@@ -93,19 +97,26 @@ fn main() {
     handlebars.register_template_string("t", template_str)
         .expect("Could not register template");
 
-    info!("Initial HE expr:\n{}", init_expr.pretty(80));
-    info!("Initial HE program (muldepth {}, latency {}ms):\n{}",
-        init_prog.get_muldepth(),
-        init_prog.get_latency(),
-        handlebars.render("t", &lower_program(&init_prog)).unwrap()
-    );
-    
-    info!("Optimized HE expr:\n{}", opt_expr.pretty(80));
-    info!("Optimized HE program (muldepth {}, latency {}ms):\n{}",
-        opt_prog.get_muldepth(),
-        opt_prog.get_latency(),
-        handlebars.render("t", &lower_program(&opt_prog)).unwrap()
-    );
+    if args.outfile.len() > 1 {
+        let f =  File::create(&args.outfile).unwrap();
+        handlebars.render_to_write("t", &lower_program(&opt_prog), f).unwrap();
+        info!("Generated optimized program to {}", &args.outfile);
+
+    } else {
+        info!("Initial HE expr:\n{}", init_expr.pretty(80));
+        info!("Initial HE program (muldepth {}, latency {}ms):\n{}",
+            init_prog.get_muldepth(),
+            init_prog.get_latency(),
+            handlebars.render("t", &lower_program(&init_prog)).unwrap()
+        );
+
+        info!("Optimized HE expr:\n{}", opt_expr.pretty(80));
+        info!("Optimized HE program (muldepth {}, latency {}ms):\n{}",
+            opt_prog.get_muldepth(),
+            opt_prog.get_latency(),
+            handlebars.render("t", &lower_program(&opt_prog)).unwrap()
+        );
+    }
 
     let vec_size = 16;
     let sym_store: HESymStore = init_prog.gen_sym_store(vec_size, -10..=10);
