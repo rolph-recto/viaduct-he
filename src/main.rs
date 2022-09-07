@@ -3,32 +3,37 @@
 
 use clap::Parser;
 use handlebars::{Handlebars, handlebars_helper};
-use egg::{RecExpr, AstSize, CostFunction};
+use egg::RecExpr;
 use log::*;
 use std::fs::File;
 
-use crate::{lang::*, optimizer::optimize};
+use crate::{lang::*, optimizer::{ExtractorType, optimize}};
 
 mod lang;
 mod optimizer;
-mod toposort_extractor;
 
 #[derive(Parser)]
 #[clap(author, version, about = "optimizer for for vectorized homomorphic encryption circuits", long_about = None)]
 struct Arguments {
-    /// File to parse as input
+    /// file to parse as input
     #[clap(value_parser)]
     file: String,
 
-    #[clap(short = 'p', long = "template", value_parser, value_name = "template", default_value = "template.txt")]
+    /// template file for output program
+    #[clap(short = 'p', long = "template", value_parser, default_value = "template.txt")]
     template: String,
 
-    #[clap(short = 'o', long = "outfile", value_parser, value_name = "outfile", default_value = "")]
+    /// file for output program
+    #[clap(short = 'o', long = "outfile", value_parser, default_value = "")]
     outfile: String,
 
     /// duration in seconds to run equality saturation until timeout
-    #[clap(short = 'd', long = "duration", value_parser, value_name = "duration", default_value_t = 20)]
-    duration: u64
+    #[clap(short = 'd', long = "duration", value_parser, default_value_t = 20)]
+    duration: u64,
+
+    /// duration in seconds to run equality saturation until timeout
+    #[clap(short = 'e', long = "extractor", value_enum, default_value_t = ExtractorType::GREEDY)]
+    extractor: ExtractorType,
 }
 
 handlebars_helper!(instr_is_binary: |instr: HELoweredInstr| match instr {
@@ -87,7 +92,7 @@ fn main() {
     let init_expr: RecExpr<HE> = input_str.parse().unwrap();
     let init_prog = gen_program(&init_expr);
 
-    let opt_expr = optimize(&init_expr, args.duration);
+    let opt_expr = optimize(&init_expr, args.duration, args.extractor);
     let opt_prog: HEProgram = gen_program(&opt_expr);
 
     let mut handlebars = Handlebars::new();
@@ -100,6 +105,14 @@ fn main() {
     if args.outfile.len() > 1 {
         let f =  File::create(&args.outfile).unwrap();
         handlebars.render_to_write("t", &lower_program(&opt_prog), f).unwrap();
+        info!("Initial HE program (muldepth {}, latency {}ms):\n",
+            init_prog.get_muldepth(),
+            init_prog.get_latency()
+        );
+        info!("Optimized HE program (muldepth {}, latency {}ms):\n",
+            opt_prog.get_muldepth(),
+            opt_prog.get_latency()
+        );
         info!("Generated optimized program to {}", &args.outfile);
 
     } else {
@@ -118,12 +131,12 @@ fn main() {
         );
     }
 
-    let vec_size = 16;
-    let sym_store: HESymStore = init_prog.gen_sym_store(vec_size, -10..=10);
-    let init_out = interp_program(&sym_store, &init_prog, vec_size);
-    let opt_out = interp_program(&sym_store, &opt_prog, vec_size);
+    // let vec_size = 16;
+    // let sym_store: HESymStore = init_prog.gen_sym_store(vec_size, -10..=10);
+    // let init_out = interp_program(&sym_store, &init_prog, vec_size);
+    // let opt_out = interp_program(&sym_store, &opt_prog, vec_size);
 
-    // values of the last instructions should be equal
-    info!("output for init prog: {}", init_out.unwrap());
-    info!("output for opt prog: {}", opt_out.unwrap());
+    // // values of the last instructions should be equal
+    // info!("output for init prog: {}", init_out.unwrap());
+    // info!("output for opt prog: {}", opt_out.unwrap());
 }

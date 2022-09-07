@@ -1,8 +1,17 @@
 use egg::*;
 use log::*;
+use clap::ValueEnum;
 use std::{time::*, cmp::max, collections::HashMap};
 
-use crate::{lang::*, toposort_extractor::ToposortExtractor};
+use crate::lang::*;
+use crate::optimizer::greedy_extractor::*;
+use crate::optimizer::lp_extractor::*;
+
+mod greedy_extractor;
+mod lp_extractor;
+
+#[derive(Clone, ValueEnum)]
+pub(crate) enum ExtractorType { GREEDY, LP }
 
 pub const MUL_LATENCY: usize = 20;
 pub const MUL_PLAIN_LATENCY: usize = 8;
@@ -12,147 +21,12 @@ pub const ROT_LATENCY: usize = 1;
 pub const SYM_LATENCY: usize = 0;
 pub const NUM_LATENCY: usize = 0;
 
-type EGraph = egg::EGraph<HE, HEData>;
+pub(crate) type HEGraph = egg::EGraph<HE, HEData>;
 
 #[derive(Debug, Default, Clone, Copy)]
-struct HEData {
+pub(crate) struct HEData {
     constval: Option<i32>,
     muldepth: usize
-}
-
-#[derive(Debug, Clone)]
-pub struct HECost {
-    pub muldepth: usize,
-    pub latency_map: HashMap<Id, usize>,
-    pub cost: usize
-}
-
-impl HECost {
-    fn calculate_cost(&mut self) -> usize {
-        let mut total_latency: usize = 0;
-        for v in self.latency_map.values() {
-            total_latency += v;
-        }
-
-        self.cost = total_latency * self.muldepth;
-        // self.cost = self.muldepth;
-        self.cost
-    }
-}
-
-impl PartialEq for HECost {
-    fn eq(&self, other: &Self) -> bool {
-        self.cost.eq(&other.cost)
-    }
-}
-
-impl PartialOrd for HECost {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.cost.partial_cmp(&other.cost)
-    }
-}
-
-struct HECostFunction<'a> {
-    egraph: &'a EGraph,
-    count: usize
-}
-
-impl<'a> CostFunction<HE> for HECostFunction<'a> {
-    type Cost = HECost;
-
-    fn cost<C>(&mut self, enode: &HE, mut costs: C) -> Self::Cost
-        where C: FnMut(Id) -> Self::Cost
-    {
-        let id = self.egraph.find(self.egraph.lookup(enode.clone()).unwrap());
-        let self_data = self.egraph[id].data;
-        
-        let mut self_cost = HECost { muldepth: 0, latency_map: HashMap::new(), cost: 0 };
-        for child in enode.children() {
-            let child_id = self.egraph.find(*child);
-            let child_cost = costs(child_id);
-
-            self_cost.muldepth = max(self_cost.muldepth, child_cost.muldepth);
-
-            for (k, v) in child_cost.latency_map.iter() {
-                if !self_cost.latency_map.contains_key(k) {
-                    self_cost.latency_map.insert(*k, *v);
-
-                } else if self_cost.latency_map[k] > *v {
-                    self_cost.latency_map.insert(*k, *v);
-                }
-            }
-        }
-
-        match *enode {
-            HE::Add(_) => {
-                if self_data.constval.is_some() {
-                    self_cost.latency_map.insert(id, ADD_PLAIN_LATENCY);
-
-                } else {
-                    self_cost.latency_map.insert(id, ADD_LATENCY);
-                }
-            },
-
-            HE::Mul(_) => {
-                if self_data.constval.is_some() {
-                    self_cost.latency_map.insert(id, MUL_PLAIN_LATENCY);
-
-                } else {
-                    self_cost.latency_map.insert(id, MUL_LATENCY);
-                    self_cost.muldepth += 1;
-                }
-            },
-
-
-            HE::Num(_) => {
-                self_cost.latency_map.insert(id, NUM_LATENCY);
-            },
-
-            HE::Rot(_) => {
-                self_cost.latency_map.insert(id, ROT_LATENCY);
-            }
-
-            HE::Symbol(_) => {
-                self_cost.latency_map.insert(id, SYM_LATENCY);
-            }
-        }
-
-        self_cost.calculate_cost();
-        self.count += 1;
-        self_cost
-    }
-}
-
-struct OpSizeFunction;
-impl LpCostFunction<HE, HEData> for OpSizeFunction {
-    fn node_cost(&mut self, egraph: &EGraph, id: Id, enode: &HE) -> f64 {
-        match enode {
-            HE::Num(_) => 0.1,
-
-            HE::Add([id1, id2]) => {
-                let d1 = egraph[*id1].data.muldepth;
-                let d2 = egraph[*id2].data.muldepth;
-                let muldepth = max(d1, d2) + 1;
-                6.0 * (muldepth as f64)
-            },
-
-            HE::Mul([id1, id2]) => {
-                let d1 = egraph[*id1].data.muldepth;
-                let d2 = egraph[*id2].data.muldepth;
-                let muldepth = max(d1, d2) + 1;
-                15.0 * (muldepth as f64)
-            },
-
-            HE::Rot([id1, id2]) => {
-                let d1 = egraph[*id1].data.muldepth;
-                let d2 = egraph[*id2].data.muldepth;
-                let muldepth = max(d1, d2) + 1;
-                0.1 * (muldepth as f64)
-            },
-
-            HE::Symbol(_) => 0.1,
-        }
-    }
 }
 
 impl Analysis<HE> for HEData {
@@ -168,7 +42,7 @@ impl Analysis<HE> for HEData {
         }
     }
 
-    fn make(egraph: &EGraph, enode: &HE) -> Self::Data {
+    fn make(egraph: &HEGraph, enode: &HE) -> Self::Data {
         let data = |id: &Id| egraph[*id].data;
 
         match enode {
@@ -307,14 +181,14 @@ fn make_rules() -> Vec<Rewrite<HE, HEData>> {
 }
 
 // This returns a function that implements Condition
-fn is_zero(var: &'static str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
+fn is_zero(var: &'static str) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
     let var = var.parse().unwrap();
     let zero = HE::Num(0);
     move |egraph, _, subst| egraph[subst[var]].nodes.contains(&zero)
 }
 
 // This returns a function that implements Condition
-fn can_fold(astr: &'static str, bstr: &'static str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
+fn can_fold(astr: &'static str, bstr: &'static str) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
     let avar = astr.parse().unwrap();
     let bvar = bstr.parse().unwrap();
     move |egraph, _, subst|
@@ -324,7 +198,7 @@ fn can_fold(astr: &'static str, bstr: &'static str) -> impl Fn(&mut EGraph, Id, 
 fn can_split_factor(
     astr: &'static str,
     bstr: &'static str,
-) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
+) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
     let avar = astr.parse().unwrap();
     let bvar = bstr.parse().unwrap();
     move |egraph, _, subst| match egraph[subst[avar]].data.constval {
@@ -334,7 +208,7 @@ fn can_split_factor(
 }
 
 // This returns a function that implements Condition
-fn beyond_vec_length(var: &'static str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
+fn beyond_vec_length(var: &'static str) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
     let var = var.parse().unwrap();
     move |egraph, _, subst: &Subst| {
         let val = egraph[subst[var]].data.constval.unwrap();
@@ -345,10 +219,10 @@ fn beyond_vec_length(var: &'static str) -> impl Fn(&mut EGraph, Id, &Subst) -> b
 fn can_split_rot(
     l1_str: &'static str,
     l2_str: &'static str,
-) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
+) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
     let l1: Var = l1_str.parse().unwrap();
     let l2: Var = l2_str.parse().unwrap();
-    move |egraph: &mut EGraph, _, subst: &Subst| match (
+    move |egraph: &mut HEGraph, _, subst: &Subst| match (
         egraph[subst[l1]].data.constval,
         egraph[subst[l2]].data.constval,
     ) {
@@ -368,7 +242,7 @@ struct ConstantFold {
 impl Applier<HE, HEData> for ConstantFold {
     fn apply_one(
         &self,
-        egraph: &mut EGraph,
+        egraph: &mut HEGraph,
         matched_id: Id,
         subst: &Subst,
         _: Option<&PatternAst<HE>>,
@@ -401,7 +275,7 @@ struct FactorSplit {
 impl Applier<HE, HEData> for FactorSplit {
     fn apply_one(
         &self,
-        egraph: &mut EGraph,
+        egraph: &mut HEGraph,
         matched_id: Id,
         subst: &Subst,
         _: Option<&PatternAst<HE>>,
@@ -439,7 +313,7 @@ struct RotateWrap {
 impl Applier<HE, HEData> for RotateWrap {
     fn apply_one(
         &self,
-        egraph: &mut EGraph,
+        egraph: &mut HEGraph,
         matched_id: Id,
         subst: &Subst,
         _: Option<&PatternAst<HE>>,
@@ -468,7 +342,7 @@ struct RotateSquash {
 impl Applier<HE, HEData> for RotateSquash {
     fn apply_one(
         &self,
-        egraph: &mut EGraph,
+        egraph: &mut HEGraph,
         matched_id: Id,
         subst: &Subst,
         _: Option<&PatternAst<HE>>,
@@ -501,7 +375,7 @@ struct RotateSplit {
 impl Applier<HE, HEData> for RotateSplit {
     fn apply_one(
         &self,
-        egraph: &mut EGraph,
+        egraph: &mut HEGraph,
         matched_id: Id,
         subst: &Subst,
         _pattern: Option<&PatternAst<HE>>,
@@ -550,7 +424,7 @@ impl Applier<HE, HEData> for RotateSplit {
     }
 }
 
-pub(crate) fn optimize(expr: &RecExpr<HE>, timeout: u64) -> RecExpr<HE> {
+pub(crate) fn optimize(expr: &RecExpr<HE>, timeout: u64, extractor_type: ExtractorType) -> RecExpr<HE> {
     info!("running equality saturation for {} seconds...", timeout);
 
     // simplify the expression using a Runner, which creates an e-graph with
@@ -564,12 +438,21 @@ pub(crate) fn optimize(expr: &RecExpr<HE>, timeout: u64) -> RecExpr<HE> {
     let egraph = &mut runner.egraph;
     let root = egraph.add_expr(&expr);
 
-    let extractor = ToposortExtractor::new(egraph, HECostFunction { egraph, count: 0 });
-    // let extractor = Extractor::new(egraph, HECostFunction { egraph, count: 0 });
-    let (_, opt_expr) = extractor.find_best(root);
-
-    // let mut lp_extractor = LpExtractor::new(egraph, OpSizeFunction);
-    // let opt_expr = lp_extractor.solve(root);
+    let opt_expr =
+        match extractor_type {
+            ExtractorType::GREEDY => {
+                info!("using greedy extractor to derive optimized program...");
+                let extractor = GreedyExtractor::new(egraph, HECostFunction { egraph, count: 0 });
+                // let extractor = Extractor::new(egraph, HECostFunction { egraph, count: 0 });
+                let (_, opt_expr) = extractor.find_best(root);
+                opt_expr
+            },
+            ExtractorType::LP => {
+                info!("using LP extractor to derive optimized program...");
+                let mut lp_extractor = LpExtractor::new(egraph, OpSizeFunction);
+                lp_extractor.solve(root)
+            }
+        };
 
     return opt_expr;
 }

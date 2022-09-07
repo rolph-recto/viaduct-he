@@ -1,5 +1,110 @@
 use egg::*;
 use std::{collections::{HashMap, HashSet, LinkedList}, cmp::Ordering};
+use crate::optimizer::*;
+
+#[derive(Debug, Clone)]
+pub(crate) struct HECost {
+    pub muldepth: usize,
+    pub latency_map: HashMap<Id, usize>,
+    pub cost: usize
+}
+
+impl HECost {
+    fn calculate_cost(&mut self) -> usize {
+        let mut total_latency: usize = 0;
+        for v in self.latency_map.values() {
+            total_latency += v;
+        }
+
+        self.cost = total_latency * self.muldepth;
+        // self.cost = self.muldepth;
+        self.cost
+    }
+}
+
+impl PartialEq for HECost {
+    fn eq(&self, other: &Self) -> bool {
+        self.cost.eq(&other.cost)
+    }
+}
+
+impl PartialOrd for HECost {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.cost.partial_cmp(&other.cost)
+    }
+}
+
+pub(crate) struct HECostFunction<'a> {
+    pub egraph: &'a HEGraph,
+    pub count: usize
+}
+
+impl<'a> CostFunction<HE> for HECostFunction<'a> {
+    type Cost = HECost;
+
+    fn cost<C>(&mut self, enode: &HE, mut costs: C) -> Self::Cost
+        where C: FnMut(Id) -> Self::Cost
+    {
+        let id = self.egraph.find(self.egraph.lookup(enode.clone()).unwrap());
+        let self_data = self.egraph[id].data;
+        
+        let mut self_cost = HECost { muldepth: 0, latency_map: HashMap::new(), cost: 0 };
+        for child in enode.children() {
+            let child_id = self.egraph.find(*child);
+            let child_cost = costs(child_id);
+
+            self_cost.muldepth = max(self_cost.muldepth, child_cost.muldepth);
+
+            for (k, v) in child_cost.latency_map.iter() {
+                if !self_cost.latency_map.contains_key(k) {
+                    self_cost.latency_map.insert(*k, *v);
+
+                } else if self_cost.latency_map[k] > *v {
+                    self_cost.latency_map.insert(*k, *v);
+                }
+            }
+        }
+
+        match *enode {
+            HE::Add(_) => {
+                if self_data.constval.is_some() {
+                    self_cost.latency_map.insert(id, ADD_PLAIN_LATENCY);
+
+                } else {
+                    self_cost.latency_map.insert(id, ADD_LATENCY);
+                }
+            },
+
+            HE::Mul(_) => {
+                if self_data.constval.is_some() {
+                    self_cost.latency_map.insert(id, MUL_PLAIN_LATENCY);
+
+                } else {
+                    self_cost.latency_map.insert(id, MUL_LATENCY);
+                    self_cost.muldepth += 1;
+                }
+            },
+
+
+            HE::Num(_) => {
+                self_cost.latency_map.insert(id, NUM_LATENCY);
+            },
+
+            HE::Rot(_) => {
+                self_cost.latency_map.insert(id, ROT_LATENCY);
+            }
+
+            HE::Symbol(_) => {
+                self_cost.latency_map.insert(id, SYM_LATENCY);
+            }
+        }
+
+        self_cost.calculate_cost();
+        self.count += 1;
+        self_cost
+    }
+}
+
 
 fn cmp<T: PartialOrd>(a: &Option<T>, b: &Option<T>) -> Ordering {
     // None is high
@@ -12,13 +117,13 @@ fn cmp<T: PartialOrd>(a: &Option<T>, b: &Option<T>) -> Ordering {
 }
 
 #[derive(Debug)]
-pub struct ToposortExtractor<'a, CF: CostFunction<L>, L: Language, N: Analysis<L>> {
+pub struct GreedyExtractor<'a, CF: CostFunction<L>, L: Language, N: Analysis<L>> {
     cost_function: CF,
     costs: HashMap<Id, (CF::Cost, L)>,
     egraph: &'a EGraph<L, N>,
 }
 
-impl<'a, CF, L, N> ToposortExtractor<'a, CF, L, N>
+impl<'a, CF, L, N> GreedyExtractor<'a, CF, L, N>
 where
     CF: CostFunction<L>,
     L: Language,
@@ -32,7 +137,7 @@ where
     /// eclass.
     pub fn new(egraph: &'a EGraph<L, N>, cost_function: CF) -> Self {
         let costs = HashMap::default();
-        let mut extractor = ToposortExtractor {
+        let mut extractor = GreedyExtractor {
             costs,
             egraph,
             cost_function,
