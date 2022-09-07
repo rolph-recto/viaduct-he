@@ -1,4 +1,4 @@
-use crate::optimizer::*;
+use crate::{lang::expr::HE, optimizer::*};
 
 pub(crate) struct OpSizeFunction;
 

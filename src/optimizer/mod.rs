@@ -3,9 +3,8 @@ use log::*;
 use clap::ValueEnum;
 use std::{time::*, cmp::max, collections::HashMap};
 
-use crate::lang::*;
-use crate::optimizer::greedy_extractor::*;
-use crate::optimizer::lp_extractor::*;
+use crate::lang::expr::HE;
+use crate::optimizer::{greedy_extractor::*, lp_extractor::*};
 
 mod greedy_extractor;
 mod lp_extractor;

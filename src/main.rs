@@ -4,10 +4,11 @@
 use clap::Parser;
 use handlebars::{Handlebars, handlebars_helper};
 use egg::RecExpr;
+use lang::{instr::{gen_program, HEProgram}, expr::HE, lowered::HELoweredInstr};
 use log::*;
 use std::fs::File;
 
-use crate::{lang::*, optimizer::{ExtractorType, optimize}};
+use crate::{lang::lowered::lower_program, optimizer::{ExtractorType, optimize}};
 
 mod lang;
 mod optimizer;
