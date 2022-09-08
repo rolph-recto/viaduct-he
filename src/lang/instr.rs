@@ -178,7 +178,7 @@ impl HEProgram {
     }
 
     /// get the symbols used in this program.
-    fn get_symbols(&self) -> HashSet<String> {
+    pub fn get_symbols(&self) -> HashSet<String> {
         let mut symset = HashSet::new();
 
         for instr in self.instrs.iter() {
@@ -208,6 +208,42 @@ impl HEProgram {
         }
 
         sym_store
+    }
+
+    /// compute the required vectors at every program point
+    /// this is used in the lowering pass for computing when relinearizations
+    /// and in-place operations can be used
+    pub(crate) fn analyze_use(&self) -> Vec<HashSet<usize>> {
+        let mut uses: Vec<HashSet<usize>> = Vec::new();
+        uses.push(HashSet::new());
+
+        for instr in self.instrs.iter().rev() {
+            let mut new_use: HashSet<usize> = uses.last().unwrap().clone();
+            match instr {
+                HEInstr::Add { id: _, op1, op2 } |
+                HEInstr::Mul { id: _, op1, op2 } |
+                HEInstr::Rot { id: _, op1, op2 } => {
+                    match op1 {
+                        HEOperand::Ref(HERef::NodeRef(nr)) => {
+                            new_use.insert(*nr);
+                        }
+                        _ => ()
+                    };
+
+                    match op2 {
+                        HEOperand::Ref(HERef::NodeRef(nr)) => {
+                            new_use.insert(*nr);
+                        }
+                        _ => ()
+                    };
+                }
+            }
+
+            uses.push(new_use);
+        }
+
+        uses.reverse();
+        uses
     }
 }
 
@@ -358,40 +394,4 @@ pub(crate) fn interp_program(sym_store: &HESymStore, program: &HEProgram, vec_si
     }
 
     last_instr.and_then(|i| ref_store.remove(&i))
-}
-
-/// compute the required vectors at every program point
-/// this is used in the lowering pass for computing when relinearizations
-/// and in-place operations can be used
-pub(crate) fn analyze_use(prog: &HEProgram) -> Vec<HashSet<usize>> {
-    let mut uses: Vec<HashSet<usize>> = Vec::new();
-    uses.push(HashSet::new());
-
-    for instr in prog.instrs.iter().rev() {
-        let mut new_use: HashSet<usize> = uses.last().unwrap().clone();
-        match instr {
-            HEInstr::Add { id: _, op1, op2 } |
-            HEInstr::Mul { id: _, op1, op2 } |
-            HEInstr::Rot { id: _, op1, op2 } => {
-                match op1 {
-                    HEOperand::Ref(HERef::NodeRef(nr)) => {
-                        new_use.insert(*nr);
-                    }
-                    _ => ()
-                };
-
-                match op2 {
-                    HEOperand::Ref(HERef::NodeRef(nr)) => {
-                        new_use.insert(*nr);
-                    }
-                    _ => ()
-                };
-            }
-        }
-
-        uses.push(new_use);
-    }
-
-    uses.reverse();
-    uses
 }

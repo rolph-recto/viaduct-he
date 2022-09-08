@@ -21,7 +21,7 @@ struct Arguments {
     file: String,
 
     /// template file for output program
-    #[clap(short = 'p', long = "template", value_parser, default_value = "template.txt")]
+    #[clap(short = 't', long = "template", value_parser, default_value = "template.txt")]
     template: String,
 
     /// file for output program
@@ -30,11 +30,15 @@ struct Arguments {
 
     /// duration in seconds to run equality saturation until timeout
     #[clap(short = 'd', long = "duration", value_parser, default_value_t = 20)]
-    duration: u64,
+    duration: usize,
 
     /// duration in seconds to run equality saturation until timeout
     #[clap(short = 'e', long = "extractor", value_enum, default_value_t = ExtractorType::GREEDY)]
     extractor: ExtractorType,
+
+    /// vector size
+    #[clap(short = 's', long = "size", value_parser, default_value_t = 8192)]
+    size: usize
 }
 
 handlebars_helper!(instr_is_binary: |instr: HELoweredInstr| match instr {
@@ -68,10 +72,10 @@ handlebars_helper!(instr_name: |instr: HELoweredInstr| match instr {
     HELoweredInstr::AddInplace { op1: _, op2: _} => "add_inplace",
     HELoweredInstr::AddPlain { id: _, op1: _, op2: _ } => "add_plain",
     HELoweredInstr::AddPlainInplace { op1: _, op2: _ } => "add_plain_inplace",
-    HELoweredInstr::Mul { id: _, op1: _, op2: _ } => "mul",
-    HELoweredInstr::MulInplace { op1: _, op2: _ } => "mul_inplace",
-    HELoweredInstr::MulPlain { id: _, op1: _, op2: _ } => "mul_plain",
-    HELoweredInstr::MulPlainInplace { op1: _, op2: _ } => "mul_plain_inplace",
+    HELoweredInstr::Mul { id: _, op1: _, op2: _ } => "multiply",
+    HELoweredInstr::MulInplace { op1: _, op2: _ } => "multiply_inplace",
+    HELoweredInstr::MulPlain { id: _, op1: _, op2: _ } => "multiply_plain",
+    HELoweredInstr::MulPlainInplace { op1: _, op2: _ } => "multiply_plain_inplace",
     HELoweredInstr::Rot { id: _, op1: _, op2: _ } => "rotate",
     HELoweredInstr::RelinearizeInplace { op1: _ } => "relinearize_inplace"
 });
@@ -100,17 +104,17 @@ fn main() {
     handlebars.register_helper("instr_is_inplace", Box::new(instr_is_inplace));
     handlebars.register_helper("instr_is_binary", Box::new(instr_is_binary));
     handlebars.register_helper("instr_name", Box::new(instr_name));
-    handlebars.register_template_string("t", template_str)
+    handlebars.register_template_string("template", template_str)
         .expect("Could not register template");
 
     if args.outfile.len() > 1 {
         let f =  File::create(&args.outfile).unwrap();
-        handlebars.render_to_write("t", &lower_program(&opt_prog), f).unwrap();
-        info!("Initial HE program (muldepth {}, latency {}ms):\n",
+        handlebars.render_to_write("template", &lower_program(&opt_prog, args.size), f).unwrap();
+        info!("Initial HE program (muldepth {}, latency {}ms):",
             init_prog.get_muldepth(),
             init_prog.get_latency()
         );
-        info!("Optimized HE program (muldepth {}, latency {}ms):\n",
+        info!("Optimized HE program (muldepth {}, latency {}ms):",
             opt_prog.get_muldepth(),
             opt_prog.get_latency()
         );
@@ -118,18 +122,19 @@ fn main() {
 
     } else {
         info!("Initial HE expr:\n{}", init_expr.pretty(80));
-        info!("Initial HE program (muldepth {}, latency {}ms):\n{}",
+        info!("Initial HE program (muldepth {}, latency {}ms):",
             init_prog.get_muldepth(),
-            init_prog.get_latency(),
-            handlebars.render("t", &lower_program(&init_prog)).unwrap()
+            init_prog.get_latency()
         );
+        info!("{}", handlebars.render("template", &lower_program(&init_prog, args.size)).unwrap());
 
         info!("Optimized HE expr:\n{}", opt_expr.pretty(80));
-        info!("Optimized HE program (muldepth {}, latency {}ms):\n{}",
+        info!("Optimized HE program (muldepth {}, latency {}ms):",
             opt_prog.get_muldepth(),
-            opt_prog.get_latency(),
-            handlebars.render("t", &lower_program(&opt_prog)).unwrap()
+            opt_prog.get_latency()
         );
+
+        info!("{}", handlebars.render("template", &lower_program(&opt_prog, args.size)).unwrap());
     }
 
     // let vec_size = 16;

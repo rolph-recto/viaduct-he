@@ -1,4 +1,32 @@
+from random import randint
+from seal import *
+
 def main():
+    parms = EncryptionParameters (scheme_type.bgv)
+    poly_modulus_degree = {{vec_size}}
+    parms.set_poly_modulus_degree(poly_modulus_degree)
+    parms.set_coeff_modulus(CoeffModulus.BFVDefault(poly_modulus_degree))
+    parms.set_plain_modulus(PlainModulus.Batching(poly_modulus_degree, 20))
+    context = SEALContext(parms)
+
+    keygen = KeyGenerator(context)
+    secret_key = keygen.secret_key()
+    public_key = keygen.create_public_key()
+    relin_keys = keygen.create_relin_keys()
+
+    encryptor = Encryptor(context, public_key)
+    evaluator = Evaluator(context)
+    decryptor = Decryptor(context, secret_key)
+
+    batch_encoder = BatchEncoder(context)
+    slot_count = batch_encoder.slot_count()
+    row_size = slot_count / 2
+
+{{#each symbols as |sym|}}
+    {{sym}} = batch_encoder.encode([randint(1, 100) for _ in range(slot_count)])
+    {{sym}} = encryptor.encrypt({{sym}})
+
+{{/each}}
 {{#each instrs as |instr|}}
     {{#if (instr_is_inplace instr) }}
     {{#if (instr_is_binary instr) }}
@@ -14,3 +42,6 @@ def main():
     {{/if}}
     {{/if}}
 {{/each}}
+
+if __name__ == "__main__":
+    main()

@@ -2,7 +2,7 @@
 /// lowered program for generating output programs from templates
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::lang::instr::*;
  
@@ -25,6 +25,8 @@ pub(crate) enum HELoweredInstr {
 
 #[derive(Serialize)]
 pub(crate) struct HELoweredProgram {
+    vec_size: usize,
+    symbols: HashSet<String>,
     instrs: Vec<HELoweredInstr>,
 }
 
@@ -47,8 +49,8 @@ pub(crate) fn lower_operand(inplace_map: &HashMap<NodeId,NodeId>, op: &HEOperand
     }
 }
 
-pub(crate) fn lower_program(prog: &HEProgram) -> HELoweredProgram {
-    let uses = analyze_use(prog);
+pub(crate) fn lower_program(prog: &HEProgram, vec_size: usize) -> HELoweredProgram {
+    let uses = prog.analyze_use();
     let mut inplace_map: HashMap<NodeId, NodeId> = HashMap::new();
     let mut instrs: Vec<HELoweredInstr> = Vec::new();
     for instr in prog.instrs.iter() {
@@ -176,5 +178,5 @@ pub(crate) fn lower_program(prog: &HEProgram) -> HELoweredProgram {
             }
         }
     }
-    HELoweredProgram { instrs }
+    HELoweredProgram { vec_size, symbols: prog.get_symbols(), instrs }
 }
