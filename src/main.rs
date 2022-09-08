@@ -6,7 +6,7 @@ use handlebars::{Handlebars, handlebars_helper};
 use egg::RecExpr;
 use lang::{instr::{gen_program, HEProgram}, expr::HE, lowered::HELoweredInstr};
 use log::*;
-use std::{fs::File, io::Write};
+use std::fs::File;
 
 use crate::{lang::lowered::lower_program, optimizer::{ExtractorType, optimize}};
 
@@ -28,7 +28,7 @@ struct Arguments {
     #[clap(short = 'o', long = "outfile", value_parser, default_value = "")]
     outfile: String,
 
-    /// duration in seconds to run equality saturation until timeout
+    /// duration in seconds to run optimizer until timeout (if 0, duration is unbounded)
     #[clap(short = 'd', long = "duration", value_parser, default_value_t = 20)]
     duration: usize,
 
@@ -115,7 +115,7 @@ fn main() {
 
     let opt_expr =
         if !args.passthrough {
-            optimize(&init_expr, args.size, args.duration, args.extractor)
+            optimize(&init_expr, args.size as i32, args.duration, args.extractor)
 
         } else {
             init_expr.clone()

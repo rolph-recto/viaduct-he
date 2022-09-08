@@ -95,9 +95,7 @@ impl Analysis<HE> for HEData {
     }
 }
 
-const VEC_LENGTH: i32 = 16;
-
-fn make_rules() -> Vec<Rewrite<HE, HEData>> {
+fn make_rules(size: i32) -> Vec<Rewrite<HE, HEData>> {
     let mut rules: Vec<Rewrite<HE, HEData>> = vec![
         // bidirectional addition rules
         rewrite!("add-identity"; "(+ ?a 0)" <=> "?a"),
@@ -149,6 +147,7 @@ fn make_rules() -> Vec<Rewrite<HE, HEData>> {
         // squash nested rotations into a single rotation
         rewrite!("rot-squash"; "(rot (rot ?x ?l1) ?l2)" => {
             RotateSquash {
+                size,
                 x: "?x".parse().unwrap(),
                 l1: "?l1".parse().unwrap(),
                 l2: "?l2".parse().unwrap()
@@ -203,15 +202,6 @@ fn can_split_factor(
     move |egraph, _, subst| match egraph[subst[avar]].data.constval {
         Some(aval) => aval != 0 && egraph[subst[bvar]].data.constval.is_none(),
         None => false,
-    }
-}
-
-// This returns a function that implements Condition
-fn beyond_vec_length(var: &'static str) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
-    let var = var.parse().unwrap();
-    move |egraph, _, subst: &Subst| {
-        let val = egraph[subst[var]].data.constval.unwrap();
-        -VEC_LENGTH <= val && val <= VEC_LENGTH
     }
 }
 
@@ -305,6 +295,7 @@ impl Applier<HE, HEData> for FactorSplit {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RotateWrap {
+    size: i32,
     x: Var,
     l: Var,
 }
@@ -321,7 +312,7 @@ impl Applier<HE, HEData> for RotateWrap {
         let xclass: Id = subst[self.x];
         let lval = egraph[subst[self.l]].data.constval.unwrap();
 
-        let wrapped_lval = egraph.add(HE::Num(lval % VEC_LENGTH));
+        let wrapped_lval = egraph.add(HE::Num(lval % self.size));
         let wrapped_rot: Id = egraph.add(HE::Rot([xclass, wrapped_lval]));
         if egraph.union(matched_id, wrapped_rot) {
             vec![matched_id]
@@ -333,6 +324,7 @@ impl Applier<HE, HEData> for RotateWrap {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RotateSquash {
+    size: i32,
     x: Var,
     l1: Var,
     l2: Var,
@@ -351,7 +343,7 @@ impl Applier<HE, HEData> for RotateSquash {
         let l1_val = egraph[subst[self.l1]].data.constval.unwrap();
         let l2_val = egraph[subst[self.l2]].data.constval.unwrap();
 
-        let lval_sum = egraph.add(HE::Num((l1_val + l2_val) % VEC_LENGTH));
+        let lval_sum = egraph.add(HE::Num((l1_val + l2_val) % self.size));
         let rot_sum: Id = egraph.add(HE::Rot([xclass, lval_sum]));
 
         if egraph.union(matched_id, rot_sum) {
@@ -423,8 +415,10 @@ impl Applier<HE, HEData> for RotateSplit {
     }
 }
 
-pub(crate) fn optimize(expr: &RecExpr<HE>, size: usize, timeout: usize, extractor_type: ExtractorType) -> RecExpr<HE> {
+pub(crate) fn optimize(expr: &RecExpr<HE>, size: i32, timeout: usize, extractor_type: ExtractorType) -> RecExpr<HE> {
     info!("running equality saturation for {} seconds...", timeout);
+
+    let optimization_time = Instant::now(); 
 
     // simplify the expression using a Runner, which creates an e-graph with
     // the given expression and runs the given rules over it
@@ -432,10 +426,14 @@ pub(crate) fn optimize(expr: &RecExpr<HE>, size: usize, timeout: usize, extracto
         .with_explanations_enabled()
         .with_expr(&expr)
         .with_time_limit(Duration::from_secs(timeout as u64))
-        .run(&make_rules());
+        .run(&make_rules(size));
+
+    info!("Optimization time: {}ms", optimization_time.elapsed().as_millis());
 
     let egraph = &mut runner.egraph;
     let root = egraph.add_expr(&expr);
+
+    let extraction_time = Instant::now();
 
     let opt_expr =
         match extractor_type {
@@ -452,6 +450,8 @@ pub(crate) fn optimize(expr: &RecExpr<HE>, size: usize, timeout: usize, extracto
                 lp_extractor.solve(root)
             }
         };
+
+    info!("Extraction time: {}ms", extraction_time.elapsed().as_millis());
 
     return opt_expr;
 }
