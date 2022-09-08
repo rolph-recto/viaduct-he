@@ -6,7 +6,7 @@ use handlebars::{Handlebars, handlebars_helper};
 use egg::RecExpr;
 use lang::{instr::{gen_program, HEProgram}, expr::HE, lowered::HELoweredInstr};
 use log::*;
-use std::fs::File;
+use std::{fs::File, io::Write};
 
 use crate::{lang::lowered::lower_program, optimizer::{ExtractorType, optimize}};
 
@@ -38,7 +38,11 @@ struct Arguments {
 
     /// vector size
     #[clap(short = 's', long = "size", value_parser, default_value_t = 8192)]
-    size: usize
+    size: usize,
+
+    /// let input pass through and don't optimize it
+    #[clap(short = 'p', long = "passthru")]
+    passthrough: bool,
 }
 
 handlebars_helper!(instr_is_binary: |instr: HELoweredInstr| match instr {
@@ -96,9 +100,11 @@ fn main() {
     // parse the expression, the type annotation tells it which Language to use
     let init_expr: RecExpr<HE> = input_str.parse().unwrap();
     let init_prog = gen_program(&init_expr);
-
-    let opt_expr = optimize(&init_expr, args.duration, args.extractor);
-    let opt_prog: HEProgram = gen_program(&opt_expr);
+    // info!("Initial HE expr:\n{}", init_expr.pretty(80));
+    info!("Initial HE program (muldepth {}, latency {}ms):",
+        init_prog.get_muldepth(),
+        init_prog.get_latency()
+    );
 
     let mut handlebars = Handlebars::new();
     handlebars.register_helper("instr_is_inplace", Box::new(instr_is_inplace));
@@ -107,34 +113,35 @@ fn main() {
     handlebars.register_template_string("template", template_str)
         .expect("Could not register template");
 
+    let opt_expr =
+        if !args.passthrough {
+            optimize(&init_expr, args.size, args.duration, args.extractor)
+
+        } else {
+            init_expr.clone()
+        };
+
+    let opt_prog: HEProgram = gen_program(&opt_expr);
+
+    if !args.passthrough {
+        info!("Optimized HE program (muldepth {}, latency {}ms):",
+            opt_prog.get_muldepth(),
+            opt_prog.get_latency()
+        );
+    }
+
+    let lowered_prog = lower_program(&opt_prog, args.size);
+
     if args.outfile.len() > 1 {
         let f =  File::create(&args.outfile).unwrap();
-        handlebars.render_to_write("template", &lower_program(&opt_prog, args.size), f).unwrap();
-        info!("Initial HE program (muldepth {}, latency {}ms):",
-            init_prog.get_muldepth(),
-            init_prog.get_latency()
-        );
-        info!("Optimized HE program (muldepth {}, latency {}ms):",
-            opt_prog.get_muldepth(),
-            opt_prog.get_latency()
-        );
-        info!("Generated optimized program to {}", &args.outfile);
+        handlebars.render_to_write("template", &lowered_prog, f).unwrap();
+        info!("Wrote program to {}", &args.outfile);
 
     } else {
-        info!("Initial HE expr:\n{}", init_expr.pretty(80));
-        info!("Initial HE program (muldepth {}, latency {}ms):",
-            init_prog.get_muldepth(),
-            init_prog.get_latency()
-        );
-        info!("{}", handlebars.render("template", &lower_program(&init_prog, args.size)).unwrap());
+        // info!("{}", handlebars.render("template", &lower_program(&init_prog, args.size)).unwrap());
+        // info!("Optimized HE expr:\n{}", opt_expr.pretty(80));
 
-        info!("Optimized HE expr:\n{}", opt_expr.pretty(80));
-        info!("Optimized HE program (muldepth {}, latency {}ms):",
-            opt_prog.get_muldepth(),
-            opt_prog.get_latency()
-        );
-
-        info!("{}", handlebars.render("template", &lower_program(&opt_prog, args.size)).unwrap());
+        info!("{}", handlebars.render("template", &lowered_prog).unwrap());
     }
 
     // let vec_size = 16;

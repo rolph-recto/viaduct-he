@@ -6,28 +6,31 @@ use std::collections::{HashMap, HashSet};
 
 use crate::lang::instr::*;
  
+type HELoweredNodeId = String;
 type HELoweredOperand = String;
 
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(tag = "op")]
 pub(crate) enum HELoweredInstr {
-    Add { id: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
+    Add { id: HELoweredNodeId, op1: HELoweredOperand, op2: HELoweredOperand },
     AddInplace { op1: HELoweredOperand, op2: HELoweredOperand },
     AddPlain { id: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
     AddPlainInplace { op1: HELoweredOperand, op2: HELoweredOperand },
-    Mul { id: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
+    Mul { id: HELoweredNodeId, op1: HELoweredOperand, op2: HELoweredOperand },
     MulInplace { op1: HELoweredOperand, op2: HELoweredOperand },
     MulPlain { id: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
     MulPlainInplace { op1: HELoweredOperand, op2: HELoweredOperand },
-    Rot { id: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
-    RelinearizeInplace { op1: HELoweredOperand },
+    Rot { id: HELoweredNodeId, op1: HELoweredOperand, op2: HELoweredOperand },
+    RelinearizeInplace { op1: HELoweredNodeId },
 }
 
 #[derive(Serialize)]
 pub(crate) struct HELoweredProgram {
     vec_size: usize,
     symbols: HashSet<String>,
+    constants: Vec<(i32, String)>,
     instrs: Vec<HELoweredInstr>,
+    output: HELoweredNodeId
 }
 
 pub(crate) fn resolve_inplace_indirection(inplace_map: &HashMap<NodeId,NodeId>, id: NodeId) -> NodeId {
@@ -38,27 +41,42 @@ pub(crate) fn resolve_inplace_indirection(inplace_map: &HashMap<NodeId,NodeId>, 
     cur_id
 }
 
-pub(crate) fn lower_operand(inplace_map: &HashMap<NodeId,NodeId>, op: &HEOperand) -> String {
+pub(crate) fn lower_operand(inplace_map: &HashMap<NodeId,NodeId>, const_map: &mut HashMap<i32, String>, op: &HEOperand) -> String {
     match op {
         HEOperand::Ref(HERef::NodeRef(nr)) => {
             let resolved_nr = resolve_inplace_indirection(inplace_map, *nr);
             format!("i{}", resolved_nr)
         },
         HEOperand::Ref(HERef::ConstSym(sym)) => sym.clone(),
-        HEOperand::ConstNum(n) => n.to_string(),
+        HEOperand::ConstNum(n) => {
+            if const_map.contains_key(n) {
+                const_map[n].clone()
+
+            } else {
+                if *n >= 0 {
+                    const_map.insert(*n, format!("const_{}", n));
+
+                } else {
+                    const_map.insert(*n, format!("const_neg{}", -n));
+                }
+                const_map[n].clone()
+            }
+        },
     }
 }
 
 pub(crate) fn lower_program(prog: &HEProgram, vec_size: usize) -> HELoweredProgram {
     let uses = prog.analyze_use();
     let mut inplace_map: HashMap<NodeId, NodeId> = HashMap::new();
+    let mut const_map: HashMap<i32, String> = HashMap::new();
     let mut instrs: Vec<HELoweredInstr> = Vec::new();
+
     for instr in prog.instrs.iter() {
         match instr {
             HEInstr::Add { id, op1, op2 } => {
                 let lid = format!("i{}", id);
-                let lop1 = lower_operand(&inplace_map, op1);
-                let lop2 = lower_operand(&inplace_map, op2);
+                let lop1 = lower_operand(&inplace_map, &mut const_map, op1);
+                let lop2 = lower_operand(&inplace_map, &mut const_map, op2);
                 match (op1, op2) {
                     (HEOperand::Ref(r1), HEOperand::Ref(r2)) => {
                         match (r1, r2) {
@@ -126,8 +144,8 @@ pub(crate) fn lower_program(prog: &HEProgram, vec_size: usize) -> HELoweredProgr
 
             HEInstr::Mul { id, op1, op2 } => {
                 let lid = format!("i{}", id);
-                let lop1 = lower_operand(&inplace_map, op1);
-                let lop2 = lower_operand(&inplace_map, op2);
+                let lop1 = lower_operand(&inplace_map, &mut const_map, op1);
+                let lop2 = lower_operand(&inplace_map, &mut const_map, op2);
                 match (op1, op2) {
                     (HEOperand::Ref(_), HEOperand::Ref(_)) => {
                         instrs.push(
@@ -164,8 +182,8 @@ pub(crate) fn lower_program(prog: &HEProgram, vec_size: usize) -> HELoweredProgr
             
             HEInstr::Rot { id: index, op1, op2 } => {
                 let lid = format!("i{}", index);
-                let lop1 = lower_operand(&inplace_map, op1);
-                let lop2 = lower_operand(&inplace_map, op2);
+                let lop1 = lower_operand(&inplace_map, &mut const_map, op1);
+                let lop2 = lower_operand(&inplace_map, &mut const_map, op2);
                 match (op1, op2) {
                     (HEOperand::Ref(_), HEOperand::ConstNum(_)) => {
                         instrs.push(
@@ -178,5 +196,20 @@ pub(crate) fn lower_program(prog: &HEProgram, vec_size: usize) -> HELoweredProgr
             }
         }
     }
-    HELoweredProgram { vec_size, symbols: prog.get_symbols(), instrs }
+
+    let constants: Vec<(i32, String)> = const_map.into_iter().collect();
+    let symbols: HashSet<String> = prog.get_symbols();
+    let output: HELoweredNodeId = match &instrs.last().unwrap() {
+        HELoweredInstr::Add { id, op1, op2 } => id.clone(),
+        HELoweredInstr::AddInplace { op1, op2 } => op1.clone(),
+        HELoweredInstr::AddPlain { id, op1, op2 } => id.clone(),
+        HELoweredInstr::AddPlainInplace { op1, op2 } => op1.clone(),
+        HELoweredInstr::Mul { id, op1, op2 } => id.clone(),
+        HELoweredInstr::MulInplace { op1, op2 } => op1.clone(),
+        HELoweredInstr::MulPlain { id, op1, op2 } => id.clone(),
+        HELoweredInstr::MulPlainInplace { op1, op2 } => op1.clone(),
+        HELoweredInstr::Rot { id, op1, op2 } => id.clone(),
+        HELoweredInstr::RelinearizeInplace { op1 } => op1.clone(),
+    };
+    HELoweredProgram { vec_size, constants, symbols, instrs, output }
 }

@@ -423,7 +423,7 @@ impl Applier<HE, HEData> for RotateSplit {
     }
 }
 
-pub(crate) fn optimize(expr: &RecExpr<HE>, timeout: usize, extractor_type: ExtractorType) -> RecExpr<HE> {
+pub(crate) fn optimize(expr: &RecExpr<HE>, size: usize, timeout: usize, extractor_type: ExtractorType) -> RecExpr<HE> {
     info!("running equality saturation for {} seconds...", timeout);
 
     // simplify the expression using a Runner, which creates an e-graph with

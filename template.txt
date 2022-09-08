@@ -1,47 +1,95 @@
 from random import randint
 from seal import *
+from time import time
+
+def encode(seal, x):
+    return seal["batch_encoder"].encode(x)
+
+def encrypt(seal, x):
+    return seal["encryptor"].encrypt(x)
+
+def add(seal, x, y):
+    return seal["evaluator"].add(x, y)
+
+def add_plain(seal, x, y):
+    return seal["evaluator"].add_plain(x, y)
+
+def add_inplace(seal, x, y):
+    seal["evaluator"].add_inplace(x, y)
+
+def add_plain_inplace(seal, x, y):
+    seal["evaluator"].add_plain_inplace(x, y)
+
+def multiply(seal, x, y):
+    return seal["evaluator"].multiply(x, y)
+
+def multiply_plain(seal, x, y):
+    return seal["evaluator"].multiply_plain(x, y)
+
+def multiply_inplace(seal, x, y):
+    seal["evaluator"].multiply_inplace(x, y)
+
+def multiply_plain_inplace(seal, x, y):
+    seal["evaluator"].multiply_plain_inplace(x, y)
+
+def relinearize_inplace(seal, x):
+    seal["evaluator"].relinearize_inplace(x, seal["relin_keys"])
+
+def invariant_noise_budget(seal, x):
+    return seal["decryptor"].invariant_noise_budget(x)
 
 def main():
-    parms = EncryptionParameters (scheme_type.bgv)
-    poly_modulus_degree = {{vec_size}}
-    parms.set_poly_modulus_degree(poly_modulus_degree)
-    parms.set_coeff_modulus(CoeffModulus.BFVDefault(poly_modulus_degree))
-    parms.set_plain_modulus(PlainModulus.Batching(poly_modulus_degree, 20))
-    context = SEALContext(parms)
+    seal = {}
+    seal["parms"] = EncryptionParameters(scheme_type.bgv)
 
-    keygen = KeyGenerator(context)
-    secret_key = keygen.secret_key()
-    public_key = keygen.create_public_key()
-    relin_keys = keygen.create_relin_keys()
+    poly_modulus_degree = 8192*2*2
+    seal["parms"].set_poly_modulus_degree(poly_modulus_degree)
+    seal["parms"].set_coeff_modulus(CoeffModulus.BFVDefault(poly_modulus_degree))
+    seal["parms"].set_plain_modulus(PlainModulus.Batching(poly_modulus_degree, 20))
+    seal["context"] = SEALContext(seal["parms"])
+    seal["keygen"] = KeyGenerator(seal["context"])
+    seal["secret_key"] = seal["keygen"].secret_key()
+    seal["public_key"] = seal["keygen"].create_public_key()
+    seal["relin_keys"] = seal["keygen"].create_relin_keys()
 
-    encryptor = Encryptor(context, public_key)
-    evaluator = Evaluator(context)
-    decryptor = Decryptor(context, secret_key)
+    seal["encryptor"] = Encryptor(seal["context"], seal["public_key"])
+    seal["evaluator"] = Evaluator(seal["context"])
+    seal["decryptor"] = Decryptor(seal["context"], seal["secret_key"])
 
-    batch_encoder = BatchEncoder(context)
-    slot_count = batch_encoder.slot_count()
+    seal["batch_encoder"] = BatchEncoder(seal["context"])
+    slot_count = seal["batch_encoder"].slot_count()
     row_size = slot_count / 2
 
 {{#each symbols as |sym|}}
-    {{sym}} = batch_encoder.encode([randint(1, 100) for _ in range(slot_count)])
-    {{sym}} = encryptor.encrypt({{sym}})
+    {{sym}} = encode(seal, [randint(1, 100) for _ in range(slot_count)])
+    {{sym}} = encrypt(seal, {{sym}})
 
 {{/each}}
+{{#each constants as |const|}}
+    {{const.[1]}} = encode(seal, [{{const.[0]}} for _ in range(slot_count)])
+{{/each}}
+
+    start_time = time()
+
 {{#each instrs as |instr|}}
     {{#if (instr_is_inplace instr) }}
     {{#if (instr_is_binary instr) }}
-    evaluator.{{instr_name instr}}({{instr.op1}}, {{instr.op2}})
+    {{instr_name instr}}(seal, {{instr.op1}}, {{instr.op2}})
     {{else}}
-    evaluator.{{instr_name instr}}({{instr.op1}})
+    {{instr_name instr}}(seal, {{instr.op1}})
     {{/if}}
     {{else}}
     {{#if (instr_is_binary instr) }}
-    {{instr.id}} = evaluator.{{instr_name instr}}({{instr.op1}}, {{instr.op2}})
+    {{instr.id}} = {{instr_name instr}}(seal, {{instr.op1}}, {{instr.op2}})
     {{else}}
-    {{instr.id}} = evaluator.{{instr_name instr}}({{instr.op1}})
+    {{instr.id}} = {{instr_name instr}}(seal, {{instr.op1}})
     {{/if}}
     {{/if}}
 {{/each}}
+
+    end_time = time()
+    print("duration: {}ms".format((end_time - start_time)*1000))
+    print("noise budget: {} bits".format(invariant_noise_budget(seal, {{output}})))
 
 if __name__ == "__main__":
     main()
