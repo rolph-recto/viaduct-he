@@ -32,6 +32,12 @@ def multiply_inplace(seal, x, y):
 def multiply_plain_inplace(seal, x, y):
     seal["evaluator"].multiply_plain_inplace(x, y)
 
+def rotate_rows(seal, x, amt):
+    return seal["evaluator"].rotate_rows(x, amt, seal["galois_keys"])
+
+def rotate_rows_inplace(seal, x, amt):
+    seal["evaluator"].rotate_rows_inplace(x, amt, seal["galois_keys"])
+
 def relinearize_inplace(seal, x):
     seal["evaluator"].relinearize_inplace(x, seal["relin_keys"])
 
@@ -39,6 +45,8 @@ def invariant_noise_budget(seal, x):
     return seal["decryptor"].invariant_noise_budget(x)
 
 def main():
+    init_start_time = time()
+    
     seal = {}
     seal["parms"] = EncryptionParameters(scheme_type.bgv)
 
@@ -51,6 +59,7 @@ def main():
     seal["secret_key"] = seal["keygen"].secret_key()
     seal["public_key"] = seal["keygen"].create_public_key()
     seal["relin_keys"] = seal["keygen"].create_relin_keys()
+    seal["galois_keys"] = seal["keygen"].create_galois_keys()
 
     seal["encryptor"] = Encryptor(seal["context"], seal["public_key"])
     seal["evaluator"] = Evaluator(seal["context"])
@@ -69,7 +78,10 @@ def main():
     {{const.[1]}} = encode(seal, [{{const.[0]}} for _ in range(slot_count)])
 {{/each}}
 
-    start_time = time()
+    init_end_time = time()
+    print("init duration: {}ms".format((init_end_time - init_start_time)*1000))
+
+    exec_start_time = time()
 
 {{#each instrs as |instr|}}
     {{#if (instr_is_inplace instr) }}
@@ -87,8 +99,8 @@ def main():
     {{/if}}
 {{/each}}
 
-    end_time = time()
-    print("duration: {}ms".format((end_time - start_time)*1000))
+    exec_end_time = time()
+    print("exec duration: {}ms".format((exec_end_time - exec_start_time)*1000))
     print("noise budget: {} bits".format(invariant_noise_budget(seal, {{output}})))
 
 if __name__ == "__main__":

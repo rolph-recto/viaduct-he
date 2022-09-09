@@ -21,6 +21,7 @@ pub(crate) enum HELoweredInstr {
     MulPlain { id: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
     MulPlainInplace { op1: HELoweredOperand, op2: HELoweredOperand },
     Rot { id: HELoweredNodeId, op1: HELoweredOperand, op2: HELoweredOperand },
+    RotInplace { op1: HELoweredOperand, op2: HELoweredOperand },
     RelinearizeInplace { op1: HELoweredNodeId },
 }
 
@@ -146,23 +147,68 @@ pub(crate) fn lower_program(prog: &HEProgram, vec_size: usize) -> HELoweredProgr
                 let lid = format!("i{}", id);
                 let lop1 = lower_operand(&inplace_map, &mut const_map, op1);
                 let lop2 = lower_operand(&inplace_map, &mut const_map, op2);
+                let mut relin_id = lid.clone();
                 match (op1, op2) {
-                    (HEOperand::Ref(_), HEOperand::Ref(_)) => {
-                        instrs.push(
-                            HELoweredInstr::Mul { id: lid.clone(), op1: lop1, op2: lop2 }
-                        );
+                    (HEOperand::Ref(r1), HEOperand::Ref(r2)) => {
+                        match (r1, r2) {
+                            (HERef::NodeRef(nr1), HERef::NodeRef(_)) if !uses[id+1].contains(nr1) => {
+                                instrs.push(
+                                    HELoweredInstr::MulInplace { op1: lop1.clone(), op2: lop2 }
+                                );
+                                inplace_map.insert(*id, *nr1);
+                                relin_id = lop1;
+                            },
+
+                            (HERef::NodeRef(_), HERef::NodeRef(nr2)) if !uses[id+1].contains(nr2) => {
+                                instrs.push(
+                                    HELoweredInstr::MulInplace { op1: lop2.clone(), op2: lop1 }
+                                );
+                                inplace_map.insert(*id, *nr2);
+                                relin_id = lop2;
+                            },
+
+                            _ => {
+                                instrs.push(
+                                    HELoweredInstr::Mul { id: lid, op1: lop1, op2: lop2 }
+                                )
+                            }
+                        }
                     },
 
-                    (HEOperand::Ref(_), HEOperand::ConstNum(_)) => {
-                        instrs.push(
-                            HELoweredInstr::MulPlain { id: lid.clone(), op1: lop1, op2: lop2 }
-                        )
+                    (HEOperand::Ref(r1), HEOperand::ConstNum(_)) => {
+                        match r1 {
+                            HERef::NodeRef(nr1) if !uses[id+1].contains(nr1) => {
+                                instrs.push(
+                                    HELoweredInstr::MulPlainInplace { op1: lop1.clone(), op2: lop2 }
+                                );
+                                inplace_map.insert(*id, *nr1);
+                                relin_id = lop1
+                            },
+
+                            _ => {
+                                instrs.push(
+                                    HELoweredInstr::MulPlain { id: lid.clone(), op1: lop1, op2: lop2 }
+                                )
+                            }
+                        }
                     },
 
-                    (HEOperand::ConstNum(_), HEOperand::Ref(_)) => {
-                        instrs.push(
-                            HELoweredInstr::MulPlain { id: lid.clone(), op1: lop2, op2: lop1 }
-                        )
+                    (HEOperand::ConstNum(_), HEOperand::Ref(r2)) => {
+                        match r2 {
+                            HERef::NodeRef(nr2) if !uses[id+1].contains(nr2) => {
+                                instrs.push(
+                                    HELoweredInstr::MulPlainInplace { op1: lop2.clone(), op2: lop1 }
+                                );
+                                inplace_map.insert(*id, *nr2);
+                                relin_id = lop2
+                            },
+
+                            _ => {
+                                instrs.push(
+                                    HELoweredInstr::MulPlain { id: lid.clone(), op1: lop2, op2: lop1 }
+                                )
+                            }
+                        }
                     },
 
                     (HEOperand::ConstNum(_), HEOperand::ConstNum(_)) => {
@@ -175,20 +221,31 @@ pub(crate) fn lower_program(prog: &HEProgram, vec_size: usize) -> HELoweredProgr
                 // so there's no need to minimize noise for them
                 if uses[id+1].contains(id) {
                     instrs.push(
-                        HELoweredInstr::RelinearizeInplace { op1: lid }
+                        HELoweredInstr::RelinearizeInplace { op1: relin_id }
                     )
                 }
             },
             
-            HEInstr::Rot { id: index, op1, op2 } => {
-                let lid = format!("i{}", index);
+            HEInstr::Rot { id, op1, op2 } => {
+                let lid = format!("i{}", id);
                 let lop1 = lower_operand(&inplace_map, &mut const_map, op1);
-                let lop2 = lower_operand(&inplace_map, &mut const_map, op2);
                 match (op1, op2) {
-                    (HEOperand::Ref(_), HEOperand::ConstNum(_)) => {
-                        instrs.push(
-                            HELoweredInstr::Rot { id: lid, op1: lop1, op2: lop2 }
-                        )
+                    (HEOperand::Ref(r1), HEOperand::ConstNum(cn2)) => {
+                        let lop2 = cn2.to_string();
+                        match r1 {
+                            HERef::NodeRef(nr1) if !uses[id+1].contains(nr1) => {
+                                instrs.push(
+                                    HELoweredInstr::RotInplace { op1: lop1, op2: lop2 }
+                                );
+                                inplace_map.insert(*id, *nr1);
+                            },
+
+                            _ => {
+                                instrs.push(
+                                    HELoweredInstr::Rot { id: lid, op1: lop1, op2: lop2 }
+                                );
+                            }
+                        }
                     }
 
                     _ => panic!("must rotate ciphertext with constant value")
@@ -209,6 +266,7 @@ pub(crate) fn lower_program(prog: &HEProgram, vec_size: usize) -> HELoweredProgr
         HELoweredInstr::MulPlain { id, op1, op2 } => id.clone(),
         HELoweredInstr::MulPlainInplace { op1, op2 } => op1.clone(),
         HELoweredInstr::Rot { id, op1, op2 } => id.clone(),
+        HELoweredInstr::RotInplace { op1, op2 } => op1.clone(),
         HELoweredInstr::RelinearizeInplace { op1 } => op1.clone(),
     };
     HELoweredProgram { vec_size, constants, symbols, instrs, output }

@@ -55,6 +55,7 @@ handlebars_helper!(instr_is_binary: |instr: HELoweredInstr| match instr {
     HELoweredInstr::MulPlain { id: _, op1: _, op2: _ } => true,
     HELoweredInstr::MulPlainInplace { op1: _, op2: _ } => true,
     HELoweredInstr::Rot { id: _, op1: _, op2: _ } => true,
+    HELoweredInstr::RotInplace { op1: _, op2: _ } => true,
     HELoweredInstr::RelinearizeInplace { op1: _ } => false
 });
 
@@ -68,6 +69,7 @@ handlebars_helper!(instr_is_inplace: |instr: HELoweredInstr| match instr {
     HELoweredInstr::MulPlain { id: _, op1: _, op2: _ } => false,
     HELoweredInstr::MulPlainInplace { op1: _, op2: _ } => true,
     HELoweredInstr::Rot { id: _, op1: _, op2: _ } => false,
+    HELoweredInstr::RotInplace { op1: _, op2: _ } => true,
     HELoweredInstr::RelinearizeInplace { op1: _ } => true
 });
 
@@ -80,7 +82,8 @@ handlebars_helper!(instr_name: |instr: HELoweredInstr| match instr {
     HELoweredInstr::MulInplace { op1: _, op2: _ } => "multiply_inplace",
     HELoweredInstr::MulPlain { id: _, op1: _, op2: _ } => "multiply_plain",
     HELoweredInstr::MulPlainInplace { op1: _, op2: _ } => "multiply_plain_inplace",
-    HELoweredInstr::Rot { id: _, op1: _, op2: _ } => "rotate",
+    HELoweredInstr::Rot { id: _, op1: _, op2: _ } => "rotate_rows",
+    HELoweredInstr::RotInplace { op1: _, op2: _ } => "rotate_rows_inplace",
     HELoweredInstr::RelinearizeInplace { op1: _ } => "relinearize_inplace"
 });
 
