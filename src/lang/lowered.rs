@@ -173,6 +173,17 @@ pub(crate) fn lower_program(prog: &HEProgram, vec_size: usize) -> HELoweredProgr
                                 )
                             }
                         }
+
+                        // relinearize at every ciphertext-ciphertext multiplication,
+                        // except for outputs, since these will not be used in the future
+                        // so there's no need to minimize noise for them
+                        // TODO: follow EVA and only relinearize if there will be
+                        // a future *multiplication* that will use the result
+                        if uses[id+1].contains(id) {
+                            instrs.push(
+                                HELoweredInstr::RelinearizeInplace { op1: relin_id }
+                            )
+                        }
                     },
 
                     (HEOperand::Ref(r1), HEOperand::ConstNum(_)) => {
@@ -214,15 +225,6 @@ pub(crate) fn lower_program(prog: &HEProgram, vec_size: usize) -> HELoweredProgr
                     (HEOperand::ConstNum(_), HEOperand::ConstNum(_)) => {
                         panic!("attempting to multiply two plaintexts---this should be constant folded")
                     }
-                }
-
-                // relinearize at every multiplication, except for outputs;
-                // outputs will not be used in the future,
-                // so there's no need to minimize noise for them
-                if uses[id+1].contains(id) {
-                    instrs.push(
-                        HELoweredInstr::RelinearizeInplace { op1: relin_id }
-                    )
                 }
             },
             
