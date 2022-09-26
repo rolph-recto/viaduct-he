@@ -12,11 +12,18 @@ class ForNode:
         self.extent = extent
         self.expr = expr
 
+    def __str__(self):
+        return "for {} in {} { {} }".format(self.index, self.extent, self.expr)
+
 ## reduce(op, e)
 class ReduceNode:
     def __init__(self, expr, op=OP_ADD):
         self.expr = expr
         self.op = op
+
+    def __str__(self):
+        reduce_str = "sum" if op == OP_ADD else "product"
+        return "{}({})".format(reduce_str, self.expr)
 
 ## e op e
 class OpNode:
@@ -25,11 +32,24 @@ class OpNode:
         self.expr2 = expr2
         self.op = op
 
+    def __str__(self):
+        op_str = "+" if op == OP_ADD else "*"
+        return "({} {} {})".format(self.expr1, op_str, self.expr2)
+
+
 ## x[i]
 class IndexNode:
     def __init__(self, var, index_list):
         self.var = var
         self.index_list = index_list
+
+    def __str__(self):
+        if len(self.index_list) > 0:
+            index_str = ["[{}]".format(ind) for ind in index_list].join("")
+            return "{}{}".format(self.var, index_str)
+
+        else:
+            return self.var
 
 
 # TRANSFORMATIONS
@@ -37,6 +57,18 @@ class FillNode:
     def __init__(self, arr, fill_sizes):
         self.arr = arr
         self.fill_sizes = fill_sizes
+
+    def __str__(self):
+        return "fill({}, {})".format(self.arr, self.fill_sizes)
+
+
+class TransposeNode:
+    def __init__(self, arr, perm):
+        self.arr = arr
+        self.perm = perm
+
+    def __str__(self):
+        return "transpose({}, {}".format(self.arr, self.perm)
 
 
 def normalize(expr, path=[]):
@@ -75,11 +107,15 @@ def normalize(expr, path=[]):
                 fill_sizes.append(extent)
 
         # - second, compute transpositions
-        transpose_perm = list(range(len(new_shape)))
-        for i in range(len(old_shape)):
+        transpose_perm = []
+        for i in range(len(orig_shape)):
+            transpose_perm[i] = orig_shape.index(new_shape[i])
 
+        if len(fill_sizes) > 0:
+            return TransposeNode(FillNode(IndexNode(expr.var, []), fill_sizes), transpose_perm)
 
-
+        else:
+            return TransposeNode(IndexNode(expr.var, []), transpose_perm)
     else:
         assert(False, "normalize: failed to match expression")
 
