@@ -120,5 +120,3 @@ if __name__ == "__main__":
     out = csum.get(4).reshape((2,2))
     print("result:")
     print(out)
-
-
