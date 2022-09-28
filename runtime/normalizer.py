@@ -44,17 +44,17 @@ class OpNode(ExpressionNode):
 
 ## x[i]
 class IndexNode(ExpressionNode):
-    def __init__(self, var, index_list):
-        self.var = var
+    def __init__(self, arr, index_list):
+        self.arr = arr
         self.index_list = index_list
 
     def __str__(self):
         if len(self.index_list) > 0:
             index_str = "".join(["[{}]".format(ind) for ind in self.index_list])
-            return "{}{}".format(self.var, index_str)
+            return "{}{}".format(self.arr, index_str)
 
         else:
-            return self.var
+            return self.arr
 
 class TransformNode:
     pass
@@ -77,17 +77,35 @@ class TransposeNode(TransformNode):
     def __str__(self):
         return "transpose({}, {})".format(self.arr, self.perm)
 
-class ArrayNode:
-    def __init__(self, arr):
-        self.arr = arr
+class VarNode:
+    def __init__(self, var):
+        self.var = var
 
     def __str__(self):
-        return str(self.arr)
+        return str(self.var)
+
+# TODO support other indexing expressions like operators and constants
+def interpret_index(index, ind_store):
+    return ind_store[index]
 
 # interpret a program against a given store
-def interpret(expr, store):
-    if isinstance(expr, ReduceNode):
-        val = interpret(expr.expr, store)
+def interpret(expr, store, ind_store={}):
+    if isinstance(expr, ForNode):
+        arrs = []
+        for i in range(expr.extent):
+            new_ind_store = ind_store.copy()
+            new_ind_store[expr.index] = i
+            arrs.append(interpret(expr.expr, store, new_ind_store))
+
+        return np.stack(arrs)
+
+    elif isinstance(expr, IndexNode):
+        arr_val = interpret(expr.arr, store, ind_store)
+        ind_list_vals = [interpret_index(ind, ind_store) for ind in expr.index_list]
+        return arr_val[tuple(ind_list_vals)]
+
+    elif isinstance(expr, ReduceNode):
+        val = interpret(expr.expr, store, ind_store)
         if expr.op == OP_ADD:
             return np.add.reduce(val, axis=0)
 
@@ -98,8 +116,8 @@ def interpret(expr, store):
             assert False, "unknown operator {}".format(expr.op)
 
     elif isinstance(expr, OpNode):
-        val1 = interpret(expr.expr1, store)
-        val2 = interpret(expr.expr2, store)
+        val1 = interpret(expr.expr1, store, ind_store)
+        val2 = interpret(expr.expr2, store, ind_store)
 
         if expr.op == OP_ADD:
             return val1 + val2
@@ -111,19 +129,19 @@ def interpret(expr, store):
             assert False, "unknown operator {}".format(expr.op)
 
     elif isinstance(expr, FillNode):
-        cur = interpret(expr.arr, store)
+        cur = interpret(expr.arr, store, ind_store)
         for d in expr.fill_sizes:
             cur = np.stack([cur]*d)
 
         return cur
 
     elif isinstance(expr, TransposeNode):
-        val = interpret(expr.arr, store)
+        val = interpret(expr.arr, store, ind_store)
         print(val)
         return val.transpose(tuple(expr.perm))
 
-    elif isinstance(expr, ArrayNode):
-        return store[expr.arr]
+    elif isinstance(expr, VarNode):
+        return store[expr.var]
 
     else:
         assert False, "interpret: failed to match expression"
@@ -175,10 +193,10 @@ def normalize(expr: ExpressionNode, path=[]):
             transpose_perm[i] = new_shape.index(required_shape[i][0])
 
         if len(fill_sizes) > 0:
-            return TransposeNode(FillNode(ArrayNode(expr.var), fill_sizes), transpose_perm)
+            return TransposeNode(FillNode(expr.arr, fill_sizes), transpose_perm)
 
         else:
-            return TransposeNode(ArrayNode(expr.var), transpose_perm)
+            return TransposeNode(expr.arr, transpose_perm)
     else:
         assert False, "normalize: failed to match expression"
 
@@ -188,8 +206,8 @@ def matvecmul():
         ReduceNode( \
             ForNode("k", 2, \
                 OpNode( \
-                    IndexNode("A", ["i", "k"]), \
-                    IndexNode("v", ["k"]), \
+                    IndexNode(VarNode("A"), ["i", "k"]), \
+                    IndexNode(VarNode("v"), ["k"]), \
                     op = OP_MUL
                 )
             )
@@ -203,7 +221,8 @@ def matvecmul():
         "v": np.array([5,6])
     }
 
-    out = interpret(norm_expr, store)
+    orig_out = interpret(expr, store)
+    norm_out = interpret(norm_expr, store)
 
     print("source program:\n", expr)
     print("index-free representation:\n", norm_expr)
@@ -212,8 +231,10 @@ def matvecmul():
     print(store["A"])
     print("input v:")
     print(store["v"])
-    print("output:")
-    print(out)
+    print("output of original expr:")
+    print(orig_out)
+    print("output of normalized expr:")
+    print(norm_out)
 
 
 # matrix-matrix multiply
@@ -222,8 +243,8 @@ def matmatmul():
         ReduceNode( \
             ForNode("k", 2, \
                 OpNode( \
-                    IndexNode("A", ["i", "k"]), \
-                    IndexNode("B", ["k", "j"]), \
+                    IndexNode(VarNode("A"), ["i", "k"]), \
+                    IndexNode(VarNode("B"), ["k", "j"]), \
                     op = OP_MUL
                 )
             )
@@ -240,14 +261,18 @@ def matmatmul():
         "B": np.array([5,6,7,8]).reshape((2,2))
     }
 
-    out = interpret(norm_expr, store)
+    orig_out = interpret(expr, store)
+    norm_out = interpret(norm_expr, store)
 
     print("input A:")
     print(store["A"])
     print("input B:")
     print(store["B"])
     print("output:")
-    print(out)
+    print("output of original expr:")
+    print(orig_out)
+    print("output of normalized expr:")
+    print(norm_out)
 
 if __name__ == "__main__":
-    matvecmul()
+    matmatmul()
