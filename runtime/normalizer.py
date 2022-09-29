@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from typing import *
 import numpy as np
 
 OP_ADD = "add"
@@ -9,7 +10,7 @@ OP_MUL = "mul"
 # INTERVALS
 
 class Interval:
-    def __init__(self, minval, maxval):
+    def __init__(self, minval: int, maxval: int):
         self.minval = minval
         self.maxval = maxval
 
@@ -39,8 +40,7 @@ class ExpressionNode:
         return OpNode(self, other, op=OP_MUL)
 
     def __getitem__(self, item):
-        return IndexingNode(arr, item)
-
+        return IndexingNode(self, item)
 
 ## for(i, e)
 class ForNode(ExpressionNode):
@@ -96,8 +96,8 @@ class IndexingNode(ExpressionNode):
         else:
             return self.arr
 
-class VarNode:
-    def __init__(self, var):
+class VarNode(ExpressionNode):
+    def __init__(self, var: str):
         self.var = var
 
     def __str__(self):
@@ -265,19 +265,19 @@ def get_index_vars(ind_expr):
         return get_index_vars(ind_expr.expr1).union(get_index_vars(ind_expr.expr2))
 
     else:
-        assert False, "get_indices: failed to match on index expression forms"
+        assert False, "get_indices: {} failed to match on index expression forms".format(ind_expr)
 
-def indexpr_to_interval(ind_expr, store):
+def indexpr_to_interval(ind_expr, ind_store):
     if isinstance(ind_expr, IndexVarNode):
-        extent = store[ind_expr.var]
+        extent = ind_store[ind_expr.var]
         return Interval(extent[0], extent[1])
 
     elif isinstance(ind_expr, IndexLiteralNode):
         return Interval(ind_expr.val, ind_expr.val)
 
     elif isinstance(ind_expr, IndexOpNode):
-        i1 = indexpr_to_interval(ind_expr.expr1)
-        i2 = indexpr_to_interval(ind_expr.expr2)
+        i1 = indexpr_to_interval(ind_expr.expr1, ind_store)
+        i2 = indexpr_to_interval(ind_expr.expr2, ind_store)
 
         if ind_expr.op == OP_ADD:
             return i1 + i2
@@ -289,17 +289,17 @@ def indexpr_to_interval(ind_expr, store):
             return i1 * i2
 
 # convert into index-free representation
-def normalize(expr: ExpressionNode, path=[], store={}):
+def normalize(expr: ExpressionNode, store={}, path=[]): 
     if isinstance(expr, ForNode):
-        return normalize(expr.expr, path + [("index", (expr.index, expr.extent))])
+        return normalize(expr.expr, store, path + [("index", (expr.index, expr.extent))])
 
     elif isinstance(expr, ReduceNode):
-        new_expr = normalize(expr.expr, path + [("reduce", expr.op)])
+        new_expr = normalize(expr.expr, store, path + [("reduce", expr.op)])
         return ReduceNode(new_expr, expr.op)
 
     elif isinstance(expr, OpNode):
-        new_expr1 = normalize(expr.expr1, path)
-        new_expr2 = normalize(expr.expr2, path)
+        new_expr1 = normalize(expr.expr1, store, path)
+        new_expr2 = normalize(expr.expr2, store, path)
         return OpNode(new_expr1, new_expr2, expr.op)
 
     elif isinstance(expr, VarNode):
@@ -312,12 +312,11 @@ def normalize(expr: ExpressionNode, path=[], store={}):
         for ind_expr in expr.index_list:
             ind_vars = get_index_vars(ind_expr)
             if len(ind_vars) == 1:
-                orig_shape.append(ind_vars[0])
+                orig_shape.append(ind_vars.pop())
 
             else:
                 assert False, "only one index var allowed per dimension"
 
-        orig_shape = expr.index_list[:]
         required_shape = []
         reduce_ind = 0
 
@@ -330,10 +329,13 @@ def normalize(expr: ExpressionNode, path=[], store={}):
 
         # next, compute the transformations from the array's original shape
         # to its required shape
-        # - first, compute padding
+        # - first, generate map of in-scope indices and their extents
+        ind_store = dict([data for (tag, data) in path if tag == "index"])
+
+        # - next, compute padding
         pad_list = []
         for i, ind_expr in enumerate(expr.index_list):
-            ind_interval = indexpr_to_interval(ind_expr)
+            ind_interval = indexpr_to_interval(ind_expr, ind_store)
             dim_extent = store[expr.arr.var][i]
             dim_interval = Interval(dim_extent[0], dim_extent[1])
 
@@ -346,24 +348,35 @@ def normalize(expr: ExpressionNode, path=[], store={}):
 
             pad_list.append((pad_min, pad_max))
 
+        print("pad_list", pad_list)
+
         # - next, compute fills
         missing_indices = [(index, extent) for (index, extent) in required_shape if index not in orig_shape]
         new_shape = orig_shape[:]
         fill_sizes = []
         for (index, extent) in missing_indices:
-            fill_sizes.append(extent[1] - extent[0])
+            fill_sizes.append(extent[1] - extent[0] + 1)
             new_shape = [index] + new_shape
+
+        print("fill_sizes", fill_sizes)
+        print("new_shape", new_shape)
+        print("required_shape", required_shape)
 
         # - finally, compute transpositions
         transpose_perm = list(range(len(required_shape)))
         for i in range(len(new_shape)):
             transpose_perm[i] = new_shape.index(required_shape[i][0])
 
-        if len(fill_sizes) > 0:
-            return TransposeNode(FillNode(expr.arr, fill_sizes), transpose_perm)
+        # compose transformations in this order: pad, fill, transpose
+        pad_expr = expr.arr
+        if any(pad_min != 0 or pad_max != 0 for (pad_min, pad_max) in pad_list):
+            pad_expr = PadNode(expr.arr, pad_list)
 
-        else:
-            return TransposeNode(expr.arr, transpose_perm)
+        fill_expr = pad_expr
+        if len(fill_sizes) > 0:
+            fill_expr = FillNode(expr.arr, fill_sizes)
+
+        return TransposeNode(fill_expr, transpose_perm)
 
     else:
         assert False, "normalize: failed to match expression"
@@ -373,7 +386,7 @@ def check_expr_equiv(expr1, expr2, store_template, n=20):
     for _ in range(n):
         store = {}
         for k, extents in store_template.items():
-            shape = tuple(map(lambda extent: extent[1]-extent[0], extents))
+            shape = tuple(map(lambda extent: extent[1]-extent[0] + 1, extents))
             store[k] = np.random.randint(0, 100, shape)
 
         out1 = interpret(expr1, store)
@@ -388,8 +401,8 @@ def check_expr_equiv(expr1, expr2, store_template, n=20):
 def ind(var):
     return IndexVarNode(var)
 
-def arr(var):
-    return VarNode(var)
+def arr(v):
+    return VarNode(v)
 
 def arrsum(expr):
     return ReduceNode(expr, op = OP_ADD)
@@ -400,32 +413,36 @@ def arrprod(expr):
 def matvecmul():
     print("TEST: matrix-vector multiply")
 
-    expr = ForNode("i", (0,1), arrsum(ForNode("k", (0,1),
-        arr("A")[[ind("i"), ind("k")]] * arr("v")[[ind("k")]]))
+    expr = ForNode("i", (0,1),
+        arrsum(ForNode("k", (0,1),
+            arr("A")[[ind("i"), ind("k")]] * arr("v")[[ind("k")]])
+        )
     )
 
     store = {"A": [(0,1),(0,1)], "v": [(0,1)]}
-    norm_expr = normalize(expr)
-    check_expr_equiv(expr, norm_expr, store)
+    norm_expr = normalize(expr, store)
+
+    print(expr)
+    print(norm_expr)
+    # check_expr_equiv(expr, norm_expr, store)
 
 def matmatmul():
     print("TEST: matrix-matrix multiply")
 
-    expr = ForNode("i", (0,1), ForNode("j", (0,1), \
-        ReduceNode( \
-            ForNode("k", (0,1), \
-                OpNode( \
-                    IndexingNode(VarNode("A"), ["i", "k"]), \
-                    IndexingNode(VarNode("B"), ["k", "j"]), \
-                    op = OP_MUL
-                )
+    expr = ForNode("i", (0,1), ForNode("j", (0,1),
+        arrsum(
+            ForNode("k", (0,1),
+                arr("A")[[ind("i"), ind("k")]] * arr("B")[[ind("k"), ind("j")]]
             )
         )
     ))
 
     store = {"A": [(0,1),(0,1)], "B": [(0,1),(0,1)]}
-    norm_expr = normalize(expr)
-    check_expr_equiv(expr, norm_expr, store)
+    norm_expr = normalize(expr, store)
+
+    print(expr)
+    print(norm_expr)
+    # check_expr_equiv(expr, norm_expr, store)
 
     # print("source program:\n", expr)
     # print("index-free representation:\n", norm_expr)
@@ -448,6 +465,21 @@ def matmatmul():
     # print("output of normalized expr:")
     # print(norm_out)
 
+def imgblur():
+    print("TEST: image blur")
+
+    expr = ForNode("x", (0,16), ForNode("y", (0,16),
+        arr("img")[[ind("x") - 1, ind("y") - 1]] +
+        arr("img")[[ind("x") + 1, ind("y") + 1]]
+    ))
+
+    store = {"img": [(0, 16),(0,16)]}
+    norm_expr = normalize(expr, store)
+
+    print(expr)
+    print(norm_expr)
+
 if __name__ == "__main__":
     matvecmul()
     matmatmul()
+    imgblur()
