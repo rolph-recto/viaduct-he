@@ -9,6 +9,8 @@ OP_MUL = "mul"
 
 # INTERVALS
 
+# Intervals with arithmetic and lattice operations.
+# the empty interval is represented as Interval(None, None)
 class Interval:
     def __init__(self, minval: int, maxval: int):
         self.minval = minval
@@ -24,12 +26,61 @@ class Interval:
         allpairs = [self.minval * other.minval, self.minval * other.maxval, self.maxval * other.minval, self.maxval * other.maxval]
         return Interval(min(allpairs), max(allpairs))
 
+    def __eq__(self, other):
+        if isinstance(other, Interval):
+            return self.minval == other.minval and self.maxval == other.maxval
+
+        else:
+            return False
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def is_empty(self):
+        return self.minval is None and self.maxval is None
+
     def contains(self, other):
-        return self.minval <= other.minval and self.maxval >= other.maxval
+        if self.is_empty():
+            return other.is_empty()
+
+        elif other.is_empty():
+            return self.is_empty()
+
+        else:
+            return self.minval <= other.minval and self.maxval >= other.maxval
+
+    def merge(self, other):
+        if self.is_empty():
+            return other
+
+        elif other.is_empty():
+            return self
+
+        else:
+            return Interval(min(self.minval, other.minval), max(self.maxval, other.maxval))
+
+    def __str__(self):
+        return "({}, {})".format(self.minval, self.maxval)
+
+    def __repr__(self):
+        return "Interval({}, {})".format(self.minval, self.maxval)
+
+EmptyInterval = Interval(None, None)
 
 # EXPRESSIONS
 
 class ExpressionNode:
+    cur_id = 0
+
+    @staticmethod
+    def get_fresh_id():
+        ret = ExpressionNode.cur_id
+        ExpressionNode.cur_id += 1
+        return ret
+
+    def __init__(self):
+        self.id = ExpressionNode.get_fresh_id()
+
     def __add__(self, other):
         return OpNode(self, other, op=OP_ADD)
 
@@ -45,6 +96,7 @@ class ExpressionNode:
 ## for(i, e)
 class ForNode(ExpressionNode):
     def __init__(self, index, extent, expr):
+        super().__init__()
         self.index = index
         self.extent = extent
         self.expr = expr
@@ -55,6 +107,7 @@ class ForNode(ExpressionNode):
 ## reduce(op, e)
 class ReduceNode(ExpressionNode):
     def __init__(self, expr, op=OP_ADD):
+        super().__init__()
         self.expr = expr
         self.op = op
 
@@ -65,6 +118,7 @@ class ReduceNode(ExpressionNode):
 ## e op e
 class OpNode(ExpressionNode):
     def __init__(self, expr1, expr2, op=OP_ADD):
+        super().__init__()
         self.expr1 = expr1
         self.expr2 = expr2
         self.op = op
@@ -85,6 +139,7 @@ class OpNode(ExpressionNode):
 ## x[i]
 class IndexingNode(ExpressionNode):
     def __init__(self, arr, index_list):
+        super().__init__()
         self.arr = arr
         self.index_list = index_list
 
@@ -98,6 +153,7 @@ class IndexingNode(ExpressionNode):
 
 class VarNode(ExpressionNode):
     def __init__(self, var: str):
+        super().__init__()
         self.var = var
 
     def __str__(self):
@@ -163,32 +219,208 @@ class IndexOpNode(IndexExpression):
 
 # TRANSFORMATIONS
 
-class TransformNode:
-    pass
-
-class FillNode(TransformNode):
-    def __init__(self, arr, fill_sizes):
+# represent fill, transpose, and pad transformations
+class TransformNode(ExpressionNode):
+    def __init__(self, arr, fill_sizes=[], transpose=[], pad_sizes=[], extent_list=[]):
+        super().__init__()
         self.arr = arr
         self.fill_sizes = fill_sizes
+        self.transpose = transpose
+        self.pad_sizes = pad_sizes
+        self.extent_list = extent_list
 
     def __str__(self):
-        return "fill({}, {})".format(self.arr, self.fill_sizes)
+        expr = str(self.arr)
 
-class TransposeNode(TransformNode):
-    def __init__(self, arr, perm):
-        self.arr = arr
-        self.perm = perm
+        if len(self.fill_sizes) > 0:
+            expr = "fill({}, {})".format(expr, self.fill_sizes)
 
-    def __str__(self):
-        return "transpose({}, {})".format(self.arr, self.perm)
+        if self.transpose != list(range(len(self.transpose))):
+            expr = "transpose({}, {})".format(expr, self.transpose)
 
-class PadNode(TransformNode):
-    def __init__(self, arr, pad_list):
-        self.arr = arr
-        self.pad_list = pad_list
+        if any(pad_min != 0 or pad_max != 0 for (pad_min, pad_max) in self.pad_sizes):
+            expr = "pad({}, {})".format(expr, self.pad_sizes)
 
-    def __str__(self):
-        return "pad({}, {})".format(self.arr, self.pad_list)
+        return expr
+
+class IntervalVar:
+    def __init__(self, var_id):
+        self.id = var_id
+
+    def __repr__(self):
+        return "IntervalVar({})".format(self.id)
+
+class IntervalConstraint:
+    pass
+
+# constraint that rhs contains the lhs
+# - lhs must be a constant and rhs must be a variable
+class IntervalContainsConstraint(IntervalConstraint):
+    def __init__(self, lhs, rhs):
+        if isinstance(lhs, Interval) and isinstance(rhs, IntervalVar):
+            self.lhs = lhs
+            self.rhs = rhs
+        
+        else:
+            assert False, "LHS of IntervalContainsConstraint must be a constant"
+
+# constraint that rhs contains the lhs
+# - lhs must be a constant and rhs must be a variable
+class IntervalEqualsConstraint(IntervalConstraint):
+    def __init__(self, lhs, rhs):
+        if isinstance(lhs, IntervalVar) and isinstance(rhs, IntervalVar):
+            self.lhs = lhs
+            self.rhs = rhs
+        
+        else:
+            assert False, "both LHS and RHS of IntervalEqualsConstraint must be variables"
+        
+# extent analysis
+class ExtentAnalysis:
+    def __init__(self):
+        # fresh constraint var id counter
+        self.cur_var_id = 0
+
+        # constraint counters
+        self.constraints = []
+
+        # constraint variables
+        self.vars = []
+
+        # the expression nodes that need solutions
+        self.nodes = {}
+
+    def fresh_constraint_var(self):
+        new_id = self.cur_var_id
+        self.cur_var_id += 1
+        var = IntervalVar(new_id)
+        self.vars.append(var)
+        return var
+
+    def add_contains_constraint(self, lhs, rhs):
+        self.constraints.append(IntervalContainsConstraint(lhs, rhs))
+
+    def add_equals_constraint(self, lhs, rhs):
+        self.constraints.append(IntervalEqualsConstraint(lhs, rhs))
+
+    # generate constraints between extents in an expr
+    def collect_constraints(self, expr):
+        if isinstance(expr, ForNode):
+            assert False, "unify_extents: input must be an index-free expression"
+
+        elif isinstance(expr, IndexingNode):
+            assert False, "unify_extents: input must be an index-free expression"
+
+        elif isinstance(expr, ReduceNode):
+            (i, extent_list) = self.collect_constraints(expr.expr)
+            return (i+1, extent_list)
+
+        elif isinstance(expr, OpNode):
+            (i1, extent_list1) = self.collect_constraints(expr.expr1)
+            (i2, extent_list2) = self.collect_constraints(expr.expr2)
+
+            assert len(extent_list1[i1:]) == len(extent_list2[i2:])
+
+            for (e1, e2) in zip(extent_list1[i1:], extent_list2[i2:]):
+                self.add_equals_constraint(e1, e2)
+
+            # pick one extent list from operands to return
+            return (i1, extent_list1)
+
+        elif isinstance(expr, TransformNode):
+            extent_vars = []
+            for extent in expr.extent_list:
+                extent_var = self.fresh_constraint_var()
+                extent_vars.append(extent_var)
+                self.add_contains_constraint(extent, extent_var)
+
+            self.nodes[expr.id] = extent_vars
+            return (0, extent_vars)
+
+    # adjust padding of TransformNodes so that they satisfy
+    # the extent solutions computed
+    def apply_solution(self, expr, node_solutions):
+        if isinstance(expr, ForNode):
+            assert False, "apply_solution: input must be an index-free expression"
+
+        elif isinstance(expr, IndexingNode):
+            assert False, "apply_solution: input must be an index-free expression"
+
+        elif isinstance(expr, ReduceNode):
+            new_expr = self.apply_solution(expr.expr, node_solutions)
+            return ReduceNode(new_expr, op=expr.op)
+
+        elif isinstance(expr, OpNode):
+            new_expr1 = self.apply_solution(expr.expr1, node_solutions)
+            new_expr2 = self.apply_solution(expr.expr2, node_solutions)
+
+            return OpNode(new_expr1, new_expr2, op=expr.op)
+
+        elif isinstance(expr, TransformNode):
+            if expr.id in node_solutions:
+                new_pad_sizes = []
+                for pad, cur_extent, sol_extent in zip(expr.pad_sizes, expr.extent_list, node_solutions[expr.id]):
+                    assert sol_extent.contains(cur_extent), "sol_extent should only ADD padding, not remove it"
+                    if cur_extent != sol_extent:
+                        new_pad_min = (cur_extent.minval - sol_extent.minval) + pad[0]
+                        new_pad_max = (sol_extent.maxval - cur_extent.maxval) + pad[1]
+                        new_pad_sizes.append((new_pad_min, new_pad_max))
+
+                new_transform = \
+                    TransformNode(
+                        expr.arr, expr.fill_sizes, expr.transpose,
+                        new_pad_sizes, node_solutions[expr.id]
+                    )
+
+                return new_transform
+
+            else:
+                return expr
+
+
+    def run(self, expr):
+        # first, collect constraints
+        self.collect_constraints(expr)
+
+        # next, find solutions
+        # initial solution is all variables are EmptyInterval (bottom of lattice)
+        solution = dict([(var.id, EmptyInterval) for var in self.vars])
+
+        # next, find fixpoint solution to constraints
+        # just implementing a simple linear pass instead of doing
+        # the usual dataflow analysis optimizations like
+        # keeping track of which constraints to wake when a solution is updated,
+        # toposorting the connected components of the graph, etc.
+        quiesce = False
+        while not quiesce:
+            quiesce = True
+            for c in self.constraints:
+                if isinstance(c, IntervalContainsConstraint):
+                    # update RHS solution
+                    rhs_sol = solution[c.rhs.id]
+                    if not rhs_sol.contains(c.lhs):
+                        solution[c.rhs.id] = rhs_sol.merge(c.lhs)
+                        quiesce = False
+
+                if isinstance(c, IntervalEqualsConstraint):
+                    # update LHS and RHS solution
+                    lhs_sol = solution[c.lhs.id]
+                    rhs_sol = solution[c.rhs.id]
+                    if not (rhs_sol.contains(lhs_sol) and lhs_sol.contains(rhs_sol)):
+                        new_sol = rhs_sol.merge(lhs_sol)
+                        solution[c.rhs.id] = new_sol
+                        solution[c.lhs.id] = new_sol
+                        quiesce = False
+
+        node_solutions = {}
+        for node, extent_vars in self.nodes.items():
+            extent_sol = [solution[var.id] for var in extent_vars]
+            node_solutions[node] = extent_sol
+
+        # finally, apply solutions by transforming expr nodes
+        new_expr = self.apply_solution(expr, node_solutions)
+        return new_expr
+
 
 # TODO support other indexing expressions like operators and constants
 def interpret_index(index, ind_store):
@@ -288,98 +520,108 @@ def indexpr_to_interval(ind_expr, ind_store):
         elif ind_expr.op == OP_MUL:
             return i1 * i2
 
-# convert into index-free representation
-def normalize(expr: ExpressionNode, store={}, path=[]): 
-    if isinstance(expr, ForNode):
-        return normalize(expr.expr, store, path + [("index", (expr.index, expr.extent))])
+class Normalizer:
+    def __init__(self):
+        self.extent_analysis = ExtentAnalysis()
 
-    elif isinstance(expr, ReduceNode):
-        new_expr = normalize(expr.expr, store, path + [("reduce", expr.op)])
-        return ReduceNode(new_expr, expr.op)
+    # convert into index-free representation
+    def normalize(self, expr: ExpressionNode, store={}, path=[]): 
+        if isinstance(expr, ForNode):
+            return self.normalize(expr.expr, store, path + [("index", (expr.index, expr.extent))])
 
-    elif isinstance(expr, OpNode):
-        new_expr1 = normalize(expr.expr1, store, path)
-        new_expr2 = normalize(expr.expr2, store, path)
-        return OpNode(new_expr1, new_expr2, expr.op)
+        elif isinstance(expr, ReduceNode):
+            new_expr = self.normalize(expr.expr, store, path + [("reduce", expr.op)])
+            return ReduceNode(new_expr, expr.op)
 
-    elif isinstance(expr, VarNode):
-        return expr
+        elif isinstance(expr, OpNode):
+            new_expr1 = self.normalize(expr.expr1, store, path)
+            new_expr2 = self.normalize(expr.expr2, store, path)
+            return OpNode(new_expr1, new_expr2, expr.op)
 
-    # TODO for now, assume index nodes are scalar (0-dim)
-    elif isinstance(expr, IndexingNode):
-        # first, compute the required shape of the array
-        orig_shape = []
-        for ind_expr in expr.index_list:
-            ind_vars = get_index_vars(ind_expr)
-            if len(ind_vars) == 1:
-                orig_shape.append(ind_vars.pop())
+        elif isinstance(expr, VarNode):
+            return expr
 
-            else:
-                assert False, "only one index var allowed per dimension"
+        # TODO for now, assume index nodes are scalar (0-dim)
+        elif isinstance(expr, IndexingNode):
+            # first, compute the required shape of the array
+            required_shape = []
+            reduce_ind = 0
 
-        required_shape = []
-        reduce_ind = 0
+            for (tag, val) in path[::-1]:
+                if tag == "index":
+                    required_shape.insert(reduce_ind, val)
 
-        for (tag, val) in path[::-1]:
-            if tag == "index":
-                required_shape.insert(reduce_ind, val)
+                elif tag == "reduce":
+                    reduce_ind += 1
 
-            elif tag == "reduce":
-                reduce_ind += 1
+            # next, compute the transformations from the array's original shape
+            # to its required shape
+            # compute the original shape
+            orig_shape = []
+            for ind_expr in expr.index_list:
+                ind_vars = get_index_vars(ind_expr)
+                if len(ind_vars) == 1:
+                    orig_shape.append(ind_vars.pop())
 
-        # next, compute the transformations from the array's original shape
-        # to its required shape
-        # - first, generate map of in-scope indices and their extents
-        ind_store = dict([data for (tag, data) in path if tag == "index"])
+                else:
+                    assert False, "only one index var allowed per dimension"
 
-        # - next, compute padding
-        pad_list = []
-        for i, ind_expr in enumerate(expr.index_list):
-            ind_interval = indexpr_to_interval(ind_expr, ind_store)
-            dim_extent = store[expr.arr.var][i]
-            dim_interval = Interval(dim_extent[0], dim_extent[1])
+            # generate map of in-scope indices and their extents
+            ind_store = dict([data for (tag, data) in path if tag == "index"])
 
-            pad_min, pad_max = 0, 0
-            if dim_interval.minval > ind_interval.minval:
-                pad_min = dim_interval.minval - ind_interval.minval
+            # compute fills
+            extent_list = []
+            missing_indices = [(index, extent) for (index, extent) in required_shape if index not in orig_shape]
+            new_shape = orig_shape[:]
+            fill_sizes = []
+            for (index, extent) in missing_indices:
+                extent_list.append(Interval(extent[0], extent[1]))
+                fill_sizes.append(extent[1] - extent[0] + 1)
+                new_shape = [index] + new_shape
 
-            if dim_interval.maxval < ind_interval.maxval:
-                pad_max = ind_interval.maxval - dim_interval.maxval
+            # compute padding
+            # initialize with padding for filled dimensions, which should always be (0,0)
+            pad_sizes = [(0,0) for _ in range(len(fill_sizes))]
+            for i, ind_expr in enumerate(expr.index_list):
+                ind_interval = indexpr_to_interval(ind_expr, ind_store)
+                dim_extent = store[expr.arr.var][i]
+                dim_interval = Interval(dim_extent[0], dim_extent[1])
 
-            pad_list.append((pad_min, pad_max))
+                pad_min, pad_max = 0, 0
+                if dim_interval.minval > ind_interval.minval:
+                    pad_min = dim_interval.minval - ind_interval.minval
 
-        print("pad_list", pad_list)
+                if dim_interval.maxval < ind_interval.maxval:
+                    pad_max = ind_interval.maxval - dim_interval.maxval
 
-        # - next, compute fills
-        missing_indices = [(index, extent) for (index, extent) in required_shape if index not in orig_shape]
-        new_shape = orig_shape[:]
-        fill_sizes = []
-        for (index, extent) in missing_indices:
-            fill_sizes.append(extent[1] - extent[0] + 1)
-            new_shape = [index] + new_shape
+                pad_sizes.append((pad_min, pad_max))
+                extent_list.append(Interval(dim_extent[0]-pad_min, dim_extent[1]+pad_max))
 
-        print("fill_sizes", fill_sizes)
-        print("new_shape", new_shape)
-        print("required_shape", required_shape)
+            # compute transpositions
+            transpose = list(range(len(required_shape)))
+            for i in range(len(new_shape)):
+                transpose[i] = new_shape.index(required_shape[i][0])
 
-        # - finally, compute transpositions
-        transpose_perm = list(range(len(required_shape)))
-        for i in range(len(new_shape)):
-            transpose_perm[i] = new_shape.index(required_shape[i][0])
+            # apply transpositions
+            transposed_pad_sizes = [pad_sizes[i] for i in transpose]
+            transposed_extent_list = [extent_list[i] for i in transpose]
 
-        # compose transformations in this order: pad, fill, transpose
-        pad_expr = expr.arr
-        if any(pad_min != 0 or pad_max != 0 for (pad_min, pad_max) in pad_list):
-            pad_expr = PadNode(expr.arr, pad_list)
+            print("new_shape", new_shape)
+            print("required_shape", required_shape)
+            print("fill_sizes", fill_sizes)
+            print("pad_list", transposed_pad_sizes)
+            print("transpose", transpose)
+            print("extent_list", transposed_extent_list)
 
-        fill_expr = pad_expr
-        if len(fill_sizes) > 0:
-            fill_expr = FillNode(expr.arr, fill_sizes)
+            return TransformNode(expr.arr, fill_sizes, transpose, transposed_pad_sizes, transposed_extent_list)
 
-        return TransposeNode(fill_expr, transpose_perm)
+        else:
+            assert False, "normalize: failed to match expression"
 
-    else:
-        assert False, "normalize: failed to match expression"
+    def run(self, expr, store):
+        norm_expr = self.normalize(expr, store)
+        norm_expr2 = self.extent_analysis.run(norm_expr)
+        return norm_expr2
 
 # check equivalence of two expressions by repeatedly interpreting them against different stores
 def check_expr_equiv(expr1, expr2, store_template, n=20):
@@ -420,7 +662,7 @@ def matvecmul():
     )
 
     store = {"A": [(0,1),(0,1)], "v": [(0,1)]}
-    norm_expr = normalize(expr, store)
+    norm_expr = Normalizer().run(expr, store)
 
     print(expr)
     print(norm_expr)
@@ -438,7 +680,7 @@ def matmatmul():
     ))
 
     store = {"A": [(0,1),(0,1)], "B": [(0,1),(0,1)]}
-    norm_expr = normalize(expr, store)
+    norm_expr = Normalizer().run(expr, store)
 
     print(expr)
     print(norm_expr)
@@ -474,7 +716,7 @@ def imgblur():
     ))
 
     store = {"img": [(0, 16),(0,16)]}
-    norm_expr = normalize(expr, store)
+    norm_expr = Normalizer().run(expr, store)
 
     print(expr)
     print(norm_expr)
