@@ -1,26 +1,25 @@
+use core::fmt::Display;
 use std::collections::HashMap;
 
 use interval::Interval;
 
-pub(crate) mod normalizer;
+pub mod normalizer;
 
-type Extent = Interval<isize>;
-type ExtentStore = HashMap<String, Vec<Extent>>;
+pub type Extent = Interval<isize>;
+pub type ExtentStore = HashMap<String, Vec<Extent>>;
 
-type IndexName = String;
-type ArrayName = String;
+pub type IndexName = String;
+pub type ArrayName = String;
 
-type ExprId = usize;
+pub type ExprId = usize;
 
 #[derive(Copy,Clone,Debug)]
-pub(crate) enum ExprOperator { OP_ADD, OP_SUB, OP_MUL }
+pub enum ExprOperator { OpAdd, OpSub, OpMul }
 
 #[derive(Clone,Debug)]
-pub(crate) enum IndexExpr {
+pub enum IndexExpr {
     IndexVar(IndexName),
-
     IndexLiteral(isize),
-
     IndexOp(ExprOperator, Box<IndexExpr>, Box<IndexExpr>)
 }
 
@@ -48,32 +47,127 @@ impl IndexExpr {
     }
 }
 
-#[derive(Clone,Debug)]
-pub(crate) enum SourceExpr {
-    ForNode { index: String, extent: Extent, body: Box<SourceExpr> },
+impl Display for IndexExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IndexExpr::IndexVar(var) => {
+                write!(f, "{}", var)
+            },
 
-    ReduceNode { op: ExprOperator, body: Box<SourceExpr> },
+            IndexExpr::IndexLiteral(val) => {
+                write!(f, "{}", val)
+            },
 
-    OpNode { op: ExprOperator, expr1: Box<SourceExpr>, expr2: Box<SourceExpr> },
+            IndexExpr::IndexOp(op, expr1, expr2) => {
+                let op_str =
+                    match op {
+                        ExprOperator::OpAdd => "+",
+                        ExprOperator::OpSub => "-",
+                        ExprOperator::OpMul => "*"
+                    };
 
-    IndexingNode { arr: ArrayName, index_list: Vec<IndexExpr> }
+                write!(f, "({} {} {})", expr1, op_str, expr2)
+            }
+        }
+    }
 }
 
 #[derive(Clone,Debug)]
-pub(crate) enum NormalizedExpr {
-    ReduceNode { op: ExprOperator, body: Box<NormalizedExpr> },
+pub enum SourceExpr {
+    ForNode(IndexName, Extent, Box<SourceExpr>),
+    ReduceNode(ExprOperator, Box<SourceExpr>),
+    OpNode(ExprOperator, Box<SourceExpr>, Box<SourceExpr>),
+    IndexingNode(ArrayName, Vec<IndexExpr>)
+}
 
-    OpNode { op: ExprOperator, expr1: Box<NormalizedExpr>, expr2: Box<NormalizedExpr> },
+impl Display for SourceExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SourceExpr::ForNode(index, extent, body) => {
+                write!(f, "for {} : {} in {}", index, extent, body)
+            },
 
-    TransformNode { id: ExprId, arr: ArrayName, transform: ArrayTransform }
+            SourceExpr::ReduceNode(op, body) => {
+                let reduce_op_str = 
+                    match op {
+                        ExprOperator::OpAdd => "sum",
+                        ExprOperator::OpSub => "sum_sub",
+                        ExprOperator::OpMul => "product"
+                    };
+
+                write!(f, "{}({})", reduce_op_str, body)
+            },
+
+            SourceExpr::OpNode(op, expr1, expr2) => {
+                let op_str =
+                    match op {
+                        ExprOperator::OpAdd => "+",
+                        ExprOperator::OpSub => "-",
+                        ExprOperator::OpMul => "*"
+                    };
+
+                write!(f, "({} {} {})", expr1, op_str, expr2)
+            },
+
+            SourceExpr::IndexingNode(arr, index_list) => {
+                write!(f, "{}{:?}", arr, index_list)
+            }
+        }
+    }
+}
+
+#[derive(Clone,Debug)]
+pub enum NormalizedExpr {
+    ReduceNode(ExprOperator, Box<NormalizedExpr>),
+    OpNode(ExprOperator, Box<NormalizedExpr>, Box<NormalizedExpr>),
+    TransformNode(ExprId, ArrayName, ArrayTransform)
 }
 
 type PadSize = (usize, usize);
 
 #[derive(Clone,Debug)]
-pub(crate) struct ArrayTransform {
+pub struct ArrayTransform {
     fill_sizes: Vec<usize>,
     transpose: Vec<usize>,
     pad_sizes: Vec<PadSize>,
     extent_list: Vec<Extent>
+}
+
+impl Display for NormalizedExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            NormalizedExpr::ReduceNode(op, body) => {
+                let reduce_op_str = 
+                    match op {
+                        ExprOperator::OpAdd => "sum",
+                        ExprOperator::OpSub => "sum_sub",
+                        ExprOperator::OpMul => "product"
+                    };
+
+                write!(f, "{}({})", reduce_op_str, body)
+            },
+
+            NormalizedExpr::OpNode(op, expr1, expr2) => {
+                let op_str = 
+                    match op {
+                        ExprOperator::OpAdd => "+",
+                        ExprOperator::OpSub => "-",
+                        ExprOperator::OpMul => "*"
+                    };
+
+                write!(f, "({} {} {})", expr1, op_str, expr2)
+            },
+
+            NormalizedExpr::TransformNode(_, arr, transform) => {
+                write!(
+                    f,
+                    "transpose(fill(pad({}, {:?}), {:?}), {:?})",
+                    arr,
+                    transform.pad_sizes,
+                    transform.fill_sizes,
+                    transform.transpose
+                )
+            }
+        }
+    }
 }

@@ -4,11 +4,11 @@
 use std::{collections::HashMap, cmp::max};
 
 use interval::{Interval, ops::{Range, Hull}};
-use gcollections::ops::{bounded::Bounded, Contains, Subset};
+use gcollections::ops::{bounded::Bounded, Subset};
 
 use super::{SourceExpr, NormalizedExpr};
 
-use crate::{lang::*, ir::instr::NodeId};
+use crate::lang::*;
 
 #[derive(Clone)]
 enum PathInfo {
@@ -21,17 +21,17 @@ struct ConstraintVar(usize);
 
 struct ExtentConstraint { var1: ConstraintVar, var2: ConstraintVar }
 
-struct ExprNormalizer {
+pub struct ExprNormalizer {
     cur_expr_id: usize,
     cur_constraint_id: usize,
     constraints: Vec<ExtentConstraint>,
     constraint_vars: Vec<ConstraintVar>,
     solution: HashMap<ConstraintVar, Extent>,
-    node_vars: HashMap<NodeId, Vec<ConstraintVar>>,
+    node_vars: HashMap<ExprId, Vec<ConstraintVar>>,
 }
 
 impl ExprNormalizer {
-    fn new() -> Self {
+    pub fn new() -> Self {
         ExprNormalizer {
             cur_expr_id: 0,
             cur_constraint_id: 0,
@@ -70,9 +70,9 @@ impl ExprNormalizer {
                 let interval1 = self.index_expr_to_interval(expr1, index_store);
                 let interval2 = self.index_expr_to_interval(expr2, index_store);
                 match op {
-                    ExprOperator::OP_ADD => interval1 + interval2,
-                    ExprOperator::OP_SUB => interval1 - interval2,
-                    ExprOperator::OP_MUL => interval1 * interval2,
+                    ExprOperator::OpAdd => interval1 + interval2,
+                    ExprOperator::OpSub => interval1 - interval2,
+                    ExprOperator::OpMul => interval1 * interval2,
                 }
             }
         }
@@ -81,7 +81,7 @@ impl ExprNormalizer {
     /// transformation that removes indices from source expressions.
     fn lower(&mut self, expr: &SourceExpr, store: &ExtentStore, path: &im::Vector<PathInfo> ) -> NormalizedExpr {
         match expr {
-            SourceExpr::ForNode { index, extent, body } => {
+            SourceExpr::ForNode(index, extent, body) => {
                 let new_path = 
                     &im::Vector::unit(PathInfo::Index {
                         index: index.clone(), extent: *extent
@@ -90,30 +90,23 @@ impl ExprNormalizer {
                 self.lower(body, store, &new_path)
             },
 
-            SourceExpr::ReduceNode { op, body } => {
+            SourceExpr::ReduceNode(op, body) => {
                 let new_path = 
                     &im::Vector::unit(PathInfo::Reduce { op: *op }) + path;
                 let new_body = self.lower(body, store, &new_path);
 
-                NormalizedExpr::ReduceNode {
-                    op: *op,
-                    body: Box::new(new_body)
-                }
+                NormalizedExpr::ReduceNode(*op, Box::new(new_body))
             },
 
-            SourceExpr::OpNode { op, expr1, expr2 } => {
+            SourceExpr::OpNode(op, expr1, expr2) => {
                 let new_expr1 = self.lower(expr1, store, path);
                 let new_expr2 = self.lower(expr2, store, path);
 
-                NormalizedExpr::OpNode {
-                    op: *op,
-                    expr1: Box::new(new_expr1),
-                    expr2: Box::new(new_expr2)
-                }
+                NormalizedExpr::OpNode(*op, Box::new(new_expr1), Box::new(new_expr2))
             },
 
             // TODO for now, assume indexing nodes are scalar (0-dim)
-            SourceExpr::IndexingNode { arr, index_list } => {
+            SourceExpr::IndexingNode(arr, index_list) => {
                 // first, compute the required shape of the array
                 let mut required_shape: Vec<(IndexName, Extent)> = Vec::new();
                 let mut reduce_ind: usize = 0;
@@ -201,28 +194,28 @@ impl ExprNormalizer {
                     transpose.iter().map(|&i| extent_list[i]).collect();
 
                 // finally, assemble the array transform
-                NormalizedExpr::TransformNode {
-                    id: self.fresh_expr_id(), 
-                    arr: arr.clone(),
-                    transform: ArrayTransform {
+                NormalizedExpr::TransformNode(
+                    self.fresh_expr_id(), 
+                    arr.clone(),
+                    ArrayTransform {
                         fill_sizes,
                         transpose,
                         pad_sizes: transposed_pad_sizes,
                         extent_list: transposed_extent_list,
                     }
-                }
+                )
             }
         }
     }
 
     fn collect_extent_constraints(&mut self, expr: &NormalizedExpr) -> (usize, Vec<ConstraintVar>) {
         match expr {
-            NormalizedExpr::ReduceNode { op: _, body } => {
+            NormalizedExpr::ReduceNode(_, body) => {
                 let (i, extent_list) = self.collect_extent_constraints(body);
                 (i+1, extent_list)
             },
 
-            NormalizedExpr::OpNode { op: _, expr1, expr2 } => {
+            NormalizedExpr::OpNode(_, expr1, expr2) => {
                 let (i1, extent_list1) = self.collect_extent_constraints(expr1);
                 let (i2, extent_list2) = self.collect_extent_constraints(expr2);
 
@@ -239,7 +232,7 @@ impl ExprNormalizer {
                 (i1, extent_list1)
             },
 
-            NormalizedExpr::TransformNode { id, arr: _, transform } => {
+            NormalizedExpr::TransformNode(id, _, transform) => {
                 let mut extent_vars: Vec<ConstraintVar> = Vec::new();
                 for extent in transform.extent_list.iter() {
                     let extent_var = self.fresh_constraint_var();
@@ -253,7 +246,7 @@ impl ExprNormalizer {
         }
     }
 
-    fn solve_extent_constraints(&mut self) -> HashMap<NodeId, Vec<Extent>> {
+    fn solve_extent_constraints(&mut self) -> HashMap<ExprId, Vec<Extent>> {
         let mut quiesce = false;
 
         // find fixpoint solution to constraints;
@@ -266,14 +259,16 @@ impl ExprNormalizer {
             for c in self.constraints.iter() {
                 let sol1 = self.solution[&c.var1];
                 let sol2 = self.solution[&c.var2];
-                let new_sol = sol1.hull(&sol2);
-                self.solution.insert(c.var1, new_sol);
-                self.solution.insert(c.var2, new_sol);
-                quiesce = false;
+                if sol1 != sol2 {
+                    let new_sol = sol1.hull(&sol2);
+                    self.solution.insert(c.var1, new_sol);
+                    self.solution.insert(c.var2, new_sol);
+                    quiesce = false;
+                }
             }
         }
 
-        let mut node_solutions: HashMap<NodeId, Vec<Extent>> = HashMap::new();
+        let mut node_solutions: HashMap<ExprId, Vec<Extent>> = HashMap::new();
         for (node, extent_vars) in self.node_vars.iter() {
             let extent_sol: Vec<Extent> =
                 extent_vars.iter()
@@ -285,20 +280,20 @@ impl ExprNormalizer {
         node_solutions
     }
 
-    fn apply_extent_solution(&self, expr: &NormalizedExpr, node_solution: &HashMap<NodeId, Vec<Extent>>) -> NormalizedExpr {
+    fn apply_extent_solution(&self, expr: &NormalizedExpr, node_solution: &HashMap<ExprId, Vec<Extent>>) -> NormalizedExpr {
         match expr {
-            NormalizedExpr::ReduceNode { op, body } => {
+            NormalizedExpr::ReduceNode(op, body) => {
                 let new_body = self.apply_extent_solution(body, node_solution);
-                NormalizedExpr::ReduceNode { op: *op, body: Box::new(new_body) }
+                NormalizedExpr::ReduceNode(*op, Box::new(new_body))
             },
 
-            NormalizedExpr::OpNode { op, expr1, expr2 } => {
+            NormalizedExpr::OpNode(op, expr1, expr2) => {
                 let new_expr1 = self.apply_extent_solution(expr1, node_solution);
                 let new_expr2 = self.apply_extent_solution(expr2, node_solution);
-                NormalizedExpr::OpNode { op: *op, expr1: Box::new(new_expr1), expr2: Box::new(new_expr2) }
+                NormalizedExpr::OpNode(*op, Box::new(new_expr1), Box::new(new_expr2))
             },
 
-            NormalizedExpr::TransformNode { id, arr, transform } => {
+            NormalizedExpr::TransformNode(id, arr, transform) => {
                 if node_solution.contains_key(id) {
                     let mut new_pad_sizes: Vec<PadSize> = Vec::new();
                     let zipped_iter =
@@ -317,16 +312,16 @@ impl ExprNormalizer {
                         }
                     }
 
-                    NormalizedExpr::TransformNode {
-                        id: *id,
-                        arr: arr.clone(),
-                        transform: ArrayTransform {
+                    NormalizedExpr::TransformNode(
+                        *id,
+                        arr.clone(),
+                        ArrayTransform {
                             fill_sizes: transform.fill_sizes.clone(),
                             transpose: transform.transpose.clone(),
                             pad_sizes: new_pad_sizes,
                             extent_list: node_solution[id].clone()
                         }
-                    }
+                    )
 
                 } else {
                     expr.clone()
@@ -335,10 +330,11 @@ impl ExprNormalizer {
         }
     }
 
-    pub(crate) fn run(&mut self, expr: &SourceExpr, store: &ExtentStore) -> NormalizedExpr {
+    pub fn run(&mut self, expr: &SourceExpr, store: &ExtentStore) -> NormalizedExpr {
         let norm_expr = self.lower(expr, store, &im::Vector::new());
         self.collect_extent_constraints(&norm_expr);
         let node_solution = self.solve_extent_constraints();
         self.apply_extent_solution(&norm_expr, &node_solution)
+        // self.lower(expr, store, &im::Vector::new())
     }
 }

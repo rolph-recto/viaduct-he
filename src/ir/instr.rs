@@ -69,7 +69,7 @@ impl fmt::Display for HEInstr {
     }
 }
 
-pub(crate) struct HEProgram {
+pub struct HEProgram {
     pub(crate) instrs: Vec<HEInstr>,
 }
 
@@ -93,7 +93,7 @@ pub(crate) type HERefStore = HashMap<NodeId, HEValue>;
 
 impl HEProgram {
     /// calculate the multiplicative depth of the program.
-    pub(crate) fn get_muldepth(&self) -> usize {
+    pub fn get_muldepth(&self) -> usize {
         let mut max_depth: usize = 0;
         let mut depth_list: Vec<usize> = vec![];
 
@@ -257,7 +257,7 @@ impl fmt::Display for HEProgram {
     }
 }
 
-pub(crate) fn gen_program(expr: &RecExpr<HE>) -> HEProgram {
+pub fn gen_program(expr: &RecExpr<HE>) -> HEProgram {
     let mut node_map: HashMap<Id, HEOperand> = HashMap::new();
     let mut program: HEProgram = HEProgram { instrs: Vec::new() };
     let mut cur_instr: NodeId = 0;

@@ -1,3 +1,3 @@
-pub(crate) mod expr;
-pub(crate) mod instr;
-pub(crate) mod lowered;
+pub mod expr;
+pub mod instr;
+pub mod lowered;

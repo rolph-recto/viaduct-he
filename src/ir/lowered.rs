@@ -11,7 +11,7 @@ type HELoweredOperand = String;
 
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(tag = "op")]
-pub(crate) enum HELoweredInstr {
+pub enum HELoweredInstr {
     Add { id: HELoweredNodeId, op1: HELoweredOperand, op2: HELoweredOperand },
     AddInplace { op1: HELoweredOperand, op2: HELoweredOperand },
     AddPlain { id: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
@@ -26,7 +26,7 @@ pub(crate) enum HELoweredInstr {
 }
 
 #[derive(Serialize)]
-pub(crate) struct HELoweredProgram {
+pub struct HELoweredProgram {
     vec_size: usize,
     symbols: HashSet<String>,
     constants: Vec<(i32, String)>,
@@ -66,7 +66,7 @@ pub(crate) fn lower_operand(inplace_map: &HashMap<NodeId,NodeId>, const_map: &mu
     }
 }
 
-pub(crate) fn lower_program(prog: &HEProgram, vec_size: usize) -> HELoweredProgram {
+pub fn lower_program(prog: &HEProgram, vec_size: usize) -> HELoweredProgram {
     let uses = prog.analyze_use();
     let mut inplace_map: HashMap<NodeId, NodeId> = HashMap::new();
     let mut const_map: HashMap<i32, String> = HashMap::new();

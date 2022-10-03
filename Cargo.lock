@@ -275,7 +275,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "he-vectorizer"
+name = "he_vectorizer"
 version = "0.1.0"
 dependencies = [
  "clap",

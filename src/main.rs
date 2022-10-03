@@ -1,18 +1,16 @@
+mod lang;
+
 /// main.rs
 /// Vectorizer for homomorphic encryption circuits
 
 use clap::Parser;
 use handlebars::{Handlebars, handlebars_helper};
 use egg::RecExpr;
-use ir::{instr::{gen_program, HEProgram}, expr::HE, lowered::HELoweredInstr};
 use log::*;
 use std::fs::File;
 
-use crate::{ir::lowered::lower_program, optimizer::{ExtractorType, optimize}};
-
-mod ir;
-mod lang;
-mod optimizer;
+use he_vectorizer::ir::{instr::{gen_program, HEProgram}, expr::HE, lowered::HELoweredInstr};
+use he_vectorizer::{ir::lowered::lower_program, optimizer::{ExtractorType, optimize}};
 
 #[derive(Parser)]
 #[clap(author, version, about = "optimizer for for vectorized homomorphic encryption circuits", long_about = None)]

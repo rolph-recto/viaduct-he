@@ -1,11 +1,19 @@
 [package]
-name = "he-vectorizer"
+name = "he_vectorizer"
 author = "Rolph Recto"
 about = "vectorizer for homomorphic encryption circuits"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "he_vectorizer"
+path = "src/lib.rs"
+
+[[bin]]
+name = "he_vectorizer"
+path = "src/main.rs"
 
 [dependencies]
 clap = { version = "3.2.16", features = ["derive"] }

@@ -6,7 +6,7 @@ use egg::*;
 
 define_language! {
     /// The language used by egg e-graph engine.
-    pub(crate) enum HE {
+    pub enum HE {
         Num(i32),
         "+" = Add([Id; 2]),
         "*" = Mul([Id; 2]),

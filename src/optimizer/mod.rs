@@ -10,7 +10,7 @@ mod greedy_extractor;
 mod lp_extractor;
 
 #[derive(Clone, ValueEnum)]
-pub(crate) enum ExtractorType { GREEDY, LP }
+pub enum ExtractorType { GREEDY, LP }
 
 pub const MUL_LATENCY: usize = 20;
 pub const MUL_PLAIN_LATENCY: usize = 8;
@@ -415,7 +415,7 @@ impl Applier<HE, HEData> for RotateSplit {
     }
 }
 
-pub(crate) fn optimize(expr: &RecExpr<HE>, size: i32, timeout: usize, extractor_type: ExtractorType) -> RecExpr<HE> {
+pub fn optimize(expr: &RecExpr<HE>, size: i32, timeout: usize, extractor_type: ExtractorType) -> RecExpr<HE> {
     info!("running equality saturation for {} seconds...", timeout);
 
     let optimization_time = Instant::now(); 
