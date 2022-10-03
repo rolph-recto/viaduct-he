@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::ops::RangeInclusive;
 
-use crate::lang::expr::*;
+use crate::ir::expr::*;
 
 pub(crate) type NodeId = usize;
 

@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-use crate::lang::instr::*;
+use crate::ir::instr::*;
  
 type HELoweredNodeId = String;
 type HELoweredOperand = String;

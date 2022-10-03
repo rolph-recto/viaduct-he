@@ -3,7 +3,7 @@ use log::*;
 use clap::ValueEnum;
 use std::{time::*, cmp::max, collections::HashMap};
 
-use crate::lang::expr::HE;
+use crate::ir::expr::HE;
 use crate::optimizer::{greedy_extractor::*, lp_extractor::*};
 
 mod greedy_extractor;
