@@ -1,6 +1,6 @@
 use egg::*;
 use std::{collections::HashMap, cmp::Ordering};
-use crate::{ir::expr::HE, optimizer::*};
+use crate::ir::{expr::HE, optimizer::*};
 
 #[derive(Debug, Clone)]
 pub(crate) struct HECost {

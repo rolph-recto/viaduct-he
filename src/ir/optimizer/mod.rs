@@ -1,10 +1,9 @@
 use egg::*;
 use log::*;
 use clap::ValueEnum;
-use std::{time::*, cmp::max, collections::HashMap};
+use std::{time::*, cmp::max};
 
-use crate::ir::expr::HE;
-use crate::optimizer::{greedy_extractor::*, lp_extractor::*};
+use crate::ir::{expr::HE, optimizer::{greedy_extractor::*, lp_extractor::*}};
 
 mod greedy_extractor;
 mod lp_extractor;

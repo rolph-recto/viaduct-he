@@ -14,7 +14,6 @@ use interval::{Interval, ops::Range};
 fn test_parse_positive() {
     let parser = ExprParser::new();
     assert!(parser.parse("42").is_ok());
-    assert!(parser.parse("-42").is_ok());
     assert!(parser.parse("(42)").is_ok());
     assert!(parser.parse("42 + 56").is_ok());
     assert!(parser.parse("42 * 56").is_ok());

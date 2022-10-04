@@ -12,7 +12,7 @@ use log::*;
 use std::fs::File;
 
 use he_vectorizer::ir::{instr::{gen_program, HEProgram}, expr::HE, lowered::HELoweredInstr};
-use he_vectorizer::{ir::lowered::lower_program, optimizer::{ExtractorType, optimize}};
+use he_vectorizer::ir::{lowered::lower_program, optimizer::{ExtractorType, optimize}};
 
 #[derive(Parser)]
 #[clap(author, version, about = "optimizer for for vectorized homomorphic encryption circuits", long_about = None)]

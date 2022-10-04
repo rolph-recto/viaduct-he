@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::ops::RangeInclusive;
 
-use crate::ir::expr::*;
+use crate::ir::{expr::*, optimizer};
 
 pub(crate) type NodeId = usize;
 
@@ -148,11 +148,11 @@ impl HEProgram {
                 HEInstr::Add { id: _, op1, op2 } => {
                     match (op1, op2) {
                         (HEOperand::ConstNum(_), _) | (_, HEOperand::ConstNum(_)) =>  {
-                            latency += crate::optimizer::ADD_PLAIN_LATENCY
+                            latency += optimizer::ADD_PLAIN_LATENCY
                         },
 
                         _ => {
-                            latency += crate::optimizer::ADD_LATENCY
+                            latency += optimizer::ADD_LATENCY
                         }
                     }
                 },
@@ -160,17 +160,17 @@ impl HEProgram {
                 HEInstr::Mul { id: _, op1, op2 } => {
                     match (op1, op2) {
                         (HEOperand::ConstNum(_), _) | (_, HEOperand::ConstNum(_)) =>  {
-                            latency += crate::optimizer::MUL_PLAIN_LATENCY
+                            latency += optimizer::MUL_PLAIN_LATENCY
                         },
 
                         _ => {
-                            latency += crate::optimizer::MUL_LATENCY
+                            latency += optimizer::MUL_LATENCY
                         }
                     }
                 },
                 
                 HEInstr::Rot { id: _, op1: _, op2: _ } => {
-                    latency += crate::optimizer::ROT_LATENCY
+                    latency += optimizer::ROT_LATENCY
                 }
             }
         }
