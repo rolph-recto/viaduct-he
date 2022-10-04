@@ -204,32 +204,58 @@ impl ExprNormalizer {
                         extent_list: transposed_extent_list,
                     }
                 )
+            },
+
+            SourceExpr::LiteralNode(val) => {
+                NormalizedExpr::LiteralNode(*val)
             }
         }
     }
 
-    fn collect_extent_constraints(&mut self, expr: &NormalizedExpr) -> (usize, Vec<ConstraintVar>) {
+    fn collect_extent_constraints(&mut self, expr: &NormalizedExpr) -> Option<(usize, Vec<ConstraintVar>)> {
         match expr {
             NormalizedExpr::ReduceNode(_, body) => {
-                let (i, extent_list) = self.collect_extent_constraints(body);
-                (i+1, extent_list)
+                match self.collect_extent_constraints(body) {
+                    Some((i, extent_list)) => {
+                        Some((i+1, extent_list))
+                    },
+
+                    None => {
+                        panic!("trying to reduce dimension of a scalar value")
+                    }
+                }
             },
 
             NormalizedExpr::OpNode(_, expr1, expr2) => {
-                let (i1, extent_list1) = self.collect_extent_constraints(expr1);
-                let (i2, extent_list2) = self.collect_extent_constraints(expr2);
+                let shape1 = self.collect_extent_constraints(expr1);
+                let shape2 = self.collect_extent_constraints(expr2);
 
-                assert!(extent_list1[i1..].len() == extent_list2[i2..].len());
+                match (shape1, shape2) {
+                    (Some((i1, extent_list1)),
+                     Some((i2, extent_list2))) => {
+                        assert!(extent_list1[i1..].len() == extent_list2[i2..].len());
 
-                let zipped_extents = extent_list1[i1..].iter().zip(extent_list2[i2..].iter());
-                for (&extent1, &extent2) in zipped_extents {
-                    self.constraints.push(
-                        ExtentConstraint { var1: extent1, var2: extent2 }
-                    )
+                        let zipped_extents = extent_list1[i1..].iter().zip(extent_list2[i2..].iter());
+                        for (&extent1, &extent2) in zipped_extents {
+                            self.constraints.push(
+                                ExtentConstraint { var1: extent1, var2: extent2 }
+                            )
+                        }
+
+                        // arbitrarily pick one extent list from operands to return
+                        Some((i1, extent_list1))
+                     },
+
+                    (Some((i1, extent_list1)), None) => {
+                        Some((i1, extent_list1))
+                    },
+                    
+                    (None, Some((i2, extent_list2))) => {
+                        Some((i2, extent_list2))
+                    },
+
+                     _ => None
                 }
-
-                // arbitrarily pick one extent list from operands to return
-                (i1, extent_list1)
             },
 
             NormalizedExpr::TransformNode(id, _, transform) => {
@@ -241,7 +267,11 @@ impl ExprNormalizer {
                 }
 
                 self.node_vars.insert(*id, extent_vars.clone());
-                (0, extent_vars)
+                Some((0, extent_vars))
+            },
+
+            NormalizedExpr::LiteralNode(_) => {
+                None
             }
         }
     }
@@ -326,7 +356,9 @@ impl ExprNormalizer {
                 } else {
                     expr.clone()
                 }
-            }
+            },
+
+            NormalizedExpr::LiteralNode(_) => expr.clone()
         }
     }
 

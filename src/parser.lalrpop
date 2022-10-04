@@ -1,0 +1,68 @@
+use crate::lang::{*, ExprOperator::*, IndexExpr::*, SourceExpr::*};
+use interval::{Interval, ops::Range};
+use std::str::FromStr;
+
+grammar;
+
+pub Expr: SourceExpr = {
+    <e:AddSubExpr> => e,
+    <e:MulExpr> => e,
+};
+
+// factor grammar this way so multiplication is always lower
+// in the parse tree than add or subtraction
+AddSubExpr: SourceExpr = {
+    <l:Expr> "+" <r:MulExpr> => OpNode(OpAdd, Box::new(l), Box::new(r)),
+    <l:Expr> "-" <r:MulExpr> => OpNode(OpSub, Box::new(l), Box::new(r)),
+}
+
+MulExpr: SourceExpr = {
+    <l:MulExpr> "*" <r:TermExpr> => OpNode(OpMul, Box::new(l), Box::new(r)),
+    <t:TermExpr> => t
+}
+
+TermExpr: SourceExpr = {
+    "(" <e:Expr> ")" => e,
+
+    <n:Num> => LiteralNode(n as isize),
+
+    "for" <x:Ident> ":" <e:Extent> "{" <body:Expr> "}" => {
+        ForNode(x, e, Box::new(body))
+    },
+
+    "sum" "(" <body:Expr> ")" => ReduceNode(OpAdd, Box::new(body)),
+
+    "product" "(" <body:Expr> ")" => ReduceNode(OpMul, Box::new(body)),
+
+    <ie:IndexingNode> => IndexingNode(ie.0, ie.1)
+}
+
+IndexingNode: (ArrayName, im::Vector<IndexExpr>) = {
+    <i:Ident> => (i, im::Vector::new()),
+    <ie:IndexingNode> "[" <i:IndexExpr> "]" => (ie.0, ie.1 + im::Vector::unit(i)),
+}
+
+IndexExpr: IndexExpr = {
+    <e:IndexAddSubExpr> => e,
+    <e:IndexMulExpr> => e,
+}
+
+IndexAddSubExpr: IndexExpr = {
+    <l:IndexExpr> "+" <r:IndexMulExpr> => IndexOp(OpAdd, Box::new(l), Box::new(r)),
+    <l:IndexExpr> "-" <r:IndexMulExpr> => IndexOp(OpSub, Box::new(l), Box::new(r)),
+}
+
+IndexMulExpr: IndexExpr = {
+    <l:IndexMulExpr> "*" <r:IndexTermExpr> => IndexOp(OpMul, Box::new(l), Box::new(r)),
+    <e:IndexTermExpr> => e,
+}
+
+IndexTermExpr: IndexExpr = {
+    <var:Ident> => IndexVar(var),
+    <n:Num> => IndexLiteral(n as isize),
+}
+
+Extent: Extent = "(" <lb:Num> "," <ub:Num> ")" => Interval::new(lb as isize, ub as isize);
+
+Ident: String = <s:r"[[:alpha:]][[:word:]]*"> => String::from(s);
+Num: i64 = <s:r"[0-9]+"> => i64::from_str(s).unwrap();

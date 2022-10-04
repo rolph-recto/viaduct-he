@@ -2,6 +2,9 @@ use core::fmt::Display;
 use std::collections::HashMap;
 
 use interval::Interval;
+use lalrpop_util::lalrpop_mod;
+
+lalrpop_mod!(pub parser);
 
 pub mod normalizer;
 
@@ -77,17 +80,19 @@ pub enum SourceExpr {
     ForNode(IndexName, Extent, Box<SourceExpr>),
     ReduceNode(ExprOperator, Box<SourceExpr>),
     OpNode(ExprOperator, Box<SourceExpr>, Box<SourceExpr>),
-    IndexingNode(ArrayName, Vec<IndexExpr>)
+    IndexingNode(ArrayName, im::Vector<IndexExpr>),
+    LiteralNode(isize)
 }
 
 impl Display for SourceExpr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use SourceExpr::*;
         match self {
-            SourceExpr::ForNode(index, extent, body) => {
+            ForNode(index, extent, body) => {
                 write!(f, "for {} : {} in {}", index, extent, body)
             },
 
-            SourceExpr::ReduceNode(op, body) => {
+            ReduceNode(op, body) => {
                 let reduce_op_str = 
                     match op {
                         ExprOperator::OpAdd => "sum",
@@ -98,7 +103,7 @@ impl Display for SourceExpr {
                 write!(f, "{}({})", reduce_op_str, body)
             },
 
-            SourceExpr::OpNode(op, expr1, expr2) => {
+            OpNode(op, expr1, expr2) => {
                 let op_str =
                     match op {
                         ExprOperator::OpAdd => "+",
@@ -109,9 +114,13 @@ impl Display for SourceExpr {
                 write!(f, "({} {} {})", expr1, op_str, expr2)
             },
 
-            SourceExpr::IndexingNode(arr, index_list) => {
+            IndexingNode(arr, index_list) => {
                 write!(f, "{}{:?}", arr, index_list)
-            }
+            },
+
+            LiteralNode(val) => {
+                write!(f, "{}", val)
+            },
         }
     }
 }
@@ -120,7 +129,8 @@ impl Display for SourceExpr {
 pub enum NormalizedExpr {
     ReduceNode(ExprOperator, Box<NormalizedExpr>),
     OpNode(ExprOperator, Box<NormalizedExpr>, Box<NormalizedExpr>),
-    TransformNode(ExprId, ArrayName, ArrayTransform)
+    TransformNode(ExprId, ArrayName, ArrayTransform),
+    LiteralNode(isize)
 }
 
 type PadSize = (usize, usize);
@@ -167,6 +177,10 @@ impl Display for NormalizedExpr {
                     transform.fill_sizes,
                     transform.transpose
                 )
+            },
+
+            NormalizedExpr::LiteralNode(val) => {
+                write!(f, "{}", val)
             }
         }
     }
