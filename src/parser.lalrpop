@@ -4,7 +4,22 @@ use std::str::FromStr;
 
 grammar;
 
-pub Expr: SourceExpr = {
+pub Program: SourceProgram = {
+    <inputs:InputList> <expr:Expr> => SourceProgram { inputs, expr },
+    <expr:Expr> => SourceProgram { inputs: im::Vector::new(), expr }
+}
+
+InputList: im::Vector<InputNode> = {
+    <il:InputList> <i:InputNode> => il + im::Vector::unit(i),
+    <i:InputNode> => im::Vector::unit(i)
+}
+
+InputNode: InputNode = {
+    "input" <arr:Ident> ":" "[" <e:ExtentList> "]" => InputNode(arr, e),
+    "input" <arr:Ident> => InputNode(arr, im::Vector::new()),
+}
+
+Expr: SourceExpr = {
     <e:AddSubExpr> => e,
     <e:MulExpr> => e,
 };
@@ -60,6 +75,16 @@ IndexMulExpr: IndexExpr = {
 IndexTermExpr: IndexExpr = {
     <var:Ident> => IndexVar(var),
     <n:Num> => IndexLiteral(n),
+}
+
+ExtentListOrEmpty: im::Vector<Extent> = {
+    <el:ExtentList> => el,
+    "" => im::Vector::new()
+}
+
+ExtentList: im::Vector<Extent> = {
+    <el:ExtentList> "," <e:Extent> => el + im::Vector::unit(e),
+    <e:Extent> => im::Vector::unit(e)
 }
 
 Extent: Extent = "(" <lb:Num> "," <ub:Num> ")" => Interval::new(lb, ub);

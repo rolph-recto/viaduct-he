@@ -10,24 +10,27 @@ impl TypeChecker {
         TypeChecker {}
     }
 
-    pub fn run(&self, expr: &SourceExpr, store: &ArrayEnvironment) -> Result<Shape, String> {
-        self._run(expr, store, & im::HashMap::new())
+    pub fn run(&self, program: &SourceProgram) -> Result<usize, String> {
+        let mut store: im::HashMap<&str, usize> =
+            im::HashMap::from_iter(
+                program.inputs.iter().map(|input|
+                    (input.0.as_ref(), input.1.len())
+                )
+            );
+        self.runWithStores(&program.expr, &store)
     }
 
-    fn _run(&self, expr: &SourceExpr, store: &ArrayEnvironment, index_store: &IndexEnvironment) -> Result<Shape, String> {
+    fn runWithStores(&self, expr: &SourceExpr, store: &im::HashMap<&str, usize>) -> Result<usize, String> {
         match expr {
             ForNode(index, extent, body) => {
-                self._run(
-                    body,
-                    store,
-                    &index_store.update(index.clone(), *extent)
-                )
+                let dim = self.runWithStores(body, store)?;
+                Ok(dim+1)
             }
 
             ReduceNode(_, body) => {
-                let mut body_shape = self._run(body, store, index_store)?;
-                if body_shape.len() > 0 {
-                    Ok(body_shape.split_off(1))
+                let body_dim = self.runWithStores(body, store)?;
+                if body_dim > 0 {
+                    Ok(body_dim-1)
 
                 } else {
                     Err(String::from("cannot reduce scalar value"))
@@ -35,31 +38,30 @@ impl TypeChecker {
             },
 
             OpNode(_, expr1, expr2) => {
-                let shape1 = self._run(expr1, store, index_store)?;
-                let shape2 = self._run(expr2, store, index_store)?;
+                let dim1 = self.runWithStores(expr1, store)?;
+                let dim2 = self.runWithStores(expr2, store)?;
 
-                if shape1.len() == shape2.len() {
-                    Ok(shape1)
+                if dim1 == dim2 {
+                    Ok(dim1)
                 } else {
                     Err(String::from("operands must have the same dimension"))
                 }
             }
 
             IndexingNode(arr, index_list) => {
-                let shape: &Shape =
-                    store.get(arr)
+                let arr_dim: usize =
+                    *store.get(arr.as_str())
                          .ok_or(format!("array {} not in store", arr))?;
-                let sn = shape.len();
-                let iln = index_list.len();
-                if sn >= iln {
-                    Ok(shape.clone().split_off(iln))
+                let num_indices = index_list.len();
+                if arr_dim >= num_indices {
+                    Ok(arr_dim - num_indices)
 
                 } else {
-                    Err(format!("array with {} dimensions cannot have index list of length {}", sn, iln))
+                    Err(format!("array with {} dimensions cannot have index list of length {}", arr_dim, num_indices))
                 }
             },
 
-            LiteralNode(_) => Ok(im::Vector::new())
+            LiteralNode(_) => Ok(0)
         }
     }
 }

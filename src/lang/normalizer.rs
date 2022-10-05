@@ -3,6 +3,7 @@
 
 use std::{collections::HashMap, cmp::max};
 
+use im::vector;
 use interval::{Interval, ops::{Range, Hull}};
 use gcollections::ops::{bounded::Bounded, Subset};
 
@@ -23,7 +24,7 @@ struct ConstraintVar(usize);
 
 struct ExtentConstraint { var1: ConstraintVar, var2: ConstraintVar }
 
-pub struct ExprNormalizer {
+pub struct Normalizer {
     cur_expr_id: usize,
     cur_constraint_id: usize,
     constraints: Vec<ExtentConstraint>,
@@ -32,9 +33,9 @@ pub struct ExprNormalizer {
     node_vars: HashMap<ExprId, Vec<ConstraintVar>>,
 }
 
-impl ExprNormalizer {
+impl Normalizer {
     pub fn new() -> Self {
-        ExprNormalizer {
+        Normalizer {
             cur_expr_id: 0,
             cur_constraint_id: 0,
             constraints: Vec::new(),
@@ -414,11 +415,18 @@ impl ExprNormalizer {
         }
     }
 
-    pub fn run(&mut self, expr: &SourceExpr, store: &ArrayEnvironment) -> NormalizedExpr {
-        let norm_expr = self.lower(expr, store, &im::Vector::new());
+    pub fn run(&mut self, program: &SourceProgram) -> Result<NormalizedProgram, String> {
+        let mut store: im::HashMap<ArrayName, Shape> = im::HashMap::new();
+        program.inputs.iter().try_for_each(|input|
+            match store.insert(input.0.clone(), input.1.clone()) {
+                Some(_) => Err(format!("duplicate input bindings for {}", input.0)),
+                None => Ok(())
+            }
+        )?;
+        let norm_expr = self.lower(&program.expr, &store, &im::Vector::new());
         self.collect_extent_constraints(&norm_expr);
         let node_solution = self.solve_extent_constraints();
-        self.apply_extent_solution(&norm_expr, &node_solution)
-        // self.lower(expr, store, &im::Vector::new())
+        let final_expr = self.apply_extent_solution(&norm_expr, &node_solution);
+        Ok(NormalizedProgram { store, expr: final_expr })
     }
 }
