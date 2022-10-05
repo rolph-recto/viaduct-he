@@ -257,7 +257,7 @@ impl fmt::Display for HEProgram {
     }
 }
 
-pub fn gen_program(expr: &RecExpr<HE>) -> HEProgram {
+pub fn gen_program(expr: &RecExpr<HEExpr>) -> HEProgram {
     let mut node_map: HashMap<Id, HEOperand> = HashMap::new();
     let mut program: HEProgram = HEProgram { instrs: Vec::new() };
     let mut cur_instr: NodeId = 0;
@@ -279,15 +279,15 @@ pub fn gen_program(expr: &RecExpr<HE>) -> HEProgram {
     for (i, node) in expr.as_ref().iter().enumerate() {
         let id = Id::from(i);
         match node {
-            HE::Num(n) => {
+            HEExpr::Num(n) => {
                 node_map.insert(id, HEOperand::ConstNum(*n));
             }
 
-            HE::Symbol(sym) => {
+            HEExpr::Symbol(sym) => {
                 node_map.insert(id, HEOperand::Ref(HERef::ConstSym(sym.to_string())));
             }
 
-            HE::Add([id1, id2]) => {
+            HEExpr::Add([id1, id2]) => {
                 op_processor(
                     &mut node_map, id, 
                     |index, op1, op2| {
@@ -296,14 +296,14 @@ pub fn gen_program(expr: &RecExpr<HE>) -> HEProgram {
                     id1, id2);
             }
 
-            HE::Mul([id1, id2]) => {
+            HEExpr::Mul([id1, id2]) => {
                 op_processor(
                     &mut node_map, id, 
                     |index, op1, op2| HEInstr::Mul { id: index, op1, op2 }, 
                     id1, id2);
             }
 
-            HE::Rot([id1, id2]) => {
+            HEExpr::Rot([id1, id2]) => {
                 op_processor(
                     &mut node_map, id, 
                     |index, op1, op2| HEInstr::Rot { id: index, op1, op2 }, 

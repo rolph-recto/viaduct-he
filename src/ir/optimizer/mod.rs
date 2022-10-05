@@ -3,7 +3,7 @@ use log::*;
 use clap::ValueEnum;
 use std::{time::*, cmp::max};
 
-use crate::ir::{expr::HE, optimizer::{greedy_extractor::*, lp_extractor::*}};
+use crate::ir::{expr::HEExpr, optimizer::{greedy_extractor::*, lp_extractor::*}};
 
 mod greedy_extractor;
 mod lp_extractor;
@@ -19,7 +19,7 @@ pub const ROT_LATENCY: usize = 1;
 pub const SYM_LATENCY: usize = 0;
 pub const NUM_LATENCY: usize = 0;
 
-pub(crate) type HEGraph = egg::EGraph<HE, HEData>;
+pub(crate) type HEGraph = egg::EGraph<HEExpr, HEData>;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct HEData {
@@ -27,7 +27,7 @@ pub(crate) struct HEData {
     muldepth: usize
 }
 
-impl Analysis<HE> for HEData {
+impl Analysis<HEExpr> for HEData {
     type Data = HEData;
 
     fn merge(&mut self, to: &mut Self::Data, from: Self::Data) -> DidMerge {
@@ -40,14 +40,14 @@ impl Analysis<HE> for HEData {
         }
     }
 
-    fn make(egraph: &HEGraph, enode: &HE) -> Self::Data {
+    fn make(egraph: &HEGraph, enode: &HEExpr) -> Self::Data {
         let data = |id: &Id| egraph[*id].data;
 
         match enode {
-            HE::Num(n) =>
+            HEExpr::Num(n) =>
                 HEData { constval: Some(*n), muldepth: 0 },
 
-            HE::Add([id1, id2]) => {
+            HEExpr::Add([id1, id2]) => {
                 let constval: Option<i32> = 
                     data(id1).constval.and_then(|d1|
                         data(id2).constval.and_then(|d2|
@@ -60,7 +60,7 @@ impl Analysis<HE> for HEData {
                 HEData { constval, muldepth }
             },
 
-            HE::Mul([id1, id2]) => {
+            HEExpr::Mul([id1, id2]) => {
                 let v1 = data(id1).constval;
                 let v2 = data(id2).constval;
 
@@ -84,18 +84,18 @@ impl Analysis<HE> for HEData {
                 HEData { constval, muldepth }
             },
 
-            HE::Rot([id1, id2]) => {
+            HEExpr::Rot([id1, id2]) => {
                 let muldepth = max(data(id1).muldepth, data(id2).muldepth);
                 HEData { constval: egraph[*id1].data.constval, muldepth }
             }
 
-            HE::Symbol(_) => HEData { constval: None, muldepth: 0 }
+            HEExpr::Symbol(_) => HEData { constval: None, muldepth: 0 }
         }
     }
 }
 
-fn make_rules(size: i32) -> Vec<Rewrite<HE, HEData>> {
-    let mut rules: Vec<Rewrite<HE, HEData>> = vec![
+fn make_rules(size: i32) -> Vec<Rewrite<HEExpr, HEData>> {
+    let mut rules: Vec<Rewrite<HEExpr, HEData>> = vec![
         // bidirectional addition rules
         rewrite!("add-identity"; "(+ ?a 0)" <=> "?a"),
         rewrite!("add-assoc"; "(+ ?a (+ ?b ?c))" <=> "(+ (+ ?a ?b) ?c)"),
@@ -180,7 +180,7 @@ fn make_rules(size: i32) -> Vec<Rewrite<HE, HEData>> {
 // This returns a function that implements Condition
 fn is_zero(var: &'static str) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
     let var = var.parse().unwrap();
-    let zero = HE::Num(0);
+    let zero = HEExpr::Num(0);
     move |egraph, _, subst| egraph[subst[var]].nodes.contains(&zero)
 }
 
@@ -227,13 +227,13 @@ struct ConstantFold {
     b: Var,
 }
 
-impl Applier<HE, HEData> for ConstantFold {
+impl Applier<HEExpr, HEData> for ConstantFold {
     fn apply_one(
         &self,
         egraph: &mut HEGraph,
         matched_id: Id,
         subst: &Subst,
-        _: Option<&PatternAst<HE>>,
+        _: Option<&PatternAst<HEExpr>>,
         _: Symbol,
     ) -> Vec<Id> {
         let aval: i32 = egraph[subst[self.a]].data.constval.unwrap();
@@ -244,7 +244,7 @@ impl Applier<HE, HEData> for ConstantFold {
         } else {
             aval * bval
         };
-        let folded_id = egraph.add(HE::Num(folded_val));
+        let folded_id = egraph.add(HEExpr::Num(folded_val));
 
         if egraph.union(matched_id, folded_id) {
             vec![matched_id]
@@ -260,27 +260,27 @@ struct FactorSplit {
     b: Var,
 }
 
-impl Applier<HE, HEData> for FactorSplit {
+impl Applier<HEExpr, HEData> for FactorSplit {
     fn apply_one(
         &self,
         egraph: &mut HEGraph,
         matched_id: Id,
         subst: &Subst,
-        _: Option<&PatternAst<HE>>,
+        _: Option<&PatternAst<HEExpr>>,
         _: Symbol,
     ) -> Vec<Id> {
         let factor: i32 = egraph[subst[self.a]].data.constval.unwrap();
 
-        let mut acc: Id = egraph.add(HE::Num(0));
+        let mut acc: Id = egraph.add(HEExpr::Num(0));
         let mut cur_val = factor;
 
         let dir = if cur_val > 0 { 1 } else { -1 };
-        let dir_id = egraph.add(HE::Num(dir));
+        let dir_id = egraph.add(HEExpr::Num(dir));
 
-        let chunk = egraph.add(HE::Mul([dir_id, subst[self.b]]));
+        let chunk = egraph.add(HEExpr::Mul([dir_id, subst[self.b]]));
 
         while cur_val != 0 {
-            acc = egraph.add(HE::Add([chunk, acc]));
+            acc = egraph.add(HEExpr::Add([chunk, acc]));
             cur_val -= dir
         }
 
@@ -299,20 +299,20 @@ struct RotateWrap {
     l: Var,
 }
 
-impl Applier<HE, HEData> for RotateWrap {
+impl Applier<HEExpr, HEData> for RotateWrap {
     fn apply_one(
         &self,
         egraph: &mut HEGraph,
         matched_id: Id,
         subst: &Subst,
-        _: Option<&PatternAst<HE>>,
+        _: Option<&PatternAst<HEExpr>>,
         _: Symbol,
     ) -> Vec<Id> {
         let xclass: Id = subst[self.x];
         let lval = egraph[subst[self.l]].data.constval.unwrap();
 
-        let wrapped_lval = egraph.add(HE::Num(lval % self.size));
-        let wrapped_rot: Id = egraph.add(HE::Rot([xclass, wrapped_lval]));
+        let wrapped_lval = egraph.add(HEExpr::Num(lval % self.size));
+        let wrapped_rot: Id = egraph.add(HEExpr::Rot([xclass, wrapped_lval]));
         if egraph.union(matched_id, wrapped_rot) {
             vec![matched_id]
         } else {
@@ -329,21 +329,21 @@ struct RotateSquash {
     l2: Var,
 }
 
-impl Applier<HE, HEData> for RotateSquash {
+impl Applier<HEExpr, HEData> for RotateSquash {
     fn apply_one(
         &self,
         egraph: &mut HEGraph,
         matched_id: Id,
         subst: &Subst,
-        _: Option<&PatternAst<HE>>,
+        _: Option<&PatternAst<HEExpr>>,
         _: Symbol,
     ) -> Vec<Id> {
         let xclass: Id = subst[self.x];
         let l1_val = egraph[subst[self.l1]].data.constval.unwrap();
         let l2_val = egraph[subst[self.l2]].data.constval.unwrap();
 
-        let lval_sum = egraph.add(HE::Num((l1_val + l2_val) % self.size));
-        let rot_sum: Id = egraph.add(HE::Rot([xclass, lval_sum]));
+        let lval_sum = egraph.add(HEExpr::Num((l1_val + l2_val) % self.size));
+        let rot_sum: Id = egraph.add(HEExpr::Rot([xclass, lval_sum]));
 
         if egraph.union(matched_id, rot_sum) {
             vec![matched_id]
@@ -362,13 +362,13 @@ struct RotateSplit {
     l2: Var,
 }
 
-impl Applier<HE, HEData> for RotateSplit {
+impl Applier<HEExpr, HEData> for RotateSplit {
     fn apply_one(
         &self,
         egraph: &mut HEGraph,
         matched_id: Id,
         subst: &Subst,
-        _pattern: Option<&PatternAst<HE>>,
+        _pattern: Option<&PatternAst<HEExpr>>,
         _rule: Symbol,
     ) -> Vec<Id> {
         let x1_class: Id = subst[self.x1];
@@ -383,22 +383,22 @@ impl Applier<HE, HEData> for RotateSplit {
         let mut has_split = false;
 
         while l1_val * cur_l1 >= 0 || l2_val * cur_l2 >= 0 {
-            let cur_l1_class = egraph.add(HE::Num(cur_l1));
-            let cur_l2_class = egraph.add(HE::Num(cur_l2));
+            let cur_l1_class = egraph.add(HEExpr::Num(cur_l1));
+            let cur_l2_class = egraph.add(HEExpr::Num(cur_l2));
 
-            let rot_in1: Id = egraph.add(HE::Rot([x1_class, cur_l1_class]));
-            let rot_in2: Id = egraph.add(HE::Rot([x2_class, cur_l2_class]));
+            let rot_in1: Id = egraph.add(HEExpr::Rot([x1_class, cur_l1_class]));
+            let rot_in2: Id = egraph.add(HEExpr::Rot([x2_class, cur_l2_class]));
 
-            let op: HE = if self.is_add {
-                HE::Add([rot_in1, rot_in2])
+            let op: HEExpr = if self.is_add {
+                HEExpr::Add([rot_in1, rot_in2])
             } else {
-                HE::Mul([rot_in1, rot_in2])
+                HEExpr::Mul([rot_in1, rot_in2])
             };
 
             let op_class = egraph.add(op);
 
-            let outer_rot_class = egraph.add(HE::Num(outer_rot));
-            let rot_outer = egraph.add(HE::Rot([op_class, outer_rot_class]));
+            let outer_rot_class = egraph.add(HEExpr::Num(outer_rot));
+            let rot_outer = egraph.add(HEExpr::Rot([op_class, outer_rot_class]));
 
             has_split = has_split || egraph.union(matched_id, rot_outer);
             outer_rot += -dir;
@@ -414,7 +414,7 @@ impl Applier<HE, HEData> for RotateSplit {
     }
 }
 
-pub fn optimize(expr: &RecExpr<HE>, size: i32, timeout: usize, extractor_type: ExtractorType) -> RecExpr<HE> {
+pub fn optimize(expr: &RecExpr<HEExpr>, size: i32, timeout: usize, extractor_type: ExtractorType) -> RecExpr<HEExpr> {
     info!("running equality saturation for {} seconds...", timeout);
 
     let optimization_time = Instant::now(); 

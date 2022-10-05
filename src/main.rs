@@ -11,7 +11,7 @@ use egg::RecExpr;
 use log::*;
 use std::fs::File;
 
-use he_vectorizer::ir::{instr::{gen_program, HEProgram}, expr::HE, lowered::HELoweredInstr};
+use he_vectorizer::ir::{instr::{gen_program, HEProgram}, expr::HEExpr, lowered::HELoweredInstr};
 use he_vectorizer::ir::{lowered::lower_program, optimizer::{ExtractorType, optimize}};
 
 #[derive(Parser)]
@@ -102,7 +102,7 @@ fn main() {
 
 
     // parse the expression, the type annotation tells it which Language to use
-    let init_expr: RecExpr<HE> = input_str.parse().unwrap();
+    let init_expr: RecExpr<HEExpr> = input_str.parse().unwrap();
     let init_prog = gen_program(&init_expr);
     // info!("Initial HE expr:\n{}", init_expr.pretty(80));
     info!("Initial HE program (muldepth {}, latency {}ms):",

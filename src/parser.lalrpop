@@ -24,7 +24,7 @@ MulExpr: SourceExpr = {
 TermExpr: SourceExpr = {
     "(" <e:Expr> ")" => e,
 
-    <n:Num> => LiteralNode(n as isize),
+    <n:Num> => LiteralNode(n),
 
     "for" <x:Ident> ":" <e:Extent> "{" <body:Expr> "}" => {
         ForNode(x, e, Box::new(body))
@@ -59,10 +59,10 @@ IndexMulExpr: IndexExpr = {
 
 IndexTermExpr: IndexExpr = {
     <var:Ident> => IndexVar(var),
-    <n:Num> => IndexLiteral(n as isize),
+    <n:Num> => IndexLiteral(n),
 }
 
-Extent: Extent = "(" <lb:Num> "," <ub:Num> ")" => Interval::new(lb as isize, ub as isize);
+Extent: Extent = "(" <lb:Num> "," <ub:Num> ")" => Interval::new(lb, ub);
 
 Ident: String = <s:r"[[:alpha:]][[:word:]]*"> => String::from(s);
 Num: i64 = <s:r"[0-9]+"> => i64::from_str(s).unwrap();

@@ -6,9 +6,11 @@ use std::{collections::HashMap, cmp::max};
 use interval::{Interval, ops::{Range, Hull}};
 use gcollections::ops::{bounded::Bounded, Subset};
 
-use super::{SourceExpr, NormalizedExpr};
+use super::{ExprOperator::*, IndexExpr::*, SourceExpr, NormalizedExpr};
 
 use crate::lang::*;
+
+struct LinearIndexingData { scale: i64, offset: i64 }
 
 #[derive(Clone)]
 enum PathInfo {
@@ -56,30 +58,80 @@ impl ExprNormalizer {
         var
     }
 
-    fn index_expr_to_interval(&self, index_expr: &IndexExpr, index_store: &HashMap<String,Extent>) -> Extent {
+    fn index_expr_to_interval(&self, index_expr: &IndexExpr, index_store: &IndexEnvironment) -> Extent {
         match index_expr {
-            IndexExpr::IndexVar(var) => {
+            IndexVar(var) => {
                 index_store[var]
             },
 
-            IndexExpr::IndexLiteral(val) => {
+            IndexLiteral(val) => {
                 Interval::new(*val, *val)
             }
 
-            IndexExpr::IndexOp(op, expr1, expr2) => {
+            IndexOp(op, expr1, expr2) => {
                 let interval1 = self.index_expr_to_interval(expr1, index_store);
                 let interval2 = self.index_expr_to_interval(expr2, index_store);
                 match op {
-                    ExprOperator::OpAdd => interval1 + interval2,
-                    ExprOperator::OpSub => interval1 - interval2,
-                    ExprOperator::OpMul => interval1 * interval2,
+                    OpAdd => interval1 + interval2,
+                    OpSub => interval1 - interval2,
+                    OpMul => interval1 * interval2,
                 }
             }
         }
     }
 
+    fn get_linear_indexing_data(&self, index_expr: &IndexExpr, index_var: &IndexName) -> Option<LinearIndexingData> {
+        match index_expr {
+            IndexVar(v) => {
+                if v == index_var {
+                    Some(LinearIndexingData { scale: 1, offset: 0 })
+                } else {
+                    None
+                }
+            },
+
+            IndexLiteral(val) => {
+                Some(LinearIndexingData { scale: 0, offset: *val })
+            },
+
+            IndexOp(op, expr1, expr2) => {
+                let data1 = self.get_linear_indexing_data(expr1, index_var)?;
+                let data2 = self.get_linear_indexing_data(expr2, index_var)?;
+                match op {
+                    OpAdd => {
+                        Some(LinearIndexingData {
+                            scale: data1.scale + data2.scale,
+                            offset: data1.offset + data2.offset
+                        })
+                    },
+                    OpSub => {
+                        Some(LinearIndexingData {
+                            scale: data1.scale - data2.scale,
+                            offset: data1.offset - data2.offset
+                        })
+                    },
+                    OpMul => {
+                        if data1.scale == 0 {
+                            Some(LinearIndexingData {
+                                scale: data2.scale * data1.offset,
+                                offset: data2.offset * data1.offset
+                            })
+                        } else if data2.scale == 0 {
+                            Some(LinearIndexingData {
+                                scale: data1.scale * data2.offset,
+                                offset: data1.offset * data2.offset
+                            })
+                        } else {
+                            None
+                        }
+                    }
+                }
+            },
+        }
+    }
+
     /// transformation that removes indices from source expressions.
-    fn lower(&mut self, expr: &SourceExpr, store: &ExtentStore, path: &im::Vector<PathInfo> ) -> NormalizedExpr {
+    fn lower(&mut self, expr: &SourceExpr, store: &ArrayEnvironment, path: &im::Vector<PathInfo> ) -> NormalizedExpr {
         match expr {
             SourceExpr::ForNode(index, extent, body) => {
                 let new_path = 
@@ -112,7 +164,7 @@ impl ExprNormalizer {
                 let mut reduce_ind: usize = 0;
 
                 // in-scope indices and their extents
-                let mut index_store: HashMap<IndexName, Extent> = HashMap::new();
+                let mut index_store: IndexEnvironment = im::HashMap::new();
 
                 for info in path.iter() {
                     match info {
@@ -172,7 +224,7 @@ impl ExprNormalizer {
                     let pad_max = max(0, index_interval.upper() - dim_interval.upper());
                     let extent =
                         Interval::new(dim_interval.lower() - pad_min, dim_interval.upper() + pad_max);
-                    pad_sizes.push((pad_min as usize, pad_max as usize));
+                    pad_sizes.push((pad_min as u64, pad_max as u64));
                     extent_list.push(extent);
                 }
 
@@ -336,8 +388,8 @@ impl ExprNormalizer {
                     for (pad, (cur_extent, sol_extent)) in zipped_iter {
                         assert!(cur_extent.is_subset(sol_extent), "extent solution should only add padding, not remove it");
                         if cur_extent != sol_extent {
-                            let new_pad_min = ((cur_extent.lower() - sol_extent.lower()) as usize) + pad.0;
-                            let new_pad_max = ((sol_extent.upper() - cur_extent.upper()) as usize) + pad.1;
+                            let new_pad_min = (cur_extent.lower() - sol_extent.lower()) as u64 + pad.0;
+                            let new_pad_max = (sol_extent.upper() - cur_extent.upper()) as u64 + pad.1;
                             new_pad_sizes.push((new_pad_min, new_pad_max));
                         }
                     }
@@ -362,7 +414,7 @@ impl ExprNormalizer {
         }
     }
 
-    pub fn run(&mut self, expr: &SourceExpr, store: &ExtentStore) -> NormalizedExpr {
+    pub fn run(&mut self, expr: &SourceExpr, store: &ArrayEnvironment) -> NormalizedExpr {
         let norm_expr = self.lower(expr, store, &im::Vector::new());
         self.collect_extent_constraints(&norm_expr);
         let node_solution = self.solve_extent_constraints();

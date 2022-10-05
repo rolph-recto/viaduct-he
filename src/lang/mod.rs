@@ -7,12 +7,16 @@ use lalrpop_util::lalrpop_mod;
 lalrpop_mod!(pub parser);
 
 pub mod normalizer;
+pub mod typechecker;
 
-pub type Extent = Interval<isize>;
-pub type ExtentStore = HashMap<String, Vec<Extent>>;
+pub type Extent = Interval<i64>;
+pub type Shape = im::Vector<Extent>;
 
 pub type IndexName = String;
 pub type ArrayName = String;
+
+pub type ArrayEnvironment = im::HashMap<ArrayName, Shape>;
+pub type IndexEnvironment = im::HashMap<IndexName, Extent>;
 
 pub type ExprId = usize;
 
@@ -22,7 +26,7 @@ pub enum ExprOperator { OpAdd, OpSub, OpMul }
 #[derive(Clone,Debug)]
 pub enum IndexExpr {
     IndexVar(IndexName),
-    IndexLiteral(isize),
+    IndexLiteral(i64),
     IndexOp(ExprOperator, Box<IndexExpr>, Box<IndexExpr>)
 }
 
@@ -81,7 +85,7 @@ pub enum SourceExpr {
     ReduceNode(ExprOperator, Box<SourceExpr>),
     OpNode(ExprOperator, Box<SourceExpr>, Box<SourceExpr>),
     IndexingNode(ArrayName, im::Vector<IndexExpr>),
-    LiteralNode(isize)
+    LiteralNode(i64)
 }
 
 impl Display for SourceExpr {
@@ -130,10 +134,10 @@ pub enum NormalizedExpr {
     ReduceNode(ExprOperator, Box<NormalizedExpr>),
     OpNode(ExprOperator, Box<NormalizedExpr>, Box<NormalizedExpr>),
     TransformNode(ExprId, ArrayName, ArrayTransform),
-    LiteralNode(isize)
+    LiteralNode(i64)
 }
 
-type PadSize = (usize, usize);
+type PadSize = (u64, u64);
 
 #[derive(Clone,Debug)]
 pub struct ArrayTransform {

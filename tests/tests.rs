@@ -1,11 +1,8 @@
-use std::collections::HashMap;
 use he_vectorizer::lang::{
     parser::ExprParser,
     *,
-    ExprOperator::*,
     normalizer::ExprNormalizer,
-    IndexExpr::*,
-    SourceExpr::*
+    typechecker::TypeChecker,
 };
 use im::vector;
 use interval::{Interval, ops::Range};
@@ -28,17 +25,73 @@ fn test_parse_negative() {
 }
 
 #[test]
+fn test_typechecker_positive() {
+    let parser = ExprParser::new();
+    let typechecker = TypeChecker::new();
+    let store: im::HashMap<ArrayName, Shape> =
+        im::HashMap::from(vec![
+            (String::from("img"), vector![Interval::new(0,16), Interval::new(0,16)])
+        ]);
+
+    let expr1 = parser.parse("42").unwrap();
+    let expr2 = parser.parse("42 + 56").unwrap();
+    let expr3 = parser.parse("for x: (0,16) { img[x] }").unwrap();
+
+    assert!(typechecker.run(&expr1, &store).is_ok());
+    assert!(typechecker.run(&expr2, &store).is_ok());
+    assert!(typechecker.run(&expr3, &store).is_ok());
+}
+
+#[test]
+fn test_typechecker_negative() {
+    let parser = ExprParser::new();
+    let typechecker = TypeChecker::new();
+    let store: im::HashMap<ArrayName, Shape> =
+        im::HashMap::from(vec![
+            (String::from("img"), vector![Interval::new(0,16), Interval::new(0,16)])
+        ]);
+
+    let expr1 = parser.parse("sum(42)").unwrap();
+    let expr2 = parser.parse("for x: (0,16) { for y: (0, 16) { for z: (0, 16) { img[x][y][z] }}}").unwrap();
+
+    assert!(typechecker.run(&expr1, &store).is_err());
+    assert!(typechecker.run(&expr2, &store).is_err());
+}
+
+
+#[test]
 fn imgblur() {
     let parser = ExprParser::new();
-    let store: HashMap<ArrayName, Vec<Extent>> =
-        HashMap::from([
-            (String::from("img"), vec![Interval::new(0,16), Interval::new(0,16)])
+    let store: im::HashMap<ArrayName, Shape> =
+        im::HashMap::from(vec![
+            (String::from("img"), vector![Interval::new(0,16), Interval::new(0,16)])
         ]);
 
     let expr: SourceExpr =
         parser.parse(
             "for x: (0, 16) {
                 for y: (0, 16) {
+                    img[x-1][y-1] + img[x+1][y+1]
+                }
+            }"
+        ).unwrap();
+
+    let norm_expr = ExprNormalizer::new().run(&expr, &store);
+    println!("{}", norm_expr)
+}
+
+fn matmatmul() {
+    let parser = ExprParser::new();
+    let store: ArrayEnvironment =
+        im::HashMap::from(vec![
+            (String::from("A"), vector![Interval::new(0,4), Interval::new(0,4)]),
+            (String::from("B"), vector![Interval::new(0,4), Interval::new(0,4)]),
+        ]);
+
+    let expr: SourceExpr =
+        parser.parse(
+            "for x: (0, 4) {
+                for y: (0, 4) {
                     img[x-1][y-1] + img[x+1][y+1]
                 }
             }"
