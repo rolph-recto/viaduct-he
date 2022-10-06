@@ -1,11 +1,10 @@
 use he_vectorizer::lang::{
-    parser::ProgramParser,
     *,
-    normalizer::Normalizer,
+    parser::ProgramParser,
+    normalized::Normalizer,
+    source::SourceProgram,
     typechecker::TypeChecker,
 };
-use im::vector;
-use interval::{Interval, ops::Range};
 
 #[test]
 fn test_parse_positive() {
@@ -59,7 +58,6 @@ fn test_typechecker_negative() {
     assert!(typechecker.run(&prog1).is_err());
     assert!(typechecker.run(&prog2).is_err());
 }
-
 
 #[test]
 fn imgblur() {

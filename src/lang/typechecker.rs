@@ -1,7 +1,7 @@
 /// typechecker.rs
 /// checks for dimensionality constraints on source expressions
 
-use crate::lang::{*, SourceExpr::*};
+use crate::lang::{*, source::{*, SourceExpr::*}};
 
 pub struct TypeChecker;
 

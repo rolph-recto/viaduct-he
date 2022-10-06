@@ -1,15 +1,67 @@
-/// normalizer.rs
-/// normalizes source expressions into an index-free representation.
+use std::cmp::max;
 
-use std::{collections::HashMap, cmp::max};
-
-use im::vector;
-use interval::{Interval, ops::{Range, Hull}};
+use interval::ops::{Hull, Range};
 use gcollections::ops::{bounded::Bounded, Subset};
 
-use super::{ExprOperator::*, IndexExpr::*, SourceExpr, NormalizedExpr};
+use crate::lang::{*, source::{*, IndexExpr::*}};
 
-use crate::lang::*;
+#[derive(Clone, Debug)]
+pub struct NormalizedProgram {
+    pub store: ArrayEnvironment,
+    pub expr: NormalizedExpr
+}
+
+#[derive(Clone,Debug)]
+pub enum NormalizedExpr {
+    ReduceNode(ExprOperator, Box<NormalizedExpr>),
+    OpNode(ExprOperator, Box<NormalizedExpr>, Box<NormalizedExpr>),
+    TransformNode(ExprId, ArrayName, ArrayTransform),
+    LiteralNode(i64)
+}
+
+type PadSize = (u64, u64);
+
+#[derive(Clone,Debug)]
+pub struct ArrayTransform {
+    fill_sizes: Vec<usize>,
+    transpose: Vec<usize>,
+    pad_sizes: Vec<PadSize>,
+    extent_list: Vec<Extent>
+}
+
+impl Display for NormalizedExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            NormalizedExpr::ReduceNode(op, body) => {
+                let reduce_op_str = 
+                    match op {
+                        ExprOperator::OpAdd => "sum",
+                        ExprOperator::OpSub => "sum_sub",
+                        ExprOperator::OpMul => "product"
+                    };
+
+                write!(f, "{}({})", reduce_op_str, body)
+            },
+
+            NormalizedExpr::OpNode(op, expr1, expr2) => {
+                write!(f, "({} {} {})", expr1, op, expr2)
+            },
+
+            NormalizedExpr::TransformNode(_, arr, transform) => {
+                write!(
+                    f,
+                    "transpose(fill(pad({}, {:?}), {:?}), {:?})",
+                    arr,
+                    transform.pad_sizes,
+                    transform.fill_sizes,
+                    transform.transpose
+                )
+            },
+
+            NormalizedExpr::LiteralNode(val) => write!(f, "{}", val),
+        }
+    }
+}
 
 struct LinearIndexingData { scale: i64, offset: i64 }
 

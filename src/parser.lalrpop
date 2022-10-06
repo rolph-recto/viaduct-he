@@ -1,4 +1,4 @@
-use crate::lang::{*, ExprOperator::*, IndexExpr::*, SourceExpr::*};
+use crate::lang::{*, ExprOperator::*, source::{*, IndexExpr::*, SourceExpr::*}};
 use interval::{Interval, ops::Range};
 use std::str::FromStr;
 
