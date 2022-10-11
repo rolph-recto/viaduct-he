@@ -3,7 +3,7 @@ use he_vectorizer::lang::{
     parser::ProgramParser,
     normalized::Normalizer,
     source::SourceProgram,
-    typechecker::TypeChecker,
+    typechecker::TypeChecker, circ_gen::CircuitGenerator,
 };
 
 #[test]
@@ -89,6 +89,15 @@ fn imgblur() {
     let res = Normalizer::new().run(&program);
     assert!(res.is_ok());
     println!("{}", res.unwrap().expr)
+}
+
+#[test]
+fn test_mask_iteration_domain() {
+    let shape = im::vector![4, 2, 3];
+    let iteration_dom = CircuitGenerator::get_iteration_domain(&shape);
+    assert_eq!(iteration_dom.len(), 24);
+    assert_eq!(iteration_dom[0], im::vector![0,0,0]);
+    assert_eq!(iteration_dom.last().unwrap().clone(), im::vector![3,1,2]);
 }
 
 #[test]

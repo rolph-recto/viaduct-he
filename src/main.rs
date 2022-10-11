@@ -1,7 +1,5 @@
 #[macro_use] extern crate lalrpop_util;
 
-mod lang;
-
 /// main.rs
 /// Vectorizer for homomorphic encryption circuits
 
