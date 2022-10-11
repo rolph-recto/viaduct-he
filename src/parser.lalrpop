@@ -5,8 +5,10 @@ use std::str::FromStr;
 grammar;
 
 pub Program: SourceProgram = {
-    <inputs:InputList> <expr:Expr> => SourceProgram { inputs, expr },
-    <expr:Expr> => SourceProgram { inputs: im::Vector::new(), expr }
+    <inputs:InputList> <letBindings:LetNodeList> <expr:Expr> => SourceProgram { inputs, letBindings, expr },
+    <letBindings:LetNodeList> <expr:Expr> => SourceProgram { inputs: im::Vector::new(), letBindings, expr },
+    <inputs:InputList> <expr:Expr> => SourceProgram { inputs, letBindings: im::Vector::new(), expr },
+    <expr:Expr> => SourceProgram { inputs: im::Vector::new(), letBindings: im::Vector::new(), expr }
 }
 
 InputList: im::Vector<InputNode> = {
@@ -17,6 +19,17 @@ InputList: im::Vector<InputNode> = {
 InputNode: InputNode = {
     "input" <arr:Ident> ":" "[" <e:ExtentList> "]" => InputNode(arr, e),
     "input" <arr:Ident> => InputNode(arr, im::Vector::new()),
+}
+
+LetNodeList: im::Vector<LetNode> = {
+    <ll:LetNodeList> <l:LetNode> => ll + im::Vector::unit(l),
+    <l:LetNode> => im::Vector::unit(l)
+}   
+
+LetNode: LetNode = {
+    "let" <var:Ident> "=" <rhs:Expr> => {
+        LetNode(var, Box::new(rhs))
+    },
 }
 
 Expr: SourceExpr = {

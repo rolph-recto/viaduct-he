@@ -15,6 +15,10 @@ fn test_parse_positive() {
     assert!(parser.parse("42 * 56").is_ok());
     assert!(parser.parse("for x: (0,16) { 42 }").is_ok());
     assert!(parser.parse("for x: (0,16) { for y: (0, 16) { img[x][y] + 2  }}").is_ok());
+    assert!(parser.parse("
+        let img2 = for x: (0,16) { for y: (0, 16) { img[x][y] + 2  }}
+        img2 + img2
+    ").is_ok());
 }
 
 #[test]
@@ -54,9 +58,19 @@ fn test_typechecker_negative() {
             }
         }
     ").unwrap();
+    let prog3 = parser.parse("
+        input img: [(0,16),(0,16)]
+        let next = img + img
+        for x: (0,16) {
+            for y: (0, 16) {
+                img[x][y] + next
+            }
+        }
+    ").unwrap();
 
     assert!(typechecker.run(&prog1).is_err());
     assert!(typechecker.run(&prog2).is_err());
+    assert!(typechecker.run(&prog3).is_err());
 }
 
 #[test]
@@ -84,9 +98,10 @@ fn matmatmul() {
         parser.parse("
         input A: [(0,4),(0,4)]
         input B: [(0,4),(0,4)]
-        for i: (0, 4) {
-            for j: (0, 4) {
-                sum(for k: (0, 4) { A[i][k] * B[k][j] })
+        let x = A + B
+        for i: (0,4) {
+            for j: (0,4) {
+                sum(for k: (0,4) { A[i][k] * B[k][j] })
             }
         }
         ").unwrap();

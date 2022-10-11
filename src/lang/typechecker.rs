@@ -11,12 +11,22 @@ impl TypeChecker {
     }
 
     pub fn run(&self, program: &SourceProgram) -> Result<usize, String> {
-        let mut store: im::HashMap<&str, usize> =
-            im::HashMap::from_iter(
-                program.inputs.iter().map(|input|
-                    (input.0.as_ref(), input.1.len())
-                )
-            );
+        let mut store: im::HashMap<&str, usize> = im::HashMap::new();
+        program.inputs.iter().try_for_each(|input|
+            match store.insert(input.0.as_ref(), input.1.len()) {
+                Some(_) => Err(format!("duplicate bindings for {}", &input.0)),
+                None => Ok(())
+            }
+        )?;
+        
+        program.letBindings.iter().try_for_each(|let_node| {
+            let rhs_dims = self.runWithStores(&let_node.1, &store)?;
+            match store.insert(let_node.0.as_ref(), rhs_dims) {
+                Some(_) => Err(format!("duplicate bindings for {}", &let_node.0)),
+                None => Ok(())
+            }
+        })?;
+
         self.runWithStores(&program.expr, &store)
     }
 

@@ -3,6 +3,7 @@ use crate::lang::*;
 #[derive(Clone,Debug)]
 pub struct SourceProgram {
     pub inputs: im::Vector<InputNode>,
+    pub letBindings: im::Vector<LetNode>,
     pub expr: SourceExpr
 }
 
@@ -23,6 +24,9 @@ impl Display for InputNode {
         write!(f, "input {}: {:?}", self.0, self.1)
     }
 }
+
+#[derive(Clone,Debug)]
+pub struct LetNode(pub ArrayName, pub Box<SourceExpr>);
 
 #[derive(Clone,Debug)]
 pub enum SourceExpr {
