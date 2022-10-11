@@ -1,5 +1,5 @@
-/// prog.rs
-/// Instruction representation of HE programs
+/// program.rs
+/// instruction representation of HE programs
 
 use egg::*;
 use rand::Rng;
@@ -8,7 +8,8 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::ops::RangeInclusive;
 
-use crate::ir::{expr::*, optimizer};
+use crate::circ::optimizer;
+use crate::circ::optimizer::HEOptimizerCircuit;
 
 pub(crate) type NodeId = usize;
 
@@ -257,7 +258,7 @@ impl fmt::Display for HEProgram {
     }
 }
 
-pub fn gen_program(expr: &RecExpr<HEExpr>) -> HEProgram {
+pub fn gen_program(expr: &RecExpr<HEOptimizerCircuit>) -> HEProgram {
     let mut node_map: HashMap<Id, HEOperand> = HashMap::new();
     let mut program: HEProgram = HEProgram { instrs: Vec::new() };
     let mut cur_instr: NodeId = 0;
@@ -279,15 +280,15 @@ pub fn gen_program(expr: &RecExpr<HEExpr>) -> HEProgram {
     for (i, node) in expr.as_ref().iter().enumerate() {
         let id = Id::from(i);
         match node {
-            HEExpr::Num(n) => {
+            HEOptimizerCircuit::Num(n) => {
                 node_map.insert(id, HEOperand::ConstNum(*n));
             }
 
-            HEExpr::Symbol(sym) => {
+            HEOptimizerCircuit::Symbol(sym) => {
                 node_map.insert(id, HEOperand::Ref(HERef::ConstSym(sym.to_string())));
             }
 
-            HEExpr::Add([id1, id2]) => {
+            HEOptimizerCircuit::Add([id1, id2]) => {
                 op_processor(
                     &mut node_map, id, 
                     |index, op1, op2| {
@@ -296,14 +297,14 @@ pub fn gen_program(expr: &RecExpr<HEExpr>) -> HEProgram {
                     id1, id2);
             }
 
-            HEExpr::Mul([id1, id2]) => {
+            HEOptimizerCircuit::Mul([id1, id2]) => {
                 op_processor(
                     &mut node_map, id, 
                     |index, op1, op2| HEInstr::Mul { id: index, op1, op2 }, 
                     id1, id2);
             }
 
-            HEExpr::Rot([id1, id2]) => {
+            HEOptimizerCircuit::Rot([id1, id2]) => {
                 op_processor(
                     &mut node_map, id, 
                     |index, op1, op2| HEInstr::Rot { id: index, op1, op2 }, 

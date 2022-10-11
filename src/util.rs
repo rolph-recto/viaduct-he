@@ -16,7 +16,7 @@ impl NameGenerator {
             
         } else {
             self.name_map.insert(String::from(name), 2);
-            return String::from(name)
+            return format!("{}_{}", name, 1)
         }
     }
 }

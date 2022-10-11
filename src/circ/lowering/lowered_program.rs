@@ -1,10 +1,10 @@
-/// lowered.rs
+/// lowered_program.rs
 /// lowered program for generating output programs from templates
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-use crate::ir::instr::*;
+use crate::circ::lowering::program::*;
  
 type HELoweredNodeId = String;
 type HELoweredOperand = String;

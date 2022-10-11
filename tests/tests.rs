@@ -1,10 +1,11 @@
+use he_vectorizer::circ::{*, circ_gen::CircuitGenerator};
 use he_vectorizer::lang::{
-    *,
     parser::ProgramParser,
     normalized::Normalizer,
     source::SourceProgram,
-    typechecker::TypeChecker, circ_gen::CircuitGenerator,
+    typechecker::TypeChecker,
 };
+
 
 #[test]
 fn test_parse_positive() {
@@ -93,7 +94,7 @@ fn imgblur() {
 
 #[test]
 fn test_mask_iteration_domain() {
-    let shape = im::vector![4, 2, 3];
+    let shape: im::Vector<usize> = im::vector![4, 2, 3];
     let iteration_dom = CircuitGenerator::get_iteration_domain(&shape);
     assert_eq!(iteration_dom.len(), 24);
     assert_eq!(iteration_dom[0], im::vector![0,0,0]);

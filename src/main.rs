@@ -9,8 +9,12 @@ use egg::RecExpr;
 use log::*;
 use std::fs::File;
 
-use he_vectorizer::ir::{instr::{gen_program, HEProgram}, expr::HEExpr, lowered::HELoweredInstr};
-use he_vectorizer::ir::{lowered::lower_program, optimizer::{ExtractorType, optimize}};
+use he_vectorizer::circ::{
+    lowering::{
+        program::{gen_program, HEProgram},
+        lowered_program::{HELoweredInstr, lower_program},
+    },
+    optimizer::{HEOptimizerCircuit, ExtractorType, optimize}};
 
 #[derive(Parser)]
 #[clap(author, version, about = "optimizer for for vectorized homomorphic encryption circuits", long_about = None)]
@@ -100,7 +104,7 @@ fn main() {
 
 
     // parse the expression, the type annotation tells it which Language to use
-    let init_expr: RecExpr<HEExpr> = input_str.parse().unwrap();
+    let init_expr: RecExpr<HEOptimizerCircuit> = input_str.parse().unwrap();
     let init_prog = gen_program(&init_expr);
     // info!("Initial HE expr:\n{}", init_expr.pretty(80));
     info!("Initial HE program (muldepth {}, latency {}ms):",

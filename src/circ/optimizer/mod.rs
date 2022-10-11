@@ -3,10 +3,21 @@ use log::*;
 use clap::ValueEnum;
 use std::{time::*, cmp::max};
 
-use crate::ir::{expr::HEExpr, optimizer::{greedy_extractor::*, lp_extractor::*}};
+use self::{greedy_extractor::*, lp_extractor::*};
 
 mod greedy_extractor;
 mod lp_extractor;
+
+define_language! {
+    /// The language used by egg e-graph engine.
+    pub enum HEOptimizerCircuit {
+        Num(i32),
+        "+" = Add([Id; 2]),
+        "*" = Mul([Id; 2]),
+        "rot" = Rot([Id; 2]),
+        Symbol(Symbol),
+    }
+}
 
 #[derive(Clone, ValueEnum)]
 pub enum ExtractorType { GREEDY, LP }
@@ -19,7 +30,7 @@ pub const ROT_LATENCY: usize = 1;
 pub const SYM_LATENCY: usize = 0;
 pub const NUM_LATENCY: usize = 0;
 
-pub(crate) type HEGraph = egg::EGraph<HEExpr, HEData>;
+pub(crate) type HEGraph = egg::EGraph<HEOptimizerCircuit, HEData>;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct HEData {
@@ -27,7 +38,7 @@ pub(crate) struct HEData {
     muldepth: usize
 }
 
-impl Analysis<HEExpr> for HEData {
+impl Analysis<HEOptimizerCircuit> for HEData {
     type Data = HEData;
 
     fn merge(&mut self, to: &mut Self::Data, from: Self::Data) -> DidMerge {
@@ -40,14 +51,14 @@ impl Analysis<HEExpr> for HEData {
         }
     }
 
-    fn make(egraph: &HEGraph, enode: &HEExpr) -> Self::Data {
+    fn make(egraph: &HEGraph, enode: &HEOptimizerCircuit) -> Self::Data {
         let data = |id: &Id| egraph[*id].data;
 
         match enode {
-            HEExpr::Num(n) =>
+            HEOptimizerCircuit::Num(n) =>
                 HEData { constval: Some(*n), muldepth: 0 },
 
-            HEExpr::Add([id1, id2]) => {
+            HEOptimizerCircuit::Add([id1, id2]) => {
                 let constval: Option<i32> = 
                     data(id1).constval.and_then(|d1|
                         data(id2).constval.and_then(|d2|
@@ -60,7 +71,7 @@ impl Analysis<HEExpr> for HEData {
                 HEData { constval, muldepth }
             },
 
-            HEExpr::Mul([id1, id2]) => {
+            HEOptimizerCircuit::Mul([id1, id2]) => {
                 let v1 = data(id1).constval;
                 let v2 = data(id2).constval;
 
@@ -84,18 +95,18 @@ impl Analysis<HEExpr> for HEData {
                 HEData { constval, muldepth }
             },
 
-            HEExpr::Rot([id1, id2]) => {
+            HEOptimizerCircuit::Rot([id1, id2]) => {
                 let muldepth = max(data(id1).muldepth, data(id2).muldepth);
                 HEData { constval: egraph[*id1].data.constval, muldepth }
             }
 
-            HEExpr::Symbol(_) => HEData { constval: None, muldepth: 0 }
+            HEOptimizerCircuit::Symbol(_) => HEData { constval: None, muldepth: 0 }
         }
     }
 }
 
-fn make_rules(size: i32) -> Vec<Rewrite<HEExpr, HEData>> {
-    let mut rules: Vec<Rewrite<HEExpr, HEData>> = vec![
+fn make_rules(size: i32) -> Vec<Rewrite<HEOptimizerCircuit, HEData>> {
+    let mut rules: Vec<Rewrite<HEOptimizerCircuit, HEData>> = vec![
         // bidirectional addition rules
         rewrite!("add-identity"; "(+ ?a 0)" <=> "?a"),
         rewrite!("add-assoc"; "(+ ?a (+ ?b ?c))" <=> "(+ (+ ?a ?b) ?c)"),
@@ -180,7 +191,7 @@ fn make_rules(size: i32) -> Vec<Rewrite<HEExpr, HEData>> {
 // This returns a function that implements Condition
 fn is_zero(var: &'static str) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
     let var = var.parse().unwrap();
-    let zero = HEExpr::Num(0);
+    let zero = HEOptimizerCircuit::Num(0);
     move |egraph, _, subst| egraph[subst[var]].nodes.contains(&zero)
 }
 
@@ -227,13 +238,13 @@ struct ConstantFold {
     b: Var,
 }
 
-impl Applier<HEExpr, HEData> for ConstantFold {
+impl Applier<HEOptimizerCircuit, HEData> for ConstantFold {
     fn apply_one(
         &self,
         egraph: &mut HEGraph,
         matched_id: Id,
         subst: &Subst,
-        _: Option<&PatternAst<HEExpr>>,
+        _: Option<&PatternAst<HEOptimizerCircuit>>,
         _: Symbol,
     ) -> Vec<Id> {
         let aval: i32 = egraph[subst[self.a]].data.constval.unwrap();
@@ -244,7 +255,7 @@ impl Applier<HEExpr, HEData> for ConstantFold {
         } else {
             aval * bval
         };
-        let folded_id = egraph.add(HEExpr::Num(folded_val));
+        let folded_id = egraph.add(HEOptimizerCircuit::Num(folded_val));
 
         if egraph.union(matched_id, folded_id) {
             vec![matched_id]
@@ -260,27 +271,27 @@ struct FactorSplit {
     b: Var,
 }
 
-impl Applier<HEExpr, HEData> for FactorSplit {
+impl Applier<HEOptimizerCircuit, HEData> for FactorSplit {
     fn apply_one(
         &self,
         egraph: &mut HEGraph,
         matched_id: Id,
         subst: &Subst,
-        _: Option<&PatternAst<HEExpr>>,
+        _: Option<&PatternAst<HEOptimizerCircuit>>,
         _: Symbol,
     ) -> Vec<Id> {
         let factor: i32 = egraph[subst[self.a]].data.constval.unwrap();
 
-        let mut acc: Id = egraph.add(HEExpr::Num(0));
+        let mut acc: Id = egraph.add(HEOptimizerCircuit::Num(0));
         let mut cur_val = factor;
 
         let dir = if cur_val > 0 { 1 } else { -1 };
-        let dir_id = egraph.add(HEExpr::Num(dir));
+        let dir_id = egraph.add(HEOptimizerCircuit::Num(dir));
 
-        let chunk = egraph.add(HEExpr::Mul([dir_id, subst[self.b]]));
+        let chunk = egraph.add(HEOptimizerCircuit::Mul([dir_id, subst[self.b]]));
 
         while cur_val != 0 {
-            acc = egraph.add(HEExpr::Add([chunk, acc]));
+            acc = egraph.add(HEOptimizerCircuit::Add([chunk, acc]));
             cur_val -= dir
         }
 
@@ -299,20 +310,20 @@ struct RotateWrap {
     l: Var,
 }
 
-impl Applier<HEExpr, HEData> for RotateWrap {
+impl Applier<HEOptimizerCircuit, HEData> for RotateWrap {
     fn apply_one(
         &self,
         egraph: &mut HEGraph,
         matched_id: Id,
         subst: &Subst,
-        _: Option<&PatternAst<HEExpr>>,
+        _: Option<&PatternAst<HEOptimizerCircuit>>,
         _: Symbol,
     ) -> Vec<Id> {
         let xclass: Id = subst[self.x];
         let lval = egraph[subst[self.l]].data.constval.unwrap();
 
-        let wrapped_lval = egraph.add(HEExpr::Num(lval % self.size));
-        let wrapped_rot: Id = egraph.add(HEExpr::Rot([xclass, wrapped_lval]));
+        let wrapped_lval = egraph.add(HEOptimizerCircuit::Num(lval % self.size));
+        let wrapped_rot: Id = egraph.add(HEOptimizerCircuit::Rot([xclass, wrapped_lval]));
         if egraph.union(matched_id, wrapped_rot) {
             vec![matched_id]
         } else {
@@ -329,21 +340,21 @@ struct RotateSquash {
     l2: Var,
 }
 
-impl Applier<HEExpr, HEData> for RotateSquash {
+impl Applier<HEOptimizerCircuit, HEData> for RotateSquash {
     fn apply_one(
         &self,
         egraph: &mut HEGraph,
         matched_id: Id,
         subst: &Subst,
-        _: Option<&PatternAst<HEExpr>>,
+        _: Option<&PatternAst<HEOptimizerCircuit>>,
         _: Symbol,
     ) -> Vec<Id> {
         let xclass: Id = subst[self.x];
         let l1_val = egraph[subst[self.l1]].data.constval.unwrap();
         let l2_val = egraph[subst[self.l2]].data.constval.unwrap();
 
-        let lval_sum = egraph.add(HEExpr::Num((l1_val + l2_val) % self.size));
-        let rot_sum: Id = egraph.add(HEExpr::Rot([xclass, lval_sum]));
+        let lval_sum = egraph.add(HEOptimizerCircuit::Num((l1_val + l2_val) % self.size));
+        let rot_sum: Id = egraph.add(HEOptimizerCircuit::Rot([xclass, lval_sum]));
 
         if egraph.union(matched_id, rot_sum) {
             vec![matched_id]
@@ -362,13 +373,13 @@ struct RotateSplit {
     l2: Var,
 }
 
-impl Applier<HEExpr, HEData> for RotateSplit {
+impl Applier<HEOptimizerCircuit, HEData> for RotateSplit {
     fn apply_one(
         &self,
         egraph: &mut HEGraph,
         matched_id: Id,
         subst: &Subst,
-        _pattern: Option<&PatternAst<HEExpr>>,
+        _pattern: Option<&PatternAst<HEOptimizerCircuit>>,
         _rule: Symbol,
     ) -> Vec<Id> {
         let x1_class: Id = subst[self.x1];
@@ -383,22 +394,22 @@ impl Applier<HEExpr, HEData> for RotateSplit {
         let mut has_split = false;
 
         while l1_val * cur_l1 >= 0 || l2_val * cur_l2 >= 0 {
-            let cur_l1_class = egraph.add(HEExpr::Num(cur_l1));
-            let cur_l2_class = egraph.add(HEExpr::Num(cur_l2));
+            let cur_l1_class = egraph.add(HEOptimizerCircuit::Num(cur_l1));
+            let cur_l2_class = egraph.add(HEOptimizerCircuit::Num(cur_l2));
 
-            let rot_in1: Id = egraph.add(HEExpr::Rot([x1_class, cur_l1_class]));
-            let rot_in2: Id = egraph.add(HEExpr::Rot([x2_class, cur_l2_class]));
+            let rot_in1: Id = egraph.add(HEOptimizerCircuit::Rot([x1_class, cur_l1_class]));
+            let rot_in2: Id = egraph.add(HEOptimizerCircuit::Rot([x2_class, cur_l2_class]));
 
-            let op: HEExpr = if self.is_add {
-                HEExpr::Add([rot_in1, rot_in2])
+            let op: HEOptimizerCircuit = if self.is_add {
+                HEOptimizerCircuit::Add([rot_in1, rot_in2])
             } else {
-                HEExpr::Mul([rot_in1, rot_in2])
+                HEOptimizerCircuit::Mul([rot_in1, rot_in2])
             };
 
             let op_class = egraph.add(op);
 
-            let outer_rot_class = egraph.add(HEExpr::Num(outer_rot));
-            let rot_outer = egraph.add(HEExpr::Rot([op_class, outer_rot_class]));
+            let outer_rot_class = egraph.add(HEOptimizerCircuit::Num(outer_rot));
+            let rot_outer = egraph.add(HEOptimizerCircuit::Rot([op_class, outer_rot_class]));
 
             has_split = has_split || egraph.union(matched_id, rot_outer);
             outer_rot += -dir;
@@ -414,7 +425,7 @@ impl Applier<HEExpr, HEData> for RotateSplit {
     }
 }
 
-pub fn optimize(expr: &RecExpr<HEExpr>, size: i32, timeout: usize, extractor_type: ExtractorType) -> RecExpr<HEExpr> {
+pub fn optimize(expr: &RecExpr<HEOptimizerCircuit>, size: i32, timeout: usize, extractor_type: ExtractorType) -> RecExpr<HEOptimizerCircuit> {
     info!("running equality saturation for {} seconds...", timeout);
 
     let optimization_time = Instant::now(); 

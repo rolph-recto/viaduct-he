@@ -1,3 +1,3 @@
-pub mod ir;
+pub mod circ;
 pub mod lang;
 pub mod util;
