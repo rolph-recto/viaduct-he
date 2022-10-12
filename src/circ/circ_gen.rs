@@ -9,24 +9,25 @@ pub enum IndexFreeExprOperator {
 
 #[derive(Clone,Debug)]
 pub enum IndexFreeExpr {
+    // reduction
     ReduceNode(IndexFreeExprOperator, usize, Box<IndexFreeExpr>),
-    OpNode(IndexFreeExprOperator, Box<IndexFreeExpr>, Box<IndexFreeExpr>),
-    ArrayNode(TransformedArray),
-}
 
-#[derive(Clone,Debug)]
-pub enum TransformedArray {
+    // element-wise operation
+    OpNode(IndexFreeExprOperator, Box<IndexFreeExpr>, Box<IndexFreeExpr>),
+
     // array received from the client
     InputArray(HEObjectName),
 
+    // TRANSFORMATIONS
+
     // fill the following dimensions of an array by rotating it
-    Fill(Box<TransformedArray>, Dimension),
+    Fill(Box<IndexFreeExpr>, Dimension),
 
     // offset array by a given amount in each dimension
-    Offset(Box<TransformedArray>, im::Vector<isize>),
+    Offset(Box<IndexFreeExpr>, im::Vector<isize>),
 
     // zero out specific ranges in an array
-    Zero(Box<TransformedArray>, im::Vector<(usize, usize)>),
+    Zero(Box<IndexFreeExpr>, im::Vector<(usize, usize)>),
 }
 
 pub struct HECircuitGenerator {
@@ -42,11 +43,16 @@ impl HECircuitGenerator {
         }
     }
 
-    fn gen_circuit_expr(&mut self, expr: &IndexFreeExpr) -> Result<(HECircuit, Shape), String> {
+    pub fn gen_circuit(&mut self, expr: &IndexFreeExpr) -> Result<(HECircuit, HashMap<HEObjectName,Plaintext>), String> {
+        let (circuit, _) = self._gen_circuit(expr)?;
+        Ok((circuit, self.store.plaintexts.clone()))
+    }
+
+    fn _gen_circuit(&mut self, expr: &IndexFreeExpr) -> Result<(HECircuit, Shape), String> {
         match expr {
             // TODO optimize this
             IndexFreeExpr::ReduceNode(op, dim, body) => {
-                let (circ, shape) = self.gen_circuit_expr(body)?;
+                let (circ, shape) = self._gen_circuit(body)?;
 
                 let mut cur =
                     if let IndexFreeExprOperator::OpSub = op {
@@ -87,8 +93,8 @@ impl HECircuitGenerator {
             },
 
             IndexFreeExpr::OpNode(op, expr1, expr2) => {
-                let (circ1, shape1) = self.gen_circuit_expr(expr1)?;
-                let (circ2, _) = self.gen_circuit_expr(expr2)?;
+                let (circ1, shape1) = self._gen_circuit(expr1)?;
+                let (circ2, _) = self._gen_circuit(expr2)?;
                 let out_circ =
                     match op {
                         IndexFreeExprOperator::OpAdd => {
@@ -106,8 +112,84 @@ impl HECircuitGenerator {
                 Ok((out_circ, shape1))
             }
 
-            IndexFreeExpr::ArrayNode(arr) => {
-                self.gen_circuit_array(arr)
+            IndexFreeExpr::InputArray(arr) => {
+                let object =
+                    self.store.ciphertexts.get(arr)
+                    .ok_or(format!("input array {} not found", arr))?;
+                Ok((HECircuit::CiphertextRef(arr.clone()), object.shape.clone()))
+            },
+
+            IndexFreeExpr::Offset(expr, amounts) => {
+                let (circ, shape) = self._gen_circuit(expr)?;
+
+                let mut total_offset = 0;
+                let mut factor = 1;
+                for (&dim, &offset) in shape.iter().zip(amounts).rev() {
+                    total_offset += offset * factor;
+                    factor *= dim as isize;
+                }
+
+                Ok((HECircuit::Rotate(Box::new(circ), total_offset), shape))
+            },
+
+            IndexFreeExpr::Fill(expr, dim) => {
+                let (circ, shape) = self._gen_circuit(expr)?;
+                if *dim >= shape.len() {
+                    Err(format!("Dimension {} is out of bounds for fill operation", dim))
+
+                } else {
+                    let mut block_size = 1;
+                    for i in dim+1..shape.len() {
+                        block_size *= shape[i]
+                    }
+
+                    let mut res_circ = circ;
+                    for i in 1..shape[*dim] {
+                        res_circ =
+                            HECircuit::Add(
+                                Box::new(res_circ.clone()),
+                                Box::new(
+                                    HECircuit::Rotate(
+                                        Box::new(res_circ),
+                                        (i * block_size) as isize
+                                    )
+                                )
+                            );
+                    }
+
+                    Ok((res_circ, shape))
+                }
+            },
+
+            IndexFreeExpr::Zero(expr, zero_region) => {
+                let (circ, shape) = self._gen_circuit(expr)?;
+
+                let iter_domain = Self::get_iteration_domain(&shape);
+                let mut mask: Vec<isize> = Vec::new();
+                for point in iter_domain.iter() {
+                    let mut is_zero = true;
+                    for (i, (lb, ub)) in point.iter().zip(zero_region.iter()) {
+                        if !(lb <= i && i <= ub) {
+                            is_zero = false;
+                        }
+                    }
+                    mask.push(if is_zero { 0 } else { 1 })
+                }
+
+                let mask_name =
+                    self.register_plaintext(
+                        "zero_mask",
+                        &shape, 
+                        im::Vector::from(mask)
+                    );
+
+                let new_circ =
+                    HECircuit::Mul(
+                        Box::new(circ),
+                        Box::new(HECircuit::PlaintextRef(mask_name))
+                    );
+
+                Ok((new_circ, shape))
             }
         }
     }
@@ -153,89 +235,5 @@ impl HECircuitGenerator {
             Plaintext { shape: shape.clone(), value }
         );
         fresh_name
-    }
-
-    fn gen_circuit_array(&mut self, array: &TransformedArray) -> Result<(HECircuit, Shape), String> {
-        match array {
-            TransformedArray::InputArray(arr) => {
-                let object =
-                    self.store.ciphertexts.get(arr)
-                    .ok_or(format!("input array {} not found", arr))?;
-                Ok((HECircuit::CiphertextRef(arr.clone()), object.shape.clone()))
-            },
-
-            TransformedArray::Offset(arr, amounts) => {
-                let (circ, shape) = self.gen_circuit_array(arr)?;
-
-                let mut total_offset = 0;
-                let mut factor = 1;
-                for (&dim, &offset) in shape.iter().zip(amounts).rev() {
-                    total_offset += offset * factor;
-                    factor *= dim as isize;
-                }
-
-                Ok((HECircuit::Rotate(Box::new(circ), total_offset), shape))
-            },
-
-            TransformedArray::Fill(arr, dim) => {
-                let (circ, shape) = self.gen_circuit_array(arr)?;
-                if *dim >= shape.len() - 1 {
-                    Err(format!("Dimension {} is out of bounds for fill operation", dim))
-
-                } else {
-                    let mut block_size = 0;
-                    for i in dim+1..shape.len() {
-                        block_size += shape[i]
-                    }
-
-                    let mut res_circ = circ;
-                    for i in 0..shape[*dim] {
-                        res_circ =
-                            HECircuit::Add(
-                                Box::new(res_circ.clone()),
-                                Box::new(
-                                    HECircuit::Rotate(
-                                        Box::new(res_circ),
-                                        ((i+1) * block_size) as isize
-                                    )
-                                )
-                            );
-                    }
-
-                    Ok((res_circ, shape))
-                }
-            },
-
-            TransformedArray::Zero(arr, zero_region) => {
-                let (circ, shape) = self.gen_circuit_array(arr)?;
-
-                let iter_domain = Self::get_iteration_domain(&shape);
-                let mut mask: Vec<isize> = Vec::new();
-                for point in iter_domain.iter() {
-                    let mut is_zero = true;
-                    for (i, (lb, ub)) in point.iter().zip(zero_region.iter()) {
-                        if !(lb <= i && i <= ub) {
-                            is_zero = false;
-                        }
-                    }
-                    mask.push(if is_zero { 0 } else { 1 })
-                }
-
-                let mask_name =
-                    self.register_plaintext(
-                        "zero_mask",
-                        &shape, 
-                        im::Vector::from(mask)
-                    );
-
-                let new_circ =
-                    HECircuit::Mul(
-                        Box::new(circ),
-                        Box::new(HECircuit::PlaintextRef(mask_name))
-                    );
-
-                Ok((new_circ, shape))
-            }
-        }
     }
 }

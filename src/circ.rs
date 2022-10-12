@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 
 pub mod circ_gen;
 pub mod optimizer;
@@ -20,11 +20,38 @@ pub enum HECircuit {
     Rotate(Box<HECircuit>, isize),
 }
 
-#[derive(Clone,Debug)]
-pub struct Ciphertext { shape: Shape }
+impl Display for HECircuit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HECircuit::CiphertextRef(name) =>
+                write!(f, "{}", name),
+
+            HECircuit::PlaintextRef(name) =>
+                write!(f, "{}", name),
+
+            HECircuit::Literal(lit) =>
+                write!(f, "{}", lit),
+
+            HECircuit::Add(op1, op2) =>
+                write!(f, "({} + {})", op1, op2),
+
+            HECircuit::Sub(op1, op2) =>
+                write!(f, "({} - {})", op1, op2),
+
+            HECircuit::Mul(op1, op2) =>
+                write!(f, "({} * {})", op1, op2),
+
+            HECircuit::Rotate(op, amt) =>
+                write!(f, "rot({},{})", op, amt)
+        }
+    }
+}
 
 #[derive(Clone,Debug)]
-pub struct Plaintext { shape: Shape, value: im::Vector<isize> }
+pub struct Ciphertext { pub shape: Shape }
+
+#[derive(Clone,Debug)]
+pub struct Plaintext { pub shape: Shape, pub value: im::Vector<isize> }
 
 pub struct HECircuitStore {
     pub ciphertexts: HashMap<HEObjectName, Ciphertext>,
