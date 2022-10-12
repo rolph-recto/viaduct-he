@@ -7,7 +7,7 @@ use clap::Parser;
 use handlebars::{Handlebars, handlebars_helper};
 use egg::RecExpr;
 use log::*;
-use std::fs::File;
+use std::{collections::HashMap, fs::File};
 
 use he_vectorizer::circ::{
     lowering::{
@@ -140,7 +140,7 @@ fn main() {
         );
     }
 
-    let lowered_prog = HELoweredProgram::lower_program(&opt_prog, args.size, args.noinline);
+    let lowered_prog = HELoweredProgram::lower_program(&opt_prog, &HashMap::new(), args.size, args.noinline);
 
     if args.outfile.len() > 1 {
         let f =  File::create(&args.outfile).unwrap();

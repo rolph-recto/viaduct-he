@@ -2,6 +2,9 @@ from random import randint
 from seal import *
 from time import time
 
+def pad_list(l, n):
+    return l + ([0]*(n-len(l)))
+
 def encode(seal, x):
     return seal["batch_encoder"].encode(x)
 
@@ -69,13 +72,17 @@ def main():
     slot_count = seal["batch_encoder"].slot_count()
     row_size = slot_count / 2
 
-{{#each symbols as |sym|}}
-    {{sym}} = encode(seal, [randint(1, 100) for _ in range(slot_count)])
-    {{sym}} = encrypt(seal, {{sym}})
+{{#each inputs as |input|}}
+    {{input}} = encode(seal, [randint(1, 100) for _ in range(slot_count)])
+    {{input}} = encrypt(seal, {{input}})
 
 {{/each}}
 {{#each constants as |const|}}
-    {{const.[1]}} = encode(seal, [{{const.[0]}} for _ in range(slot_count)])
+    {{const.[1]}} = encode(seal, pad_list({{const.[0]}}, slot_count))
+
+{{/each}}
+{{#each literals as |literal|}}
+    {{literal.[1]}} = encode(seal, [{{literal.[0]}} for _ in range(slot_count)])
 {{/each}}
 
     init_end_time = time()

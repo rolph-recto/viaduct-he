@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-use crate::circ::lowering::program::*;
+use crate::circ::{*, lowering::program::*};
  
 type HELoweredNodeId = String;
 type HELoweredOperand = String;
@@ -28,8 +28,9 @@ pub enum HELoweredInstr {
 #[derive(Serialize)]
 pub struct HELoweredProgram {
     vec_size: usize,
-    symbols: HashSet<String>,
-    constants: Vec<(isize, String)>,
+    inputs: HashSet<String>,
+    literals: Vec<(isize, String)>,
+    constants: Vec<(Vec<isize>, String)>,
     instrs: Vec<HELoweredInstr>,
     output: HELoweredNodeId
 }
@@ -72,7 +73,7 @@ impl HELoweredProgram {
         }
     }
 
-    pub fn lower_program(prog: &HEProgram, vec_size: usize, noinline: bool) -> HELoweredProgram {
+    pub fn lower_program(prog: &HEProgram, object_map: &HashMap<HEObjectName, HEObject>, vec_size: usize, noinline: bool) -> HELoweredProgram {
         let uses = prog.analyze_use();
         let mut inplace_map: HashMap<NodeId, NodeId> = HashMap::new();
         let mut const_map: HashMap<isize, String> = HashMap::new();
@@ -311,8 +312,21 @@ impl HELoweredProgram {
             }
         }
 
-        let constants: Vec<(isize, String)> = const_map.into_iter().collect();
-        let symbols: HashSet<String> = prog.get_symbols();
+        let literals: Vec<(isize, String)> = const_map.into_iter().collect();
+        let inputs: HashSet<String> = prog.get_ciphertext_symbols();
+
+        let constants: Vec<(Vec<isize>, String)> =
+            prog.get_plaintext_symbols().into_iter().map(|sym|
+                match object_map.get(&sym) {
+                    Some(HEObject::Plaintext(_, val)) => {
+                        (Vec::from_iter(val.clone().into_iter()), sym)
+                    },
+                    _ => {
+                        panic!("symbol {} does not map into a plaintext object", &sym)
+                    },
+                }
+            ).collect();
+
         let output: HELoweredNodeId = match &instrs.last().unwrap() {
             HELoweredInstr::Add { id, op1, op2 } => id.clone(),
             HELoweredInstr::AddInplace { op1, op2 } => op1.clone(),
@@ -326,6 +340,6 @@ impl HELoweredProgram {
             HELoweredInstr::RotInplace { op1, op2 } => op1.clone(),
             HELoweredInstr::RelinearizeInplace { op1 } => op1.clone(),
         };
-        HELoweredProgram { vec_size, constants, symbols, instrs, output }
+        HELoweredProgram { vec_size, inputs, literals, constants, instrs, output }
     }
 }

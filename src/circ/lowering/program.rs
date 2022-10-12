@@ -184,13 +184,30 @@ impl HEProgram {
     }
 
     /// get the symbols used in this program.
-    pub fn get_symbols(&self) -> HashSet<String> {
+    pub fn get_ciphertext_symbols(&self) -> HashSet<String> {
         let mut symset = HashSet::new();
 
         for instr in self.instrs.iter() {
             for op in instr.get_operands() {
                 match op {
-                    HEOperand::Ref(HERef::CiphertextRef(sym)) |
+                    HEOperand::Ref(HERef::CiphertextRef(sym)) => {
+                        symset.insert(sym.to_string());
+                    },
+                    _ => {}
+                }
+            }
+        }
+
+        symset
+    }
+
+    /// get the plaintext symbols used in this program.
+    pub fn get_plaintext_symbols(&self) -> HashSet<String> {
+        let mut symset = HashSet::new();
+
+        for instr in self.instrs.iter() {
+            for op in instr.get_operands() {
+                match op {
                     HEOperand::Ref(HERef::PlaintextRef(sym)) => {
                         symset.insert(sym.to_string());
                     },
@@ -204,7 +221,7 @@ impl HEProgram {
 
     /// generate a random sym store for this program
     pub(crate) fn gen_sym_store(&self, vec_size: usize, range: RangeInclusive<isize>) -> HESymStore {
-        let symbols = self.get_symbols();
+        let symbols = self.get_ciphertext_symbols();
         let mut sym_store: HESymStore = HashMap::new();
         let mut rng = rand::thread_rng();
 
