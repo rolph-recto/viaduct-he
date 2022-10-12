@@ -14,9 +14,9 @@ pub(crate) type NodeId = usize;
 
 #[derive(Clone, Debug)]
 pub(crate) enum HERef {
-    NodeRef(NodeId),
-    CiphertextRef(HEObjectName),
-    PlaintextRef(HEObjectName),
+    Node(NodeId),
+    Ciphertext(HEObjectName),
+    Plaintext(HEObjectName),
 }
 
 #[derive(Clone, Debug)]
@@ -28,13 +28,13 @@ pub(crate) enum HEOperand {
 impl fmt::Display for HEOperand {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            HEOperand::Ref(HERef::NodeRef(i)) => {
+            HEOperand::Ref(HERef::Node(i)) => {
                 write!(f, "i{}", i)
             },
-            HEOperand::Ref(HERef::CiphertextRef(sym)) => {
+            HEOperand::Ref(HERef::Ciphertext(sym)) => {
                 write!(f, "{}", sym)
             },
-            HEOperand::Ref(HERef::PlaintextRef(sym)) => {
+            HEOperand::Ref(HERef::Plaintext(sym)) => {
                 write!(f, "{}", sym)
             },
             HEOperand::ConstNum(n) => {
@@ -104,9 +104,9 @@ impl HEProgram {
 
         let get_opdepth = |dlist: &Vec<usize>, op: &HEOperand| -> usize {
             match op {
-                HEOperand::Ref(HERef::NodeRef(r)) => dlist[*r],
-                HEOperand::Ref(HERef::CiphertextRef(_)) => 0,
-                HEOperand::Ref(HERef::PlaintextRef(_)) => 0,
+                HEOperand::Ref(HERef::Node(r)) => dlist[*r],
+                HEOperand::Ref(HERef::Ciphertext(_)) => 0,
+                HEOperand::Ref(HERef::Plaintext(_)) => 0,
                 HEOperand::ConstNum(_) => 0,
             }
         };
@@ -189,11 +189,8 @@ impl HEProgram {
 
         for instr in self.instrs.iter() {
             for op in instr.get_operands() {
-                match op {
-                    HEOperand::Ref(HERef::CiphertextRef(sym)) => {
-                        symset.insert(sym.to_string());
-                    },
-                    _ => {}
+                if let HEOperand::Ref(HERef::Ciphertext(sym)) = op{
+                    symset.insert(sym.to_string());
                 }
             }
         }
@@ -207,11 +204,8 @@ impl HEProgram {
 
         for instr in self.instrs.iter() {
             for op in instr.get_operands() {
-                match op {
-                    HEOperand::Ref(HERef::PlaintextRef(sym)) => {
-                        symset.insert(sym.to_string());
-                    },
-                    _ => {}
+                if let HEOperand::Ref(HERef::Plaintext(sym)) = op {
+                    symset.insert(sym.to_string());
                 }
             }
         }
@@ -250,19 +244,13 @@ impl HEProgram {
                 HEInstr::Add { id: _, op1, op2 } |
                 HEInstr::Mul { id: _, op1, op2 } |
                 HEInstr::Rot { id: _, op1, op2 } => {
-                    match op1 {
-                        HEOperand::Ref(HERef::NodeRef(nr)) => {
-                            new_use.insert(*nr);
-                        }
-                        _ => ()
-                    };
+                    if let HEOperand::Ref(HERef::Node(nr)) = op1 {
+                        new_use.insert(*nr);
+                    }
 
-                    match op2 {
-                        HEOperand::Ref(HERef::NodeRef(nr)) => {
-                            new_use.insert(*nr);
-                        }
-                        _ => ()
-                    };
+                    if let HEOperand::Ref(HERef::Node(nr)) = op2 {
+                        new_use.insert(*nr);
+                    }
                 }
             }
 
@@ -289,7 +277,7 @@ impl From<&RecExpr<HEOptimizerCircuit>> for HEProgram {
             let op2 = &nmap[id_op2];
 
             program.instrs.push(ctor(cur_instr, op1.clone(), op2.clone()));
-            nmap.insert(id, HEOperand::Ref(HERef::NodeRef(cur_instr)));
+            nmap.insert(id, HEOperand::Ref(HERef::Node(cur_instr)));
 
             cur_instr += 1;
         };
@@ -302,11 +290,11 @@ impl From<&RecExpr<HEOptimizerCircuit>> for HEProgram {
                 }
 
                 HEOptimizerCircuit::CiphertextRef(sym) => {
-                    node_map.insert(id, HEOperand::Ref(HERef::CiphertextRef(sym.to_string())));
+                    node_map.insert(id, HEOperand::Ref(HERef::Ciphertext(sym.to_string())));
                 }
 
                 HEOptimizerCircuit::PlaintextRef(sym) => {
-                    node_map.insert(id, HEOperand::Ref(HERef::PlaintextRef(sym.to_string())));
+                    node_map.insert(id, HEOperand::Ref(HERef::Plaintext(sym.to_string())));
                 }
 
                 HEOptimizerCircuit::Add([id1, id2]) => {
@@ -344,8 +332,7 @@ impl fmt::Display for HEProgram {
         self.instrs
             .iter()
             .enumerate()
-            .map(|(i, instr)| write!(f, "let i{} = {}\n", i + 1, instr))
-            .collect()
+            .try_for_each(|(i, instr)| write!(f, "let i{} = {}\n", i + 1, instr))
     }
 }
 
@@ -366,11 +353,11 @@ impl HEProgramInterpreter {
 
     fn interp_operand(&self, op: &HEOperand) -> HEValue {
         match op {
-            HEOperand::Ref(HERef::NodeRef(ref_i)) => self.ref_store[ref_i].clone(),
+            HEOperand::Ref(HERef::Node(ref_i)) => self.ref_store[ref_i].clone(),
 
-            HEOperand::Ref(HERef::CiphertextRef(sym)) => self.sym_store[sym.as_str()].clone(),
+            HEOperand::Ref(HERef::Ciphertext(sym)) => self.sym_store[sym.as_str()].clone(),
 
-            HEOperand::Ref(HERef::PlaintextRef(sym)) => self.sym_store[sym.as_str()].clone(),
+            HEOperand::Ref(HERef::Plaintext(sym)) => self.sym_store[sym.as_str()].clone(),
 
             HEOperand::ConstNum(n) => HEValue::HEScalar(*n),
         }
@@ -413,7 +400,7 @@ impl HEProgramInterpreter {
                 match (val1, val2) {
                     (HEValue::HEVector(v1), HEValue::HEScalar(s2)) => {
                         let rot_val = s2 % (self.vec_size as isize);
-                        let mut new_vec: Vec<isize> = v1.clone();
+                        let mut new_vec: Vec<isize> = v1;
                         if rot_val < 0 {
                             new_vec.rotate_left((-rot_val) as usize)
                         } else {

@@ -125,9 +125,9 @@ impl Normalizer {
                 let interval1 = self.index_expr_to_interval(expr1, index_store);
                 let interval2 = self.index_expr_to_interval(expr2, index_store);
                 match op {
-                    OpAdd => interval1 + interval2,
-                    OpSub => interval1 - interval2,
-                    OpMul => interval1 * interval2,
+                    ExprOperator::OpAdd => interval1 + interval2,
+                    ExprOperator::OpSub => interval1 - interval2,
+                    ExprOperator::OpMul => interval1 * interval2,
                 }
             }
         }
@@ -151,19 +151,19 @@ impl Normalizer {
                 let data1 = self.get_linear_indexing_data(expr1, index_var)?;
                 let data2 = self.get_linear_indexing_data(expr2, index_var)?;
                 match op {
-                    OpAdd => {
+                    ExprOperator::OpAdd => {
                         Some(LinearIndexingData {
                             scale: data1.scale + data2.scale,
                             offset: data1.offset + data2.offset
                         })
                     },
-                    OpSub => {
+                    ExprOperator::OpSub => {
                         Some(LinearIndexingData {
                             scale: data1.scale - data2.scale,
                             offset: data1.offset - data2.offset
                         })
                     },
-                    OpMul => {
+                    ExprOperator::OpMul => {
                         if data1.scale == 0 {
                             Some(LinearIndexingData {
                                 scale: data2.scale * data1.offset,
@@ -480,5 +480,11 @@ impl Normalizer {
         let node_solution = self.solve_extent_constraints();
         let final_expr = self.apply_extent_solution(&norm_expr, &node_solution);
         Ok(NormalizedProgram { store, expr: final_expr })
+    }
+}
+
+impl Default for Normalizer {
+    fn default() -> Self {
+        Normalizer::new()
     }
 }

@@ -20,3 +20,9 @@ impl NameGenerator {
         }
     }
 }
+
+impl Default for NameGenerator {
+    fn default() -> Self {
+        NameGenerator::new()
+    }
+}

@@ -56,12 +56,15 @@ impl<'a> CostFunction<HEOptimizerCircuit> for HECostFunction<'a> {
             self_cost.muldepth = max(self_cost.muldepth, child_cost.muldepth);
 
             for (k, v) in child_cost.latency_map.iter() {
+                self_cost.latency_map.insert(*k, *v);
+                /*
                 if !self_cost.latency_map.contains_key(k) {
                     self_cost.latency_map.insert(*k, *v);
 
                 } else if self_cost.latency_map[k] > *v {
                     self_cost.latency_map.insert(*k, *v);
                 }
+                */
             }
         }
 

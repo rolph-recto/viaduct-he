@@ -46,13 +46,13 @@ impl HELoweredProgram {
 
     fn lower_operand(inplace_map: &HashMap<NodeId,NodeId>, const_map: &mut HashMap<isize, String>, op: &HEOperand) -> String {
         match op {
-            HEOperand::Ref(HERef::NodeRef(nr)) => {
+            HEOperand::Ref(HERef::Node(nr)) => {
                 let resolved_nr = Self::resolve_inplace_indirection(inplace_map, *nr);
                 format!("i{}", resolved_nr)
             },
 
-            HEOperand::Ref(HERef::CiphertextRef(sym)) |
-            HEOperand::Ref(HERef::PlaintextRef(sym)) => {
+            HEOperand::Ref(HERef::Ciphertext(sym)) |
+            HEOperand::Ref(HERef::Plaintext(sym)) => {
                 sym.clone()
             },
 
@@ -88,7 +88,7 @@ impl HELoweredProgram {
                     match (op1, op2) {
                         (HEOperand::Ref(r1), HEOperand::Ref(r2)) => {
                             match (r1, r2) {
-                                (HERef::NodeRef(nr1), HERef::NodeRef(_))
+                                (HERef::Node(nr1), HERef::Node(_))
                                 if !uses[id+1].contains(nr1) && !noinline => {
                                     instrs.push(
                                         HELoweredInstr::AddInplace { op1: lop1, op2: lop2 }
@@ -96,7 +96,7 @@ impl HELoweredProgram {
                                     inplace_map.insert(*id, *nr1);
                                 },
 
-                                (HERef::NodeRef(_), HERef::NodeRef(nr2))
+                                (HERef::Node(_), HERef::Node(nr2))
                                 if !uses[id+1].contains(nr2) && !noinline => {
                                     instrs.push(
                                         HELoweredInstr::AddInplace { op1: lop2, op2: lop1 }
@@ -104,17 +104,17 @@ impl HELoweredProgram {
                                     inplace_map.insert(*id, *nr2);
                                 },
 
-                                (HERef::PlaintextRef(_), HERef::PlaintextRef(_)) => {
+                                (HERef::Plaintext(_), HERef::Plaintext(_)) => {
                                     panic!("attempting to add two plaintexts: {:?} and {:?}", r1, r2)
                                 },
 
-                                (_, HERef::PlaintextRef(_)) => {
+                                (_, HERef::Plaintext(_)) => {
                                     instrs.push(
                                         HELoweredInstr::AddPlain { id: lid, op1: lop1, op2: lop2 }
                                     )
                                 },
 
-                                (HERef::PlaintextRef(_), _) => {
+                                (HERef::Plaintext(_), _) => {
                                     instrs.push(
                                         HELoweredInstr::AddPlain { id: lid, op1: lop2, op2: lop1 }
                                     )
@@ -130,7 +130,7 @@ impl HELoweredProgram {
 
                         (HEOperand::Ref(r1), HEOperand::ConstNum(_)) => {
                             match r1 {
-                                HERef::NodeRef(nr1)
+                                HERef::Node(nr1)
                                 if !uses[id+1].contains(nr1) && !noinline => {
                                     instrs.push(
                                         HELoweredInstr::AddPlainInplace { op1: lop1, op2: lop2 }
@@ -148,7 +148,7 @@ impl HELoweredProgram {
 
                         (HEOperand::ConstNum(_), HEOperand::Ref(r2)) => {
                             match r2 {
-                                HERef::NodeRef(nr2)
+                                HERef::Node(nr2)
                                 if !uses[id+1].contains(nr2) && !noinline => {
                                     instrs.push(
                                         HELoweredInstr::AddPlainInplace { op1: lop2, op2: lop1 }
@@ -179,7 +179,7 @@ impl HELoweredProgram {
                         (HEOperand::Ref(r1), HEOperand::Ref(r2)) => {
                             let mut cipher_cipher_op = false;
                             match (r1, r2) {
-                                (HERef::NodeRef(nr1), HERef::NodeRef(_))
+                                (HERef::Node(nr1), HERef::Node(_))
                                 if !uses[id+1].contains(nr1) && !noinline => {
                                     instrs.push(
                                         HELoweredInstr::MulInplace { op1: lop1.clone(), op2: lop2 }
@@ -189,7 +189,7 @@ impl HELoweredProgram {
                                     cipher_cipher_op = true;
                                 },
 
-                                (HERef::NodeRef(_), HERef::NodeRef(nr2))
+                                (HERef::Node(_), HERef::Node(nr2))
                                 if !uses[id+1].contains(nr2) && !noinline => {
                                     instrs.push(
                                         HELoweredInstr::MulInplace { op1: lop2.clone(), op2: lop1 }
@@ -199,17 +199,17 @@ impl HELoweredProgram {
                                     cipher_cipher_op = true;
                                 },
 
-                                (HERef::PlaintextRef(_), HERef::PlaintextRef(_)) => {
+                                (HERef::Plaintext(_), HERef::Plaintext(_)) => {
                                     panic!("attempting to add two plaintexts: {:?} and {:?}", r1, r2)
                                 },
 
-                                (_, HERef::PlaintextRef(_)) => {
+                                (_, HERef::Plaintext(_)) => {
                                     instrs.push(
                                         HELoweredInstr::MulPlain { id: lid, op1: lop1, op2: lop2 }
                                     )
                                 },
 
-                                (HERef::PlaintextRef(_), _) => {
+                                (HERef::Plaintext(_), _) => {
                                     instrs.push(
                                         HELoweredInstr::MulPlain { id: lid, op1: lop2, op2: lop1 }
                                     )
@@ -237,13 +237,12 @@ impl HELoweredProgram {
 
                         (HEOperand::Ref(r1), HEOperand::ConstNum(_)) => {
                             match r1 {
-                                HERef::NodeRef(nr1)
+                                HERef::Node(nr1)
                                 if !uses[id+1].contains(nr1) && !noinline => {
                                     instrs.push(
                                         HELoweredInstr::MulPlainInplace { op1: lop1.clone(), op2: lop2 }
                                     );
                                     inplace_map.insert(*id, *nr1);
-                                    relin_id = lop1
                                 },
 
                                 _ => {
@@ -256,13 +255,12 @@ impl HELoweredProgram {
 
                         (HEOperand::ConstNum(_), HEOperand::Ref(r2)) => {
                             match r2 {
-                                HERef::NodeRef(nr2)
+                                HERef::Node(nr2)
                                 if !uses[id+1].contains(nr2) && !noinline => {
                                     instrs.push(
                                         HELoweredInstr::MulPlainInplace { op1: lop2.clone(), op2: lop1 }
                                     );
                                     inplace_map.insert(*id, *nr2);
-                                    relin_id = lop2
                                 },
 
                                 _ => {
@@ -286,7 +284,7 @@ impl HELoweredProgram {
                         (HEOperand::Ref(r1), HEOperand::ConstNum(cn2)) => {
                             let lop2 = cn2.to_string();
                             match r1 {
-                                HERef::NodeRef(nr1)
+                                HERef::Node(nr1)
                                 if !uses[id+1].contains(nr1) && !noinline => {
                                     instrs.push(
                                         HELoweredInstr::RotInplace { op1: lop1, op2: lop2 }
@@ -294,7 +292,7 @@ impl HELoweredProgram {
                                     inplace_map.insert(*id, *nr1);
                                 },
 
-                                HERef::PlaintextRef(_) =>  {
+                                HERef::Plaintext(_) =>  {
                                     panic!("attempting to rotate plaintext {:?}", r1)
                                 }
 

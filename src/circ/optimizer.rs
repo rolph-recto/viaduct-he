@@ -62,9 +62,7 @@ impl Analysis<HEOptimizerCircuit> for HEData {
             HEOptimizerCircuit::Add([id1, id2]) => {
                 let constval: Option<isize> = 
                     data(id1).constval.and_then(|d1|
-                        data(id2).constval.and_then(|d2|
-                            Some(d1 + d2)
-                        )
+                        data(id2).constval.map(|d2| d1 + d2)
                     );
 
                 let muldepth = max(data(id1).muldepth, data(id2).muldepth);
@@ -188,7 +186,7 @@ fn make_rules(size: usize) -> Vec<Rewrite<HEOptimizerCircuit, HEData>> {
         } if can_split_rot("?l1", "?l2")),
     ]);
 
-    return rules;
+    rules
 }
 
 // This returns a function that implements Condition
@@ -437,14 +435,14 @@ pub fn optimize(expr: &RecExpr<HEOptimizerCircuit>, size: usize, timeout: usize,
     // the given expression and runs the given rules over it
     let mut runner = Runner::default()
         .with_explanations_enabled()
-        .with_expr(&expr)
+        .with_expr(expr)
         .with_time_limit(Duration::from_secs(timeout as u64))
         .run(&make_rules(size));
 
     info!("Optimization time: {}ms", optimization_time.elapsed().as_millis());
 
     let egraph = &mut runner.egraph;
-    let root = egraph.add_expr(&expr);
+    let root = egraph.add_expr(expr);
 
     let extraction_time = Instant::now();
 
@@ -466,5 +464,5 @@ pub fn optimize(expr: &RecExpr<HEOptimizerCircuit>, size: usize, timeout: usize,
 
     info!("Extraction time: {}ms", extraction_time.elapsed().as_millis());
 
-    return opt_expr;
+    opt_expr
 }

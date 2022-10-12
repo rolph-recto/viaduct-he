@@ -12,7 +12,7 @@ use std::{collections::HashMap, fs::File};
 use he_vectorizer::circ::{
     lowering::{
         program::HEProgram,
-        lowered_program::{HELoweredInstr, HELoweredProgram},
+        lowered_program::{HELoweredInstr, HELoweredProgram}, code_gen::CodeGenerator,
     },
     optimizer::{HEOptimizerCircuit, ExtractorType, optimize}};
 
@@ -52,48 +52,6 @@ struct Arguments {
     noinline: bool,
 }
 
-handlebars_helper!(instr_is_binary: |instr: HELoweredInstr| match instr {
-    HELoweredInstr::Add { id: _, op1: _, op2: _} => true,
-    HELoweredInstr::AddInplace { op1: _, op2: _} => true,
-    HELoweredInstr::AddPlain { id: _, op1: _, op2: _ } => true,
-    HELoweredInstr::AddPlainInplace { op1: _, op2: _ } => true,
-    HELoweredInstr::Mul { id: _, op1: _, op2: _ } => true,
-    HELoweredInstr::MulInplace { op1: _, op2: _ } => true,
-    HELoweredInstr::MulPlain { id: _, op1: _, op2: _ } => true,
-    HELoweredInstr::MulPlainInplace { op1: _, op2: _ } => true,
-    HELoweredInstr::Rot { id: _, op1: _, op2: _ } => true,
-    HELoweredInstr::RotInplace { op1: _, op2: _ } => true,
-    HELoweredInstr::RelinearizeInplace { op1: _ } => false
-});
-
-handlebars_helper!(instr_is_inplace: |instr: HELoweredInstr| match instr {
-    HELoweredInstr::Add { id: _, op1: _, op2: _} => false,
-    HELoweredInstr::AddInplace { op1: _, op2: _} => true,
-    HELoweredInstr::AddPlain { id: _, op1: _, op2: _ } => false,
-    HELoweredInstr::AddPlainInplace { op1: _, op2: _ } => true,
-    HELoweredInstr::Mul { id: _, op1: _, op2: _ } => false,
-    HELoweredInstr::MulInplace { op1: _, op2: _ } => true,
-    HELoweredInstr::MulPlain { id: _, op1: _, op2: _ } => false,
-    HELoweredInstr::MulPlainInplace { op1: _, op2: _ } => true,
-    HELoweredInstr::Rot { id: _, op1: _, op2: _ } => false,
-    HELoweredInstr::RotInplace { op1: _, op2: _ } => true,
-    HELoweredInstr::RelinearizeInplace { op1: _ } => true
-});
-
-handlebars_helper!(instr_name: |instr: HELoweredInstr| match instr {
-    HELoweredInstr::Add { id: _, op1: _, op2: _} => "add",
-    HELoweredInstr::AddInplace { op1: _, op2: _} => "add_inplace",
-    HELoweredInstr::AddPlain { id: _, op1: _, op2: _ } => "add_plain",
-    HELoweredInstr::AddPlainInplace { op1: _, op2: _ } => "add_plain_inplace",
-    HELoweredInstr::Mul { id: _, op1: _, op2: _ } => "multiply",
-    HELoweredInstr::MulInplace { op1: _, op2: _ } => "multiply_inplace",
-    HELoweredInstr::MulPlain { id: _, op1: _, op2: _ } => "multiply_plain",
-    HELoweredInstr::MulPlainInplace { op1: _, op2: _ } => "multiply_plain_inplace",
-    HELoweredInstr::Rot { id: _, op1: _, op2: _ } => "rotate_rows",
-    HELoweredInstr::RotInplace { op1: _, op2: _ } => "rotate_rows_inplace",
-    HELoweredInstr::RelinearizeInplace { op1: _ } => "relinearize_inplace"
-});
-
 fn main() {
     env_logger::init();
 
@@ -101,11 +59,6 @@ fn main() {
     let input_str =
         std::fs::read_to_string(&args.file)
         .expect(&format!("Could not read file {}", &args.file));
-
-    let template_str =
-        std::fs::read_to_string(&args.template)
-        .expect(&format!("Could not read file {}", &args.template));
-
 
     // parse the expression, the type annotation tells it which Language to use
     let init_expr: RecExpr<HEOptimizerCircuit> = input_str.parse().unwrap();
@@ -116,19 +69,12 @@ fn main() {
         init_prog.get_latency()
     );
 
-    let mut handlebars = Handlebars::new();
-    handlebars.register_helper("instr_is_inplace", Box::new(instr_is_inplace));
-    handlebars.register_helper("instr_is_binary", Box::new(instr_is_binary));
-    handlebars.register_helper("instr_name", Box::new(instr_name));
-    handlebars.register_template_string("template", template_str)
-        .expect("Could not register template");
-
     let opt_expr =
         if !args.passthrough {
             optimize(&init_expr, args.size, args.duration, args.extractor)
 
         } else {
-            init_expr.clone()
+            init_expr
         };
 
     let opt_prog = HEProgram::from(&opt_expr);
@@ -141,17 +87,19 @@ fn main() {
     }
 
     let lowered_prog = HELoweredProgram::lower_program(&opt_prog, &HashMap::new(), args.size, args.noinline);
+    let codegen = CodeGenerator::new(&args.template);
 
     if args.outfile.len() > 1 {
-        let f =  File::create(&args.outfile).unwrap();
-        handlebars.render_to_write("template", &lowered_prog, f).unwrap();
+        codegen.render_to_file(&lowered_prog, &args.outfile).unwrap();
         info!("Wrote program to {}", &args.outfile);
+
 
     } else {
         // info!("{}", handlebars.render("template", &lower_program(&init_prog, args.size)).unwrap());
         // info!("Optimized HE expr:\n{}", opt_expr.pretty(80));
 
-        info!("{}", handlebars.render("template", &lowered_prog).unwrap());
+        let output = codegen.render_to_str(&lowered_prog).unwrap();
+        info!("{}", output);
     }
 
     // let vec_size = 16;
