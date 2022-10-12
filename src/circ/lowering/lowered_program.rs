@@ -73,7 +73,7 @@ impl HELoweredProgram {
         }
     }
 
-    pub fn lower_program(prog: &HEProgram, object_map: &HashMap<HEObjectName, HEObject>, vec_size: usize, noinline: bool) -> HELoweredProgram {
+    pub fn lower_program(prog: &HEProgram, store: &HECircuitStore, vec_size: usize, noinline: bool) -> HELoweredProgram {
         let uses = prog.analyze_use();
         let mut inplace_map: HashMap<NodeId, NodeId> = HashMap::new();
         let mut const_map: HashMap<isize, String> = HashMap::new();
@@ -315,9 +315,9 @@ impl HELoweredProgram {
 
         let constants: Vec<(Vec<isize>, String)> =
             prog.get_plaintext_symbols().into_iter().map(|sym|
-                match object_map.get(&sym) {
-                    Some(HEObject::Plaintext(_, val)) => {
-                        (Vec::from_iter(val.clone().into_iter()), sym)
+                match store.plaintexts.get(&sym) {
+                    Some(Plaintext { shape: _, value }) => {
+                        (Vec::from_iter(value.clone().into_iter()), sym)
                     },
                     _ => {
                         panic!("symbol {} does not map into a plaintext object", &sym)

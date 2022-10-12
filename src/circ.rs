@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 pub mod circ_gen;
 pub mod optimizer;
 pub mod lowering;
@@ -19,16 +21,24 @@ pub enum HECircuit {
 }
 
 #[derive(Clone,Debug)]
-pub enum HEObject {
-    Ciphertext(Shape),
-    Plaintext(Shape, im::Vector<isize>),
+pub struct Ciphertext { shape: Shape }
+
+#[derive(Clone,Debug)]
+pub struct Plaintext { shape: Shape, value: im::Vector<isize> }
+
+pub struct HECircuitStore {
+    pub ciphertexts: HashMap<HEObjectName, Ciphertext>,
+    pub plaintexts: HashMap<HEObjectName, Plaintext>,
 }
 
-impl HEObject {
-    fn shape(&self) -> &Shape {
-        match self {
-            HEObject::Ciphertext(shape) => shape,
-            HEObject::Plaintext(shape, _) => shape,
-        }
+impl HECircuitStore {
+    pub fn new(inputs: &HashMap<HEObjectName,Ciphertext>) -> Self {
+        HECircuitStore { ciphertexts: inputs.clone(), plaintexts: HashMap::new() }
+    }
+}
+
+impl Default for HECircuitStore {
+    fn default() -> Self {
+        HECircuitStore { ciphertexts: HashMap::new(), plaintexts: HashMap::new() }
     }
 }

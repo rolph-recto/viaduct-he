@@ -31,14 +31,14 @@ pub enum TransformedArray {
 
 pub struct HECircuitGenerator {
     name_generator: NameGenerator,
-    object_map: HashMap<HEObjectName, HEObject>
+    store: HECircuitStore,
 }
 
 impl HECircuitGenerator {
-    pub fn new() -> Self {
+    pub fn new(inputs: &HashMap<HEObjectName,Ciphertext>) -> Self {
         HECircuitGenerator {
-            name_generator: NameGenerator::new(),
-            object_map: HashMap::new(),
+            name_generator: NameGenerator::default(),
+            store: HECircuitStore::new(inputs),
         }
     }
 
@@ -64,22 +64,22 @@ impl HECircuitGenerator {
                     block_size *= shape[i];
                 }
 
-                for i in 0..shape[*dim] {
+                for i in 1..shape[*dim] {
                     let rot_circ = 
                         HECircuit::Rotate(
                             Box::new(circ.clone()),
-                            -(((i+1)*block_size) as isize));
+                            -((i*block_size) as isize)
+                        );
 
-                    match op {
-                        IndexFreeExprOperator::OpAdd => {
-                            cur = HECircuit::Add(Box::new(cur), Box::new(rot_circ));
-                        }
-                        IndexFreeExprOperator::OpMul => {
-                            cur = HECircuit::Mul(Box::new(cur), Box::new(rot_circ));
-                        }
-                        IndexFreeExprOperator::OpSub => {
-                            cur = HECircuit::Sub(Box::new(cur), Box::new(rot_circ));
-                        }
+                    cur = match op {
+                        IndexFreeExprOperator::OpAdd => 
+                            HECircuit::Add(Box::new(cur), Box::new(rot_circ)),
+
+                        IndexFreeExprOperator::OpMul =>
+                            HECircuit::Mul(Box::new(cur), Box::new(rot_circ)),
+
+                        IndexFreeExprOperator::OpSub =>
+                            HECircuit::Sub(Box::new(cur), Box::new(rot_circ)),
                     }
                 }
 
@@ -148,9 +148,9 @@ impl HECircuitGenerator {
 
     fn register_plaintext(&mut self, name: &str, shape: &Shape, value: im::Vector<isize>) -> String {
         let fresh_name = self.name_generator.get_fresh_name(name);
-        self.object_map.insert(
+        self.store.plaintexts.insert(
             fresh_name.clone(),
-            HEObject::Plaintext(shape.clone(), value)
+            Plaintext { shape: shape.clone(), value }
         );
         fresh_name
     }
@@ -159,9 +159,9 @@ impl HECircuitGenerator {
         match array {
             TransformedArray::InputArray(arr) => {
                 let object =
-                    self.object_map.get(arr)
+                    self.store.ciphertexts.get(arr)
                     .ok_or(format!("input array {} not found", arr))?;
-                Ok((HECircuit::CiphertextRef(arr.clone()), object.shape().clone()))
+                Ok((HECircuit::CiphertextRef(arr.clone()), object.shape.clone()))
             },
 
             TransformedArray::Offset(arr, amounts) => {

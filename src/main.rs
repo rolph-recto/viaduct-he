@@ -14,7 +14,7 @@ use he_vectorizer::circ::{
         program::HEProgram,
         lowered_program::{HELoweredInstr, HELoweredProgram}, code_gen::CodeGenerator,
     },
-    optimizer::{HEOptimizerCircuit, ExtractorType, optimize}};
+    optimizer::{HEOptimizerCircuit, ExtractorType, optimize}, HECircuitStore};
 
 #[derive(Parser)]
 #[clap(author, version, about = "optimizer for for vectorized homomorphic encryption circuits", long_about = None)]
@@ -86,7 +86,7 @@ fn main() {
         );
     }
 
-    let lowered_prog = HELoweredProgram::lower_program(&opt_prog, &HashMap::new(), args.size, args.noinline);
+    let lowered_prog = HELoweredProgram::lower_program(&opt_prog, &HECircuitStore::default(), args.size, args.noinline);
     let codegen = CodeGenerator::new(&args.template);
 
     if args.outfile.len() > 1 {

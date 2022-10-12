@@ -6,8 +6,8 @@ use crate::{
 
 /// partially evaluate operations on plaintexts.
 struct HECircuitPartialEvaluator {
-    object_map: HashMap<HEObjectName, HEObject>,
-    name_generator: NameGenerator
+    name_generator: NameGenerator,
+    store: HECircuitStore,
 }
 
 enum PEValue {
@@ -24,8 +24,8 @@ enum PEResult {
 impl HECircuitPartialEvaluator {
     fn new() -> Self {
         HECircuitPartialEvaluator {
-            object_map: HashMap::new(),
-            name_generator: NameGenerator::new(),
+            name_generator: NameGenerator::default(),
+            store: HECircuitStore::default(),
         }
     }
 
@@ -36,6 +36,8 @@ impl HECircuitPartialEvaluator {
             },
 
             HECircuit::PlaintextRef(name) => {
+                todo!()
+                /*
                 let object = &self.object_map[name];
                 match object {
                     HEObject::Ciphertext(_) => {
@@ -48,6 +50,7 @@ impl HECircuitPartialEvaluator {
                         )
                     }
                 }
+                */
             },
 
             HECircuit::Literal(lit) => {
