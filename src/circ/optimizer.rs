@@ -11,11 +11,12 @@ mod lp_extractor;
 define_language! {
     /// The language used by egg e-graph engine.
     pub enum HEOptimizerCircuit {
-        Num(i32),
+        Num(isize),
         "+" = Add([Id; 2]),
         "*" = Mul([Id; 2]),
         "rot" = Rot([Id; 2]),
-        Symbol(Symbol),
+        CiphertextRef(Symbol),
+        PlaintextRef(Symbol),
     }
 }
 
@@ -34,7 +35,7 @@ pub(crate) type HEGraph = egg::EGraph<HEOptimizerCircuit, HEData>;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct HEData {
-    constval: Option<i32>,
+    constval: Option<isize>,
     muldepth: usize
 }
 
@@ -59,7 +60,7 @@ impl Analysis<HEOptimizerCircuit> for HEData {
                 HEData { constval: Some(*n), muldepth: 0 },
 
             HEOptimizerCircuit::Add([id1, id2]) => {
-                let constval: Option<i32> = 
+                let constval: Option<isize> = 
                     data(id1).constval.and_then(|d1|
                         data(id2).constval.and_then(|d2|
                             Some(d1 + d2)
@@ -76,7 +77,7 @@ impl Analysis<HEOptimizerCircuit> for HEData {
                 let v2 = data(id2).constval;
 
                 // special case multiplicative annihilator (0)
-                let constval: Option<i32> = 
+                let constval: Option<isize> = 
                     match (v1, v2) {
                         (Some(0), _) => Some(0),
                         (_, Some(0)) => Some(0),
@@ -100,12 +101,14 @@ impl Analysis<HEOptimizerCircuit> for HEData {
                 HEData { constval: egraph[*id1].data.constval, muldepth }
             }
 
-            HEOptimizerCircuit::Symbol(_) => HEData { constval: None, muldepth: 0 }
+            HEOptimizerCircuit::CiphertextRef(_) => HEData { constval: None, muldepth: 0 },
+
+            HEOptimizerCircuit::PlaintextRef(_) => HEData { constval: None, muldepth: 0 },
         }
     }
 }
 
-fn make_rules(size: i32) -> Vec<Rewrite<HEOptimizerCircuit, HEData>> {
+fn make_rules(size: usize) -> Vec<Rewrite<HEOptimizerCircuit, HEData>> {
     let mut rules: Vec<Rewrite<HEOptimizerCircuit, HEData>> = vec![
         // bidirectional addition rules
         rewrite!("add-identity"; "(+ ?a 0)" <=> "?a"),
@@ -247,8 +250,8 @@ impl Applier<HEOptimizerCircuit, HEData> for ConstantFold {
         _: Option<&PatternAst<HEOptimizerCircuit>>,
         _: Symbol,
     ) -> Vec<Id> {
-        let aval: i32 = egraph[subst[self.a]].data.constval.unwrap();
-        let bval: i32 = egraph[subst[self.b]].data.constval.unwrap();
+        let aval: isize = egraph[subst[self.a]].data.constval.unwrap();
+        let bval: isize = egraph[subst[self.b]].data.constval.unwrap();
 
         let folded_val = if self.is_add {
             aval + bval
@@ -280,7 +283,7 @@ impl Applier<HEOptimizerCircuit, HEData> for FactorSplit {
         _: Option<&PatternAst<HEOptimizerCircuit>>,
         _: Symbol,
     ) -> Vec<Id> {
-        let factor: i32 = egraph[subst[self.a]].data.constval.unwrap();
+        let factor: isize = egraph[subst[self.a]].data.constval.unwrap();
 
         let mut acc: Id = egraph.add(HEOptimizerCircuit::Num(0));
         let mut cur_val = factor;
@@ -305,7 +308,7 @@ impl Applier<HEOptimizerCircuit, HEData> for FactorSplit {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RotateWrap {
-    size: i32,
+    size: isize,
     x: Var,
     l: Var,
 }
@@ -334,7 +337,7 @@ impl Applier<HEOptimizerCircuit, HEData> for RotateWrap {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RotateSquash {
-    size: i32,
+    size: usize,
     x: Var,
     l1: Var,
     l2: Var,
@@ -353,7 +356,7 @@ impl Applier<HEOptimizerCircuit, HEData> for RotateSquash {
         let l1_val = egraph[subst[self.l1]].data.constval.unwrap();
         let l2_val = egraph[subst[self.l2]].data.constval.unwrap();
 
-        let lval_sum = egraph.add(HEOptimizerCircuit::Num((l1_val + l2_val) % self.size));
+        let lval_sum = egraph.add(HEOptimizerCircuit::Num((l1_val + l2_val) % (self.size as isize)));
         let rot_sum: Id = egraph.add(HEOptimizerCircuit::Rot([xclass, lval_sum]));
 
         if egraph.union(matched_id, rot_sum) {
@@ -388,7 +391,7 @@ impl Applier<HEOptimizerCircuit, HEData> for RotateSplit {
         let l1_val = egraph[subst[self.l1]].data.constval.unwrap();
         let l2_val = egraph[subst[self.l2]].data.constval.unwrap();
 
-        let dir: i32 = if l1_val < 0 { 1 } else { -1 };
+        let dir: isize = if l1_val < 0 { 1 } else { -1 };
         let (mut cur_l1, mut cur_l2) = (l1_val + dir, l2_val + dir);
         let mut outer_rot = -dir;
         let mut has_split = false;
@@ -425,7 +428,7 @@ impl Applier<HEOptimizerCircuit, HEData> for RotateSplit {
     }
 }
 
-pub fn optimize(expr: &RecExpr<HEOptimizerCircuit>, size: i32, timeout: usize, extractor_type: ExtractorType) -> RecExpr<HEOptimizerCircuit> {
+pub fn optimize(expr: &RecExpr<HEOptimizerCircuit>, size: usize, timeout: usize, extractor_type: ExtractorType) -> RecExpr<HEOptimizerCircuit> {
     info!("running equality saturation for {} seconds...", timeout);
 
     let optimization_time = Instant::now(); 

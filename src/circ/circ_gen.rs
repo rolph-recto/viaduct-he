@@ -17,7 +17,7 @@ pub enum IndexFreeExpr {
 #[derive(Clone,Debug)]
 pub enum TransformedArray {
     // array received from the client
-    InputArray(ObjectName),
+    InputArray(HEObjectName),
 
     // fill the following dimensions of an array by rotating it
     Fill(Box<TransformedArray>, Dimension),
@@ -29,14 +29,14 @@ pub enum TransformedArray {
     Zero(Box<TransformedArray>, im::Vector<(usize, usize)>),
 }
 
-pub struct CircuitGenerator {
+pub struct HECircuitGenerator {
     name_generator: NameGenerator,
-    object_map: HashMap<ObjectName, HEObject>
+    object_map: HashMap<HEObjectName, HEObject>
 }
 
-impl CircuitGenerator {
+impl HECircuitGenerator {
     fn new() -> Self {
-        CircuitGenerator {
+        HECircuitGenerator {
             name_generator: NameGenerator::new(),
             object_map: HashMap::new(),
         }

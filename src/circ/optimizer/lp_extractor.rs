@@ -28,7 +28,9 @@ impl LpCostFunction<HEOptimizerCircuit, HEData> for OpSizeFunction {
                 0.1 * (muldepth as f64)
             },
 
-            HEOptimizerCircuit::Symbol(_) => 0.1,
+            HEOptimizerCircuit::CiphertextRef(_) => 0.1,
+
+            HEOptimizerCircuit::PlaintextRef(_) => 0.1,
         }
     }
 }

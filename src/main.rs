@@ -11,8 +11,8 @@ use std::fs::File;
 
 use he_vectorizer::circ::{
     lowering::{
-        program::{gen_program, HEProgram},
-        lowered_program::{HELoweredInstr, lower_program},
+        program::HEProgram,
+        lowered_program::{HELoweredInstr, HELoweredProgram},
     },
     optimizer::{HEOptimizerCircuit, ExtractorType, optimize}};
 
@@ -43,9 +43,13 @@ struct Arguments {
     #[clap(short = 's', long = "size", value_parser, default_value_t = 8192)]
     size: usize,
 
-    /// let input pass through and don't optimize it
+    /// don't run equality saturation to optimize program
     #[clap(short = 'p', long = "passthru")]
     passthrough: bool,
+
+    /// don't inline instructions
+    #[clap(short = 'n', long = "noinline")]
+    noinline: bool,
 }
 
 handlebars_helper!(instr_is_binary: |instr: HELoweredInstr| match instr {
@@ -105,7 +109,7 @@ fn main() {
 
     // parse the expression, the type annotation tells it which Language to use
     let init_expr: RecExpr<HEOptimizerCircuit> = input_str.parse().unwrap();
-    let init_prog = gen_program(&init_expr);
+    let init_prog = HEProgram::from(&init_expr);
     // info!("Initial HE expr:\n{}", init_expr.pretty(80));
     info!("Initial HE program (muldepth {}, latency {}ms):",
         init_prog.get_muldepth(),
@@ -121,13 +125,13 @@ fn main() {
 
     let opt_expr =
         if !args.passthrough {
-            optimize(&init_expr, args.size as i32, args.duration, args.extractor)
+            optimize(&init_expr, args.size, args.duration, args.extractor)
 
         } else {
             init_expr.clone()
         };
 
-    let opt_prog: HEProgram = gen_program(&opt_expr);
+    let opt_prog = HEProgram::from(&opt_expr);
 
     if !args.passthrough {
         info!("Optimized HE program (muldepth {}, latency {}ms):",
@@ -136,7 +140,7 @@ fn main() {
         );
     }
 
-    let lowered_prog = lower_program(&opt_prog, args.size);
+    let lowered_prog = HELoweredProgram::lower_program(&opt_prog, args.size, args.noinline);
 
     if args.outfile.len() > 1 {
         let f =  File::create(&args.outfile).unwrap();

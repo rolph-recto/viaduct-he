@@ -85,18 +85,21 @@ impl<'a> CostFunction<HEOptimizerCircuit> for HECostFunction<'a> {
                 }
             },
 
-
             HEOptimizerCircuit::Num(_) => {
                 self_cost.latency_map.insert(id, NUM_LATENCY);
             },
 
             HEOptimizerCircuit::Rot(_) => {
                 self_cost.latency_map.insert(id, ROT_LATENCY);
-            }
+            },
 
-            HEOptimizerCircuit::Symbol(_) => {
+            HEOptimizerCircuit::CiphertextRef(_) => {
                 self_cost.latency_map.insert(id, SYM_LATENCY);
-            }
+            },
+
+            HEOptimizerCircuit::PlaintextRef(_) => {
+                self_cost.latency_map.insert(id, SYM_LATENCY);
+            },
         }
 
         self_cost.calculate_cost();

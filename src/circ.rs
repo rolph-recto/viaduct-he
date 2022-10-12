@@ -1,15 +1,17 @@
 pub mod circ_gen;
 pub mod optimizer;
 pub mod lowering;
+pub mod partial_eval;
 
 pub type Dimension = usize;
 pub type Shape = im::Vector<usize>;
-pub type ObjectName = String;
+pub type HEObjectName = String;
 
 #[derive(Clone,Debug)]
 pub enum HECircuit {
-    CiphertextRef(ObjectName),
-    PlaintextRef(ObjectName),
+    CiphertextRef(HEObjectName),
+    PlaintextRef(HEObjectName),
+    Literal(isize),
     Add(Box<HECircuit>, Box<HECircuit>),
     Sub(Box<HECircuit>, Box<HECircuit>),
     Mul(Box<HECircuit>, Box<HECircuit>),
