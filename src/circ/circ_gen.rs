@@ -66,7 +66,7 @@ impl HECircuitGenerator {
                     };
 
                 let mut block_size: usize = 1;
-                for i in (*dim)..shape.len() {
+                for i in (*dim+1)..shape.len() {
                     block_size *= shape[i];
                 }
 
