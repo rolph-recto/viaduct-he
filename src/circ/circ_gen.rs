@@ -35,38 +35,79 @@ pub struct HECircuitGenerator {
 }
 
 impl HECircuitGenerator {
-    fn new() -> Self {
+    pub fn new() -> Self {
         HECircuitGenerator {
             name_generator: NameGenerator::new(),
             object_map: HashMap::new(),
         }
     }
 
-    fn gen_circuit_expr(&mut self, expr: &IndexFreeExpr) -> HECircuit {
+    fn gen_circuit_expr(&mut self, expr: &IndexFreeExpr) -> Result<(HECircuit, Shape), String> {
         match expr {
-            IndexFreeExpr::ReduceNode(op, dim, body) => todo!(),
+            // TODO optimize this
+            IndexFreeExpr::ReduceNode(op, dim, body) => {
+                let (circ, shape) = self.gen_circuit_expr(body)?;
+
+                let mut cur =
+                    if let IndexFreeExprOperator::OpSub = op {
+                        HECircuit::Sub(
+                            Box::new(HECircuit::Literal(0)),
+                            Box::new(circ.clone())
+                        )
+
+                    } else {
+                        circ.clone()
+                    };
+
+                let mut block_size: usize = 1;
+                for i in (*dim)..shape.len() {
+                    block_size *= shape[i];
+                }
+
+                for i in 0..shape[*dim] {
+                    let rot_circ = 
+                        HECircuit::Rotate(
+                            Box::new(circ.clone()),
+                            -(((i+1)*block_size) as isize));
+
+                    match op {
+                        IndexFreeExprOperator::OpAdd => {
+                            cur = HECircuit::Add(Box::new(cur), Box::new(rot_circ));
+                        }
+                        IndexFreeExprOperator::OpMul => {
+                            cur = HECircuit::Mul(Box::new(cur), Box::new(rot_circ));
+                        }
+                        IndexFreeExprOperator::OpSub => {
+                            cur = HECircuit::Sub(Box::new(cur), Box::new(rot_circ));
+                        }
+                    }
+                }
+
+                Ok((cur, shape))
+            },
 
             IndexFreeExpr::OpNode(op, expr1, expr2) => {
-                let circ1 = self.gen_circuit_expr(expr1);
-                let circ2 = self.gen_circuit_expr(expr2);
-                match op {
-                    IndexFreeExprOperator::OpAdd => {
-                        HECircuit::Add(Box::new(circ1), Box::new(circ2))
-                    },
+                let (circ1, shape1) = self.gen_circuit_expr(expr1)?;
+                let (circ2, _) = self.gen_circuit_expr(expr2)?;
+                let out_circ =
+                    match op {
+                        IndexFreeExprOperator::OpAdd => {
+                            HECircuit::Add(Box::new(circ1), Box::new(circ2))
+                        },
 
-                    IndexFreeExprOperator::OpMul => {
-                        HECircuit::Mul(Box::new(circ1), Box::new(circ2))
-                    },
+                        IndexFreeExprOperator::OpMul => {
+                            HECircuit::Mul(Box::new(circ1), Box::new(circ2))
+                        },
 
-                    IndexFreeExprOperator::OpSub => {
-                        HECircuit::Sub(Box::new(circ1), Box::new(circ2))
-                    },
-                }
+                        IndexFreeExprOperator::OpSub => {
+                            HECircuit::Sub(Box::new(circ1), Box::new(circ2))
+                        },
+                    };
+                Ok((out_circ, shape1))
             }
 
-            IndexFreeExpr::ArrayNode(array) => {
-                // self.gen_circuit_array(array)
-                todo!()
+            IndexFreeExpr::ArrayNode(arr) => {
+                self.gen_circuit_array(arr)
             }
         }
     }

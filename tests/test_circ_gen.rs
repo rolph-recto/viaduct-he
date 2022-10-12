@@ -1,4 +1,4 @@
-use he_vectorizer::circ::circ_gen::HECircuitGenerator;
+use he_vectorizer::circ::{circ_gen::HECircuitGenerator, HECircuit};
 
 #[test]
 fn test_mask_iteration_domain() {
