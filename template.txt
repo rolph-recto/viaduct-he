@@ -2,56 +2,60 @@ from random import randint
 from seal import *
 from time import time
 
-def pad_list(l, n):
-    return l + ([0]*(n-len(l)))
+class SEALWrapper:
+    def __init__(self, seal):
+        self.seal = seal
 
-def encode(seal, x):
-    return seal["batch_encoder"].encode(x)
+    def pad_list(self, l, n):
+        return l + ([0]*(n-len(l)))
 
-def encrypt(seal, x):
-    return seal["encryptor"].encrypt(x)
+    def encode(self, x):
+        return self.seal["batch_encoder"].encode(x)
 
-def add(seal, x, y):
-    return seal["evaluator"].add(x, y)
+    def encrypt(self, x):
+        return self.seal["encryptor"].encrypt(x)
 
-def add_plain(seal, x, y):
-    return seal["evaluator"].add_plain(x, y)
+    def add(self, x, y):
+        return self.seal["evaluator"].add(x, y)
 
-def add_inplace(seal, x, y):
-    seal["evaluator"].add_inplace(x, y)
+    def add_plain(self, x, y):
+        return self["evaluator"].add_plain(x, y)
 
-def add_plain_inplace(seal, x, y):
-    seal["evaluator"].add_plain_inplace(x, y)
+    def add_inplace(self, x, y):
+        self.seal["evaluator"].add_inplace(x, y)
 
-def multiply(seal, x, y):
-    return seal["evaluator"].multiply(x, y)
+    def add_plain_inplace(self, x, y):
+        self.seal["evaluator"].add_plain_inplace(x, y)
 
-def multiply_plain(seal, x, y):
-    return seal["evaluator"].multiply_plain(x, y)
+    def multiply(self, x, y):
+        return self.seal["evaluator"].multiply(x, y)
 
-def multiply_inplace(seal, x, y):
-    seal["evaluator"].multiply_inplace(x, y)
+    def multiply_plain(self, x, y):
+        return self.seal["evaluator"].multiply_plain(x, y)
 
-def multiply_plain_inplace(seal, x, y):
-    seal["evaluator"].multiply_plain_inplace(x, y)
+    def multiply_inplace(self, x, y):
+        self.seal["evaluator"].multiply_inplace(x, y)
 
-def rotate_rows(seal, x, amt):
-    return seal["evaluator"].rotate_rows(x, amt, seal["galois_keys"])
+    def multiply_plain_inplace(self, x, y):
+        self.seal["evaluator"].multiply_plain_inplace(x, y)
 
-def rotate_rows_inplace(seal, x, amt):
-    seal["evaluator"].rotate_rows_inplace(x, amt, seal["galois_keys"])
+    def rotate_rows(self, x, amt):
+        return self.seal["evaluator"].rotate_rows(x, amt, seal["galois_keys"])
 
-def relinearize_inplace(seal, x):
-    seal["evaluator"].relinearize_inplace(x, seal["relin_keys"])
+    def rotate_rows_inplace(self, x, amt):
+        self.seal["evaluator"].rotate_rows_inplace(x, amt, seal["galois_keys"])
 
-def invariant_noise_budget(seal, x):
-    return seal["decryptor"].invariant_noise_budget(x)
+    def relinearize_inplace(self, x):
+        self.seal["evaluator"].relinearize_inplace(x, seal["relin_keys"])
+
+    def invariant_noise_budget(self, x):
+        return self.seal["decryptor"].invariant_noise_budget(x)
 
 def main():
     init_start_time = time()
     
     seal = {}
-    seal["parms"] = EncryptionParameters(scheme_type.bgv)
+    seal["parms"] = EncryptionParameters(scheme_type.bfv)
 
     poly_modulus_degree = 8192*2*2
     seal["parms"].set_poly_modulus_degree(poly_modulus_degree)
@@ -72,17 +76,19 @@ def main():
     slot_count = seal["batch_encoder"].slot_count()
     row_size = slot_count / 2
 
+    wrapper = SEALWrapper(seal)
+
 {{#each inputs as |input|}}
-    {{input}} = encode(seal, [randint(1, 100) for _ in range(slot_count)])
-    {{input}} = encrypt(seal, {{input}})
+    {{input}} = wrapper.encode([randint(1, 100) for _ in range(slot_count)])
+    {{input}} = wrapper.encrypt({{input}})
 
 {{/each}}
 {{#each constants as |const|}}
-    {{const.[1]}} = encode(seal, pad_list({{const.[0]}}, slot_count))
+    {{const.[1]}} = wrapper.encode(pad_list({{const.[0]}}, slot_count))
 
 {{/each}}
 {{#each literals as |literal|}}
-    {{literal.[1]}} = encode(seal, [{{literal.[0]}} for _ in range(slot_count)])
+    {{literal.[1]}} = wrapper.encode([{{literal.[0]}} for _ in range(slot_count)])
 {{/each}}
 
     init_end_time = time()
@@ -93,22 +99,22 @@ def main():
 {{#each instrs as |instr|}}
     {{#if (instr_is_inplace instr) }}
     {{#if (instr_is_binary instr) }}
-    {{instr_name instr}}(seal, {{instr.op1}}, {{instr.op2}})
+    wrapper.{{instr_name instr}}({{instr.op1}}, {{instr.op2}})
     {{else}}
-    {{instr_name instr}}(seal, {{instr.op1}})
+    wrapper.{{instr_name instr}}({{instr.op1}})
     {{/if}}
     {{else}}
     {{#if (instr_is_binary instr) }}
-    {{instr.id}} = {{instr_name instr}}(seal, {{instr.op1}}, {{instr.op2}})
+    {{instr.id}} = wrapper.{{instr_name instr}}({{instr.op1}}, {{instr.op2}})
     {{else}}
-    {{instr.id}} = {{instr_name instr}}(seal, {{instr.op1}})
+    {{instr.id}} = wrapper.{{instr_name instr}}({{instr.op1}})
     {{/if}}
     {{/if}}
 {{/each}}
 
     exec_end_time = time()
     print("exec duration: {}ms".format((exec_end_time - exec_start_time)*1000))
-    print("noise budget: {} bits".format(invariant_noise_budget(seal, {{output}})))
+    print("noise budget: {} bits".format(wrapper.invariant_noise_budget({{output}})))
 
 if __name__ == "__main__":
     main()

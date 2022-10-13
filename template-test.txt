@@ -1,0 +1,168 @@
+import numpy as np
+from random import randint
+from time import time
+
+class Ciphertext:
+    def __init__(self, size=4096, arr=None):
+        self.size = size
+        if arr is not None:
+            self.array = np.array(arr)
+
+        else:
+            self.array = np.zeros(size)
+
+    def load(self, x):
+        n = len(x)
+        assert(self.size >= n)
+        self.array[:n] = np.array(x)
+
+    def get(self, n):
+        return self.array[:n]
+
+    def add_inplace(self, y):
+        if isinstance(y, Ciphertext):
+            self.array = self.array + y.array
+
+        else:
+            self.array = self.array + y
+
+    def sub_inplace(self, y):
+        if isinstance(y, Ciphertext):
+            self.array = self.array - y.array
+
+        else:
+            self.array = self.array - y
+
+    def multiply_inplace(self, y):
+        if isinstance(y, Ciphertext):
+            self.array = self.array * y.array
+
+        else:
+            self.array = self.array * y
+
+    def rotate_inplace(self, y):
+        self.array = self.array[[(i-n) % self.size for i in range(self.size)]]
+
+    def __add__(self, x):
+        if isinstance(x, Ciphertext):
+            return Ciphertext(self.size, self.array + x.array)
+
+        else:
+            return Ciphertext(self.size, self.array + x)
+
+    def __sub__(self, x):
+        if isinstance(x, Ciphertext):
+            return Ciphertext(self.size, self.array - x.array)
+
+        else:
+            return Ciphertext(self.size, self.array - x)
+        
+    def __mul__(self, x):
+        if isinstance(x, Ciphertext):
+            return Ciphertext(self.size, self.array * x.array)
+
+        else:
+            return Ciphertext(self.size, self.array * x)
+
+    def rotate(self, n):
+        return Ciphertext(self.size, self.array[[(i-n) % self.size for i in range(self.size)]])
+
+    def __str__(self):
+        return str(self.array)
+
+class TestWrapper:
+    def __init__(self, vec_size):
+        self.vec_size = vec_size
+
+    def pad_list(self, l, n):
+        return l + ([0]*(n-len(l)))
+
+    def encode(self, x):
+        return Ciphertext(self.vec_size, x)
+
+    def encrypt(self, x):
+        return x
+
+    def add(self, x, y):
+        return x + y
+
+    def add_plain(self, x, y):
+        return x + y
+
+    def add_inplace(self, x, y):
+        x.add_inplace(y)
+
+    def add_plain_inplace(self, x, y):
+        x.add_inplace(y)
+
+    def multiply(self, x, y):
+        return x * y
+
+    def multiply_plain(self, x, y):
+        return x * y
+
+    def multiply_inplace(self, x, y):
+        x.multiply_inplace(y)
+
+    def multiply_plain_inplace(self, x, y):
+        x.multiply_inplace(y)
+
+    def rotate_rows(self, x, amt):
+        return x.rotate(amt)
+
+    def rotate_rows_inplace(self, x, amt):
+        x.rotate_inplace(amt)
+
+    def relinearize_inplace(self, x):
+        pass
+
+    def invariant_noise_budget(self, x):
+        return 0
+
+def main():
+    init_start_time = time()
+
+    slot_count = 4096
+    row_size = 2048
+    wrapper = TestWrapper(slot_count)
+
+{{#each inputs as |input|}}
+    {{input}} = wrapper.encode([randint(1, 100) for _ in range(slot_count)])
+    {{input}} = wrapper.encrypt({{input}})
+
+{{/each}}
+{{#each constants as |const|}}
+    {{const.[1]}} = wrapper.encode(pad_list({{const.[0]}}, slot_count))
+
+{{/each}}
+{{#each literals as |literal|}}
+    {{literal.[1]}} = wrapper.encode([{{literal.[0]}} for _ in range(slot_count)])
+{{/each}}
+
+    init_end_time = time()
+    print("init duration: {}ms".format((init_end_time - init_start_time)*1000))
+
+    exec_start_time = time()
+
+{{#each instrs as |instr|}}
+    {{#if (instr_is_inplace instr) }}
+    {{#if (instr_is_binary instr) }}
+    wrapper.{{instr_name instr}}({{instr.op1}}, {{instr.op2}})
+    {{else}}
+    wrapper.{{instr_name instr}}({{instr.op1}})
+    {{/if}}
+    {{else}}
+    {{#if (instr_is_binary instr) }}
+    {{instr.id}} = wrapper.{{instr_name instr}}({{instr.op1}}, {{instr.op2}})
+    {{else}}
+    {{instr.id}} = wrapper.{{instr_name instr}}({{instr.op1}})
+    {{/if}}
+    {{/if}}
+{{/each}}
+
+    exec_end_time = time()
+    print("exec duration: {}ms".format((exec_end_time - exec_start_time)*1000))
+    print("noise budget: {} bits".format(wrapper.invariant_noise_budget({{output}})))
+
+if __name__ == "__main__":
+    main()

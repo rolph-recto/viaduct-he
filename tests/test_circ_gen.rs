@@ -69,6 +69,7 @@ fn test_blur() {
     println!("{}", res.unwrap().0)
 }
 
+// this replicates Figure 1 in Dathathri, PLDI 2019 (CHET)
 #[test]
 fn test_matmul() {
     let mut inputs: HashMap<HEObjectName, Ciphertext> = HashMap::new();
@@ -114,5 +115,4 @@ fn test_matmul() {
     for (name, obj) in plaintexts.iter() {
         println!("{}: {:?}", name, obj);
     }
-
 }
