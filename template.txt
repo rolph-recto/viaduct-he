@@ -78,9 +78,9 @@ def main():
 
     wrapper = SEALWrapper(seal)
 
-{{#each inputs as |input|}}
-    {{input}} = wrapper.encode([randint(1, 100) for _ in range(slot_count)])
-    {{input}} = wrapper.encrypt({{input}})
+{{#each ciphertexts as |ciphertexts|}}
+    {{ciphertexts}} = wrapper.encode([randint(1, 100) for _ in range(slot_count)])
+    {{ciphertexts}} = wrapper.encrypt({{ciphertexts}})
 
 {{/each}}
 {{#each constants as |const|}}

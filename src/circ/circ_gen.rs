@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use serde::Serialize;
+
 use crate::util::NameGenerator;
 use super::*;
 
@@ -6,6 +8,33 @@ use super::*;
 pub enum IndexFreeExprOperator {
     OpAdd, OpMul, OpSub
 }
+
+#[derive(Clone,Debug)]
+pub enum ClientTransform {
+    InputArray(HEObjectName),
+
+    // reorder dimensions
+    Transpose(Box<ClientTransform>, im::Vector<usize>),
+
+    // add dimensions to the vector, intially filled with 0
+    Expand(Box<ClientTransform>, usize),
+}
+
+impl ClientTransform {
+    pub fn as_python_str(&self) -> String {
+        match self {
+            ClientTransform::InputArray(arr) => arr.clone(),
+
+            ClientTransform::Transpose(expr, dims) =>
+                format!("transpose({},{:?})", expr.as_python_str(), dims),
+
+            ClientTransform::Expand(expr, num_dims) => 
+                format!("expand({},{})", expr.as_python_str(), num_dims)
+        }
+    }
+}
+
+pub type HEClientStore = HashMap<HEObjectName, ClientTransform>;
 
 #[derive(Clone,Debug)]
 pub enum IndexFreeExpr {

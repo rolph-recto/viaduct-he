@@ -119,6 +119,18 @@ class TestWrapper:
     def invariant_noise_budget(self, x):
         return 0
 
+def input(dims):
+    return np.zeros(tuple(dims))
+
+def client():
+{{#each client_inputs as |cinput|}}
+    {{cinput.0}} = input({{cinput.1}})
+{{/each}}
+
+{{#each client_preprocess as |p|}}
+    {{p.0}} = {{p.1}}
+{{/each}}
+
 def main():
     init_start_time = time()
 
@@ -126,9 +138,9 @@ def main():
     row_size = 2048
     wrapper = TestWrapper(slot_count)
 
-{{#each inputs as |input|}}
-    {{input}} = wrapper.encode([randint(1, 100) for _ in range(slot_count)])
-    {{input}} = wrapper.encrypt({{input}})
+{{#each ciphertexts as |ciphertext|}}
+    {{ciphertext}} = wrapper.encode([randint(1, 100) for _ in range(slot_count)])
+    {{ciphertext}} = wrapper.encrypt({{ciphertext}})
 
 {{/each}}
 {{#each constants as |const|}}
@@ -163,6 +175,8 @@ def main():
     exec_end_time = time()
     print("exec duration: {}ms".format((exec_end_time - exec_start_time)*1000))
     print("noise budget: {} bits".format(wrapper.invariant_noise_budget({{output}})))
+    print("output:")
+    print({{output}})
 
 if __name__ == "__main__":
     main()

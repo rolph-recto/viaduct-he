@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-use crate::circ::{*, lowering::program::*};
+use crate::circ::{*, lowering::program::*, circ_gen::HEClientStore};
  
 type HELoweredNodeId = String;
 type HELoweredOperand = String;
@@ -28,11 +28,14 @@ pub enum HELoweredInstr {
 #[derive(Serialize)]
 pub struct HELoweredProgram {
     vec_size: usize,
-    inputs: HashSet<String>,
     literals: Vec<(isize, String)>,
     constants: Vec<(Vec<isize>, String)>,
     instrs: Vec<HELoweredInstr>,
-    output: HELoweredNodeId
+    output: HELoweredNodeId,
+    client_inputs: Vec<(String, im::Vector<usize>)>,
+    server_inputs: Vec<(String, im::Vector<usize>)>,
+    ciphertexts: HashSet<String>,
+    client_preprocess: Vec<(String, String)>,
 }
 
 impl HELoweredProgram {
@@ -73,7 +76,15 @@ impl HELoweredProgram {
         }
     }
 
-    pub fn lower_program(prog: &HEProgram, store: &HECircuitStore, vec_size: usize, noinline: bool) -> HELoweredProgram {
+    pub fn lower_program(
+        vec_size: usize,
+        noinplace: bool,
+        prog: &HEProgram,
+        store: &HECircuitStore,
+        client_store: HEClientStore,
+        server_inputs: HashMap<HEObjectName,Shape>,
+        client_inputs: HashMap<HEObjectName,Shape>,
+    ) -> HELoweredProgram {
         let uses = prog.analyze_use();
         let mut inplace_map: HashMap<NodeId, NodeId> = HashMap::new();
         let mut const_map: HashMap<isize, String> = HashMap::new();
@@ -89,7 +100,7 @@ impl HELoweredProgram {
                         (HEOperand::Ref(r1), HEOperand::Ref(r2)) => {
                             match (r1, r2) {
                                 (HERef::Node(nr1), HERef::Node(_))
-                                if !uses[id+1].contains(nr1) && !noinline => {
+                                if !uses[id+1].contains(nr1) && !noinplace => {
                                     instrs.push(
                                         HELoweredInstr::AddInplace { op1: lop1, op2: lop2 }
                                     );
@@ -97,7 +108,7 @@ impl HELoweredProgram {
                                 },
 
                                 (HERef::Node(_), HERef::Node(nr2))
-                                if !uses[id+1].contains(nr2) && !noinline => {
+                                if !uses[id+1].contains(nr2) && !noinplace => {
                                     instrs.push(
                                         HELoweredInstr::AddInplace { op1: lop2, op2: lop1 }
                                     );
@@ -131,7 +142,7 @@ impl HELoweredProgram {
                         (HEOperand::Ref(r1), HEOperand::ConstNum(_)) => {
                             match r1 {
                                 HERef::Node(nr1)
-                                if !uses[id+1].contains(nr1) && !noinline => {
+                                if !uses[id+1].contains(nr1) && !noinplace => {
                                     instrs.push(
                                         HELoweredInstr::AddPlainInplace { op1: lop1, op2: lop2 }
                                     );
@@ -149,7 +160,7 @@ impl HELoweredProgram {
                         (HEOperand::ConstNum(_), HEOperand::Ref(r2)) => {
                             match r2 {
                                 HERef::Node(nr2)
-                                if !uses[id+1].contains(nr2) && !noinline => {
+                                if !uses[id+1].contains(nr2) && !noinplace => {
                                     instrs.push(
                                         HELoweredInstr::AddPlainInplace { op1: lop2, op2: lop1 }
                                     );
@@ -180,7 +191,7 @@ impl HELoweredProgram {
                             let mut cipher_cipher_op = false;
                             match (r1, r2) {
                                 (HERef::Node(nr1), HERef::Node(_))
-                                if !uses[id+1].contains(nr1) && !noinline => {
+                                if !uses[id+1].contains(nr1) && !noinplace => {
                                     instrs.push(
                                         HELoweredInstr::MulInplace { op1: lop1.clone(), op2: lop2 }
                                     );
@@ -190,7 +201,7 @@ impl HELoweredProgram {
                                 },
 
                                 (HERef::Node(_), HERef::Node(nr2))
-                                if !uses[id+1].contains(nr2) && !noinline => {
+                                if !uses[id+1].contains(nr2) && !noinplace => {
                                     instrs.push(
                                         HELoweredInstr::MulInplace { op1: lop2.clone(), op2: lop1 }
                                     );
@@ -238,7 +249,7 @@ impl HELoweredProgram {
                         (HEOperand::Ref(r1), HEOperand::ConstNum(_)) => {
                             match r1 {
                                 HERef::Node(nr1)
-                                if !uses[id+1].contains(nr1) && !noinline => {
+                                if !uses[id+1].contains(nr1) && !noinplace => {
                                     instrs.push(
                                         HELoweredInstr::MulPlainInplace { op1: lop1.clone(), op2: lop2 }
                                     );
@@ -256,7 +267,7 @@ impl HELoweredProgram {
                         (HEOperand::ConstNum(_), HEOperand::Ref(r2)) => {
                             match r2 {
                                 HERef::Node(nr2)
-                                if !uses[id+1].contains(nr2) && !noinline => {
+                                if !uses[id+1].contains(nr2) && !noinplace => {
                                     instrs.push(
                                         HELoweredInstr::MulPlainInplace { op1: lop2.clone(), op2: lop1 }
                                     );
@@ -285,7 +296,7 @@ impl HELoweredProgram {
                             let lop2 = cn2.to_string();
                             match r1 {
                                 HERef::Node(nr1)
-                                if !uses[id+1].contains(nr1) && !noinline => {
+                                if !uses[id+1].contains(nr1) && !noinplace => {
                                     instrs.push(
                                         HELoweredInstr::RotInplace { op1: lop1, op2: lop2 }
                                     );
@@ -311,7 +322,7 @@ impl HELoweredProgram {
         }
 
         let literals: Vec<(isize, String)> = const_map.into_iter().collect();
-        let inputs: HashSet<String> = prog.get_ciphertext_symbols();
+        let ciphertexts: HashSet<String> = prog.get_ciphertext_symbols();
 
         let constants: Vec<(Vec<isize>, String)> =
             prog.get_plaintext_symbols().into_iter().map(|sym|
@@ -338,6 +349,15 @@ impl HELoweredProgram {
             HELoweredInstr::RotInplace { op1, op2 } => op1.clone(),
             HELoweredInstr::RelinearizeInplace { op1 } => op1.clone(),
         };
-        HELoweredProgram { vec_size, inputs, literals, constants, instrs, output }
+        HELoweredProgram {
+            vec_size, literals, constants, instrs, output,
+            server_inputs: server_inputs.into_iter().collect(),
+            client_inputs: client_inputs.into_iter().collect(),
+            ciphertexts,
+            client_preprocess:
+                client_store.into_iter()
+                .map(|(k,v)| (k, v.as_python_str()))
+                .collect(),
+        }
     }
 }

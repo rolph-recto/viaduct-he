@@ -14,7 +14,7 @@ use he_vectorizer::circ::{
         program::HEProgram,
         lowered_program::{HELoweredInstr, HELoweredProgram}, code_gen::CodeGenerator,
     },
-    optimizer::{HEOptimizerCircuit, ExtractorType, optimize}, HECircuitStore};
+    optimizer::{HEOptimizerCircuit, ExtractorType, optimize}, HECircuitStore, circ_gen::ClientTransform};
 
 #[derive(Parser)]
 #[clap(author, version, about = "optimizer for for vectorized homomorphic encryption circuits", long_about = None)]
@@ -48,8 +48,8 @@ struct Arguments {
     passthrough: bool,
 
     /// don't inline instructions
-    #[clap(short = 'n', long = "noinline")]
-    noinline: bool,
+    #[clap(short = 'n', long = "noinplace")]
+    noinplace: bool,
 }
 
 fn main() {
@@ -86,13 +86,20 @@ fn main() {
         );
     }
 
-    let lowered_prog = HELoweredProgram::lower_program(&opt_prog, &HECircuitStore::default(), args.size, args.noinline);
+    let lowered_prog =
+        HELoweredProgram::lower_program(
+            &opt_prog, 
+            &HECircuitStore::default(),
+            HashMap::new(),
+            HashMap::new(),
+            HashMap::new(),
+             args.size,
+            args.noinplace);
     let codegen = CodeGenerator::new(&args.template);
 
     if args.outfile.len() > 1 {
         codegen.render_to_file(&lowered_prog, &args.outfile).unwrap();
         info!("Wrote program to {}", &args.outfile);
-
 
     } else {
         // info!("{}", handlebars.render("template", &lower_program(&init_prog, args.size)).unwrap());
