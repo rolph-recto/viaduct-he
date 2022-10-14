@@ -53,6 +53,10 @@ pub enum IndexFreeExpr {
     // array received from the client
     InputArray(HEObjectName),
 
+    // integer literal; must be treated as "shapeless" since literals can
+    // denote arrays of *any* dimension
+    Literal(isize),
+
     // TRANSFORMATIONS
 
     // fill the following dimensions of an array by rotating it
@@ -83,12 +87,14 @@ impl HECircuitGenerator {
         Ok((circuit, self.store.plaintexts.clone()))
     }
 
-    fn _gen_circuit(&mut self, expr: &IndexFreeExpr) -> Result<(HECircuit, Shape), String> {
+    fn _gen_circuit(&mut self, expr: &IndexFreeExpr) -> Result<(HECircuit, Option<Shape>), String> {
         match expr {
             // TODO optimize this
             IndexFreeExpr::ReduceNode(op, dim, body) => {
-                let (circ, shape) = self._gen_circuit(body)?;
-
+                let (circ, shape_opt) = self._gen_circuit(body)?;
+                let shape =
+                    shape_opt.ok_or(String::from("Cannot reduce dimensionless array"))?;
+            
                 let mut cur =
                     if let IndexFreeExprOperator::OpSub = op {
                         HECircuit::Sub(
@@ -124,12 +130,12 @@ impl HECircuitGenerator {
                     }
                 }
 
-                Ok((cur, shape))
+                Ok((cur, Some(shape)))
             },
 
             IndexFreeExpr::OpNode(op, expr1, expr2) => {
-                let (circ1, shape1) = self._gen_circuit(expr1)?;
-                let (circ2, _) = self._gen_circuit(expr2)?;
+                let (circ1, shape1_opt) = self._gen_circuit(expr1)?;
+                let (circ2, shape2_opt) = self._gen_circuit(expr2)?;
                 let out_circ =
                     match op {
                         IndexFreeExprOperator::OpAdd => {
@@ -144,18 +150,31 @@ impl HECircuitGenerator {
                             HECircuit::Sub(Box::new(circ1), Box::new(circ2))
                         },
                     };
-                Ok((out_circ, shape1))
+                let out_shape = 
+                    match (shape1_opt, shape2_opt) {
+                        (None, None) => None,
+                        (None, Some(shape2)) => Some(shape2),
+                        (Some(shape1), None) => Some(shape1),
+                        (Some(shape1), Some(_)) => Some(shape1),
+                    };
+                Ok((out_circ, out_shape))
             }
 
             IndexFreeExpr::InputArray(arr) => {
                 let object =
                     self.store.ciphertexts.get(arr)
                     .ok_or(format!("input array {} not found", arr))?;
-                Ok((HECircuit::CiphertextRef(arr.clone()), object.shape.clone()))
+                Ok((HECircuit::CiphertextRef(arr.clone()), Some(object.shape.clone())))
+            },
+
+            IndexFreeExpr::Literal(lit) => {
+                Ok((HECircuit::Literal(*lit), None))
             },
 
             IndexFreeExpr::Offset(expr, amounts) => {
-                let (circ, shape) = self._gen_circuit(expr)?;
+                let (circ, shape_opt) = self._gen_circuit(expr)?;
+                let shape =
+                    shape_opt.ok_or(String::from("Cannot apply offset transform to dimensionless array"))?;
 
                 let mut total_offset = 0;
                 let mut factor = 1;
@@ -164,11 +183,13 @@ impl HECircuitGenerator {
                     factor *= dim as isize;
                 }
 
-                Ok((HECircuit::Rotate(Box::new(circ), total_offset), shape))
+                Ok((HECircuit::Rotate(Box::new(circ), total_offset), Some(shape)))
             },
 
             IndexFreeExpr::Fill(expr, dim) => {
-                let (circ, shape) = self._gen_circuit(expr)?;
+                let (circ, shape_opt) = self._gen_circuit(expr)?;
+                let shape =
+                    shape_opt.ok_or(String::from("Cannot apply fill transform to dimensionless array"))?;
                 if *dim >= shape.len() {
                     Err(format!("Dimension {} is out of bounds for fill operation", dim))
 
@@ -192,12 +213,14 @@ impl HECircuitGenerator {
                             );
                     }
 
-                    Ok((res_circ, shape))
+                    Ok((res_circ, Some(shape)))
                 }
             },
 
             IndexFreeExpr::Zero(expr, zero_region) => {
-                let (circ, shape) = self._gen_circuit(expr)?;
+                let (circ, shape_opt) = self._gen_circuit(expr)?;
+                let shape =
+                    shape_opt.ok_or(String::from("Cannot apply zero transform to dimensionless array"))?;
 
                 let iter_domain = Self::get_iteration_domain(&shape);
                 let mut mask: Vec<isize> = Vec::new();
@@ -224,7 +247,7 @@ impl HECircuitGenerator {
                         Box::new(HECircuit::PlaintextRef(mask_name))
                     );
 
-                Ok((new_circ, shape))
+                Ok((new_circ, Some(shape)))
             }
         }
     }
