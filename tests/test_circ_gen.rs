@@ -19,6 +19,30 @@ fn test_mask_iteration_domain() {
 }
 
 #[test]
+fn test_literal() {
+    let mut inputs: HashMap<HEObjectName, Ciphertext> = HashMap::new();
+    inputs.insert("img".to_owned(), Ciphertext { shape: im::vector![10, 10] });
+
+    let mut circ_gen = HECircuitGenerator::new(&inputs);
+
+    let expr =
+        OpNode(
+            IndexFreeExprOperator::OpAdd,
+            Box::new(
+                Offset(
+                    Box::new(InputArray("img".to_owned())),
+                    im::vector![2,2]
+                )
+            ),
+            Box::new(Literal(2)),
+        );
+
+    let res = circ_gen.gen_circuit(&expr);
+    assert!(res.is_ok());
+    println!("{}", res.unwrap().0)
+}
+
+#[test]
 fn test_blur() {
     let mut inputs: HashMap<HEObjectName, Ciphertext> = HashMap::new();
     inputs.insert("img".to_owned(), Ciphertext { shape: im::vector![10, 10] });
