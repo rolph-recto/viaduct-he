@@ -39,10 +39,10 @@ pub(crate) struct HECostFunction<'a> {
     pub count: usize
 }
 
-impl<'a> CostFunction<HEOptimizerCircuit> for HECostFunction<'a> {
+impl<'a> CostFunction<HEOptCircuit> for HECostFunction<'a> {
     type Cost = HECost;
 
-    fn cost<C>(&mut self, enode: &HEOptimizerCircuit, mut costs: C) -> Self::Cost
+    fn cost<C>(&mut self, enode: &HEOptCircuit, mut costs: C) -> Self::Cost
         where C: FnMut(Id) -> Self::Cost
     {
         let id = self.egraph.find(self.egraph.lookup(enode.clone()).unwrap());
@@ -69,7 +69,7 @@ impl<'a> CostFunction<HEOptimizerCircuit> for HECostFunction<'a> {
         }
 
         match *enode {
-            HEOptimizerCircuit::Add(_) => {
+            HEOptCircuit::Add(_) => {
                 if self_data.constval.is_some() {
                     self_cost.latency_map.insert(id, ADD_PLAIN_LATENCY);
 
@@ -78,7 +78,7 @@ impl<'a> CostFunction<HEOptimizerCircuit> for HECostFunction<'a> {
                 }
             },
 
-            HEOptimizerCircuit::Mul(_) => {
+            HEOptCircuit::Mul(_) => {
                 if self_data.constval.is_some() {
                     self_cost.latency_map.insert(id, MUL_PLAIN_LATENCY);
 
@@ -88,19 +88,19 @@ impl<'a> CostFunction<HEOptimizerCircuit> for HECostFunction<'a> {
                 }
             },
 
-            HEOptimizerCircuit::Num(_) => {
+            HEOptCircuit::Num(_) => {
                 self_cost.latency_map.insert(id, NUM_LATENCY);
             },
 
-            HEOptimizerCircuit::Rot(_) => {
+            HEOptCircuit::Rot(_) => {
                 self_cost.latency_map.insert(id, ROT_LATENCY);
             },
 
-            HEOptimizerCircuit::CiphertextRef(_) => {
+            HEOptCircuit::CiphertextRef(_) => {
                 self_cost.latency_map.insert(id, SYM_LATENCY);
             },
 
-            HEOptimizerCircuit::PlaintextRef(_) => {
+            HEOptCircuit::PlaintextRef(_) => {
                 self_cost.latency_map.insert(id, SYM_LATENCY);
             },
         }

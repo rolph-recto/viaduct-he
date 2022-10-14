@@ -1,20 +1,19 @@
-#[macro_use] extern crate lalrpop_util;
+extern crate lalrpop_util;
 
 /// main.rs
 /// Vectorizer for homomorphic encryption circuits
 
 use clap::Parser;
-use handlebars::{Handlebars, handlebars_helper};
 use egg::RecExpr;
 use log::*;
-use std::{collections::HashMap, fs::File};
+use std::collections::HashMap;
 
 use he_vectorizer::circ::{
     lowering::{
         program::HEProgram,
-        lowered_program::{HELoweredInstr, HELoweredProgram}, code_gen::CodeGenerator,
+        lowered_program::HELoweredProgram, code_gen::CodeGenerator,
     },
-    optimizer::{HEOptimizerCircuit, ExtractorType, optimize}, HECircuitStore, circ_gen::ClientTransform};
+    optimizer::{HEOptCircuit, ExtractorType, optimize}, HECircuitStore, circ_gen::ClientTransform};
 
 #[derive(Parser)]
 #[clap(author, version, about = "optimizer for for vectorized homomorphic encryption circuits", long_about = None)]
@@ -61,7 +60,7 @@ fn main() {
         .expect(&format!("Could not read file {}", &args.file));
 
     // parse the expression, the type annotation tells it which Language to use
-    let init_expr: RecExpr<HEOptimizerCircuit> = input_str.parse().unwrap();
+    let init_expr: RecExpr<HEOptCircuit> = input_str.parse().unwrap();
     let init_prog = HEProgram::from(&init_expr);
     // info!("Initial HE expr:\n{}", init_expr.pretty(80));
     info!("Initial HE program (muldepth {}, latency {}ms):",
@@ -92,7 +91,13 @@ fn main() {
             args.noinplace,
             &opt_prog, 
             &HECircuitStore::default(),
-            HashMap::new(),
+            HashMap::from([
+                (String::from("cimg"),
+                ClientTransform::Pad(
+                    Box::new(ClientTransform::InputArray(String::from("img"))),
+                    im::vector![(2,2),(2,2)]
+                ))
+            ]),
             HashMap::new(),
             HashMap::new());
     let codegen = CodeGenerator::new(&args.template);

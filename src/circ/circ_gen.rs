@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Add};
 use serde::Serialize;
 
 use crate::util::NameGenerator;
@@ -18,6 +18,9 @@ pub enum ClientTransform {
 
     // add dimensions to the vector, intially filled with 0
     Expand(Box<ClientTransform>, usize),
+
+    // extend existing dimensions
+    Pad(Box<ClientTransform>, im::Vector<(usize, usize)>),
 }
 
 impl ClientTransform {
@@ -29,7 +32,10 @@ impl ClientTransform {
                 format!("transpose({},{:?})", expr.as_python_str(), dims),
 
             ClientTransform::Expand(expr, num_dims) => 
-                format!("expand({},{})", expr.as_python_str(), num_dims)
+                format!("expand({},{})", expr.as_python_str(), num_dims),
+
+            ClientTransform::Pad(expr, pad_list) =>
+                format!("pad({},{:?})", expr.as_python_str(), pad_list),
         }
     }
 }

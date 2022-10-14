@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::ops::RangeInclusive;
 
-use crate::circ::{*, optimizer, optimizer::HEOptimizerCircuit};
+use crate::circ::{*, optimizer, optimizer::HEOptCircuit};
 
 pub(crate) type NodeId = usize;
 
@@ -262,8 +262,8 @@ impl HEProgram {
     }
 }
 
-impl From<&RecExpr<HEOptimizerCircuit>> for HEProgram {
-    fn from(expr: &RecExpr<HEOptimizerCircuit>) -> Self {
+impl From<&RecExpr<HEOptCircuit>> for HEProgram {
+    fn from(expr: &RecExpr<HEOptCircuit>) -> Self {
         let mut node_map: HashMap<Id, HEOperand> = HashMap::new();
         let mut program: HEProgram = HEProgram { instrs: Vec::new() };
         let mut cur_instr: NodeId = 0;
@@ -285,19 +285,19 @@ impl From<&RecExpr<HEOptimizerCircuit>> for HEProgram {
         for (i, node) in expr.as_ref().iter().enumerate() {
             let id = Id::from(i);
             match node {
-                HEOptimizerCircuit::Num(n) => {
+                HEOptCircuit::Num(n) => {
                     node_map.insert(id, HEOperand::ConstNum(*n));
                 }
 
-                HEOptimizerCircuit::CiphertextRef(sym) => {
+                HEOptCircuit::CiphertextRef(sym) => {
                     node_map.insert(id, HEOperand::Ref(HERef::Ciphertext(sym.to_string())));
                 }
 
-                HEOptimizerCircuit::PlaintextRef(sym) => {
+                HEOptCircuit::PlaintextRef(sym) => {
                     node_map.insert(id, HEOperand::Ref(HERef::Plaintext(sym.to_string())));
                 }
 
-                HEOptimizerCircuit::Add([id1, id2]) => {
+                HEOptCircuit::Add([id1, id2]) => {
                     op_processor(
                         &mut node_map, id, 
                         |index, op1, op2| {
@@ -306,14 +306,14 @@ impl From<&RecExpr<HEOptimizerCircuit>> for HEProgram {
                         id1, id2);
                 }
 
-                HEOptimizerCircuit::Mul([id1, id2]) => {
+                HEOptCircuit::Mul([id1, id2]) => {
                     op_processor(
                         &mut node_map, id, 
                         |index, op1, op2| HEInstr::Mul { id: index, op1, op2 }, 
                         id1, id2);
                 }
 
-                HEOptimizerCircuit::Rot([id1, id2]) => {
+                HEOptCircuit::Rot([id1, id2]) => {
                     op_processor(
                         &mut node_map, id, 
                         |index, op1, op2| HEInstr::Rot { id: index, op1, op2 }, 

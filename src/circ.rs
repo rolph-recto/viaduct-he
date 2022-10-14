@@ -1,5 +1,9 @@
 use std::{collections::HashMap, fmt::Display};
 
+use egg::{RecExpr, Symbol, Id};
+
+use self::optimizer::HEOptCircuit;
+
 pub mod circ_gen;
 pub mod optimizer;
 pub mod lowering;
@@ -18,6 +22,52 @@ pub enum HECircuit {
     Sub(Box<HECircuit>, Box<HECircuit>),
     Mul(Box<HECircuit>, Box<HECircuit>),
     Rotate(Box<HECircuit>, isize),
+}
+
+impl HECircuit {
+    fn to_optimizer_circuit_recur(&self, expr: &mut RecExpr<HEOptCircuit>) -> Id {
+        match self {
+            HECircuit::CiphertextRef(name) => 
+                expr.add(HEOptCircuit::CiphertextRef(Symbol::from(name))),
+
+            HECircuit::PlaintextRef(name) => 
+                expr.add(HEOptCircuit::PlaintextRef(Symbol::from(name))),
+
+            HECircuit::Literal(lit) => 
+                expr.add(HEOptCircuit::Num(*lit)),
+
+            HECircuit::Add(op1, op2) => {
+                let id1 = op1.to_optimizer_circuit_recur(expr);
+                let id2 = op2.to_optimizer_circuit_recur(expr);
+                expr.add(HEOptCircuit::Add([id1,id2]))
+            },
+
+            HECircuit::Sub(op1, op2) => {
+                let id1 = op1.to_optimizer_circuit_recur(expr);
+                let id2 = op2.to_optimizer_circuit_recur(expr);
+                // expr.add(HEOptCircuit::Sub([id1,id2]))
+                todo!()
+            },
+
+            HECircuit::Mul(op1, op2) => {
+                let id1 = op1.to_optimizer_circuit_recur(expr);
+                let id2 = op2.to_optimizer_circuit_recur(expr);
+                expr.add(HEOptCircuit::Mul([id1,id2]))
+            },
+
+            HECircuit::Rotate(op1, op2) => {
+                let id1 = op1.to_optimizer_circuit_recur(expr);
+                let id2 = expr.add(HEOptCircuit::Num(*op2));
+                expr.add(HEOptCircuit::Rot([id1,id2]))
+            },
+        }
+    }
+
+    pub fn to_opt_circuit(&self) -> RecExpr<HEOptCircuit> {
+        let mut expr = RecExpr::default();
+        self.to_optimizer_circuit_recur(&mut expr);
+        expr
+    }
 }
 
 impl Display for HECircuit {
