@@ -88,13 +88,13 @@ fn main() {
 
     let lowered_prog =
         HELoweredProgram::lower_program(
+            args.size,
+            args.noinplace,
             &opt_prog, 
             &HECircuitStore::default(),
             HashMap::new(),
             HashMap::new(),
-            HashMap::new(),
-             args.size,
-            args.noinplace);
+            HashMap::new());
     let codegen = CodeGenerator::new(&args.template);
 
     if args.outfile.len() > 1 {
