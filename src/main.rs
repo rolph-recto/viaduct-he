@@ -42,10 +42,6 @@ struct Arguments {
     #[clap(short = 's', long = "size", value_parser, default_value_t = 8192)]
     size: usize,
 
-    /// don't run equality saturation to optimize program
-    #[clap(short = 'p', long = "passthru")]
-    passthrough: bool,
-
     /// don't inline instructions
     #[clap(short = 'n', long = "noinplace")]
     noinplace: bool,
@@ -69,7 +65,7 @@ fn main() {
     );
 
     let opt_expr =
-        if !args.passthrough {
+        if args.duration > 0 {
             optimize(&init_expr, args.size, args.duration, args.extractor)
 
         } else {
@@ -78,7 +74,7 @@ fn main() {
 
     let opt_prog = HEProgram::from(&opt_expr);
 
-    if !args.passthrough {
+    if args.duration > 0 {
         info!("Optimized HE program (muldepth {}, latency {}ms):",
             opt_prog.get_muldepth(),
             opt_prog.get_latency()
