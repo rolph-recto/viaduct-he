@@ -78,6 +78,15 @@ impl<'a> CostFunction<HEOptCircuit> for HECostFunction<'a> {
                 }
             },
 
+            HEOptCircuit::Sub(_) => {
+                if self_data.constval.is_some() {
+                    self_cost.latency_map.insert(id, SUB_PLAIN_LATENCY);
+
+                } else {
+                    self_cost.latency_map.insert(id, SUB_LATENCY);
+                }
+            },
+
             HEOptCircuit::Mul(_) => {
                 if self_data.constval.is_some() {
                     self_cost.latency_map.insert(id, MUL_PLAIN_LATENCY);

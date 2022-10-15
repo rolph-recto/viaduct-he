@@ -45,33 +45,38 @@ impl fmt::Display for HEOperand {
 }
 
 #[derive(Clone)]
-pub(crate) enum HEInstr {
+pub(crate) enum HEInstruction {
     Add { id: NodeId, op1: HEOperand, op2: HEOperand },
+    Sub { id: NodeId, op1: HEOperand, op2: HEOperand },
     Mul{ id: NodeId, op1: HEOperand, op2: HEOperand },
     Rot { id: NodeId, op1: HEOperand, op2: HEOperand} ,
 }
 
-impl HEInstr {
+impl HEInstruction {
     fn get_operands(&self) -> [&HEOperand;2] {
         match self {
-            HEInstr::Add { id: _, op1, op2 } |
-            HEInstr::Mul { id: _, op1, op2 } |
-            HEInstr::Rot { id: _, op1, op2 } =>
+            HEInstruction::Add { id: _, op1, op2 } |
+            HEInstruction::Sub { id: _, op1, op2 } |
+            HEInstruction::Mul { id: _, op1, op2 } |
+            HEInstruction::Rot { id: _, op1, op2 } =>
                 [op1, op2],
         }
     }
 }
 
-impl fmt::Display for HEInstr {
+impl fmt::Display for HEInstruction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            HEInstr::Add { id: _, op1, op2 } =>
+            HEInstruction::Add { id: _, op1, op2 } =>
                 write!(f, "{} + {}", op1, op2),
 
-            HEInstr::Mul { id: _, op1, op2 } =>
+            HEInstruction::Sub { id: _, op1, op2 } =>
+                write!(f, "{} - {}", op1, op2),
+
+            HEInstruction::Mul { id: _, op1, op2 } =>
                 write!(f, "{} * {}", op1, op2),
 
-            HEInstr::Rot { id: _, op1, op2 } =>
+            HEInstruction::Rot { id: _, op1, op2 } =>
                 write!(f, "rot {} {}", op1, op2),
         }
     }
@@ -93,7 +98,7 @@ impl fmt::Display for HEValue {
 }
 
 pub struct HEProgram {
-    pub(crate) instrs: Vec<HEInstr>,
+    pub(crate) instrs: Vec<HEInstruction>,
 }
 
 impl HEProgram {
@@ -115,12 +120,17 @@ impl HEProgram {
             let dlist: &Vec<usize> = &depth_list;
             let depth: usize =
                 match instr {
-                    HEInstr::Add { id: _, op1, op2 } => {
+                    HEInstruction::Add { id: _, op1, op2 } => {
                         let op1_depth = get_opdepth(dlist, op1);
                         let op2_depth: usize = get_opdepth(dlist, op2);
                         max(op1_depth, op2_depth)
                     },
-                    HEInstr::Mul { id: _, op1, op2 } => {
+                    HEInstruction::Sub { id: _, op1, op2 } => {
+                        let op1_depth = get_opdepth(dlist, op1);
+                        let op2_depth: usize = get_opdepth(dlist, op2);
+                        max(op1_depth, op2_depth)
+                    },
+                    HEInstruction::Mul { id: _, op1, op2 } => {
                         let op1_depth = get_opdepth(dlist, op1);
                         let op2_depth: usize = get_opdepth(dlist, op2);
 
@@ -131,7 +141,7 @@ impl HEProgram {
                             _ => max(op1_depth, op2_depth) + 1
                         }
                     },
-                    HEInstr::Rot { id: _, op1, op2 } => {
+                    HEInstruction::Rot { id: _, op1, op2 } => {
                         let op1_depth = get_opdepth(dlist, op1);
                         let op2_depth: usize = get_opdepth(dlist, op2);
                         max(op1_depth, op2_depth)
@@ -151,7 +161,7 @@ impl HEProgram {
         let mut latency: usize = 0;
         for instr in self.instrs.iter() {
             match instr {
-                HEInstr::Add { id: _, op1, op2 } => {
+                HEInstruction::Add { id: _, op1, op2 } => {
                     match (op1, op2) {
                         (HEOperand::ConstNum(_), _) | (_, HEOperand::ConstNum(_)) =>  {
                             latency += optimizer::ADD_PLAIN_LATENCY
@@ -163,7 +173,19 @@ impl HEProgram {
                     }
                 },
 
-                HEInstr::Mul { id: _, op1, op2 } => {
+                HEInstruction::Sub { id: _, op1, op2 } => {
+                    match (op1, op2) {
+                        (HEOperand::ConstNum(_), _) | (_, HEOperand::ConstNum(_)) =>  {
+                            latency += optimizer::ADD_PLAIN_LATENCY
+                        },
+
+                        _ => {
+                            latency += optimizer::ADD_LATENCY
+                        }
+                    }
+                },
+
+                HEInstruction::Mul { id: _, op1, op2 } => {
                     match (op1, op2) {
                         (HEOperand::ConstNum(_), _) | (_, HEOperand::ConstNum(_)) =>  {
                             latency += optimizer::MUL_PLAIN_LATENCY
@@ -175,7 +197,7 @@ impl HEProgram {
                     }
                 },
                 
-                HEInstr::Rot { id: _, op1: _, op2: _ } => {
+                HEInstruction::Rot { id: _, op1: _, op2: _ } => {
                     latency += optimizer::ROT_LATENCY
                 }
             }
@@ -241,9 +263,10 @@ impl HEProgram {
         for instr in self.instrs.iter().rev() {
             let mut new_use: HashSet<usize> = uses.last().unwrap().clone();
             match instr {
-                HEInstr::Add { id: _, op1, op2 } |
-                HEInstr::Mul { id: _, op1, op2 } |
-                HEInstr::Rot { id: _, op1, op2 } => {
+                HEInstruction::Add { id: _, op1, op2 } |
+                HEInstruction::Sub { id: _, op1, op2 } |
+                HEInstruction::Mul { id: _, op1, op2 } |
+                HEInstruction::Rot { id: _, op1, op2 } => {
                     if let HEOperand::Ref(HERef::Node(nr)) = op1 {
                         new_use.insert(*nr);
                     }
@@ -270,7 +293,7 @@ impl From<&RecExpr<HEOptCircuit>> for HEProgram {
 
         let mut op_processor =
             |nmap: &mut HashMap<Id, HEOperand>, id: Id,
-            ctor: fn(usize, HEOperand, HEOperand) -> HEInstr,
+            ctor: fn(usize, HEOperand, HEOperand) -> HEInstruction,
             id_op1: &Id, id_op2: &Id|
         {
             let op1 = &nmap[id_op1];
@@ -301,7 +324,16 @@ impl From<&RecExpr<HEOptCircuit>> for HEProgram {
                     op_processor(
                         &mut node_map, id, 
                         |index, op1, op2| {
-                            HEInstr::Add { id: index, op1, op2 }
+                            HEInstruction::Add { id: index, op1, op2 }
+                        },
+                        id1, id2);
+                }
+                
+                HEOptCircuit::Sub([id1, id2]) => {
+                    op_processor(
+                        &mut node_map, id, 
+                        |index, op1, op2| {
+                            HEInstruction::Sub { id: index, op1, op2 }
                         },
                         id1, id2);
                 }
@@ -309,14 +341,14 @@ impl From<&RecExpr<HEOptCircuit>> for HEProgram {
                 HEOptCircuit::Mul([id1, id2]) => {
                     op_processor(
                         &mut node_map, id, 
-                        |index, op1, op2| HEInstr::Mul { id: index, op1, op2 }, 
+                        |index, op1, op2| HEInstruction::Mul { id: index, op1, op2 }, 
                         id1, id2);
                 }
 
                 HEOptCircuit::Rot([id1, id2]) => {
                     op_processor(
                         &mut node_map, id, 
-                        |index, op1, op2| HEInstr::Rot { id: index, op1, op2 }, 
+                        |index, op1, op2| HEInstruction::Rot { id: index, op1, op2 }, 
                         id1, id2);
                 }
             }
@@ -363,7 +395,7 @@ impl HEProgramInterpreter {
         }
     }
 
-    fn interp_instr(&self, instr: &HEInstr) -> HEValue {
+    fn interp_instr(&self, instr: &HEInstruction) -> HEValue {
         let exec_binop = |op1: &HEOperand, op2: &HEOperand, f: fn(&isize, &isize) -> isize| -> HEValue {
             let val1 = self.interp_operand(op1);
             let val2 = self.interp_operand(op2);
@@ -388,13 +420,16 @@ impl HEProgramInterpreter {
         };
 
         match instr {
-            HEInstr::Add { id: _, op1, op2 }=>
+            HEInstruction::Add { id: _, op1, op2 }=>
                 exec_binop(op1, op2, |x1, x2| x1 + x2),
 
-            HEInstr::Mul { id: _, op1, op2 }=>
+            HEInstruction::Sub { id: _, op1, op2 }=>
+                exec_binop(op1, op2, |x1, x2| x1 + x2),
+
+            HEInstruction::Mul { id: _, op1, op2 }=>
                 exec_binop(op1, op2, |x1, x2| x1 * x2),
 
-            HEInstr::Rot { id: _, op1, op2 }=> {
+            HEInstruction::Rot { id: _, op1, op2 }=> {
                 let val1 = self.interp_operand(op1);
                 let val2 = self.interp_operand(op2);
                 match (val1, val2) {

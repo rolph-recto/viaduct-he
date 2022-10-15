@@ -40,13 +40,13 @@ class SEALWrapper:
         self.seal["evaluator"].multiply_plain_inplace(x, y)
 
     def rotate_rows(self, x, amt):
-        return self.seal["evaluator"].rotate_rows(x, amt, seal["galois_keys"])
+        return self.seal["evaluator"].rotate_rows(x, amt, self.seal["galois_keys"])
 
     def rotate_rows_inplace(self, x, amt):
-        self.seal["evaluator"].rotate_rows_inplace(x, amt, seal["galois_keys"])
+        self.seal["evaluator"].rotate_rows_inplace(x, amt, self.seal["galois_keys"])
 
     def relinearize_inplace(self, x):
-        self.seal["evaluator"].relinearize_inplace(x, seal["relin_keys"])
+        self.seal["evaluator"].relinearize_inplace(x, self.seal["relin_keys"])
 
     def invariant_noise_budget(self, x):
         return self.seal["decryptor"].invariant_noise_budget(x)

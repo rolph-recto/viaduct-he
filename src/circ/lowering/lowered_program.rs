@@ -16,6 +16,12 @@ pub enum HELoweredInstr {
     AddInplace { op1: HELoweredOperand, op2: HELoweredOperand },
     AddPlain { id: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
     AddPlainInplace { op1: HELoweredOperand, op2: HELoweredOperand },
+    Sub { id: HELoweredNodeId, op1: HELoweredOperand, op2: HELoweredOperand },
+    SubInplace { op1: HELoweredOperand, op2: HELoweredOperand },
+    SubPlain { id: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
+    SubPlainInplace { op1: HELoweredOperand, op2: HELoweredOperand },
+    Negate { id: HELoweredNodeId, op1: HELoweredOperand },
+    NegateInplace { op1: HELoweredOperand },
     Mul { id: HELoweredNodeId, op1: HELoweredOperand, op2: HELoweredOperand },
     MulInplace { op1: HELoweredOperand, op2: HELoweredOperand },
     MulPlain { id: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
@@ -92,7 +98,7 @@ impl HELoweredProgram {
 
         for instr in prog.instrs.iter() {
             match instr {
-                HEInstr::Add { id, op1, op2 } => {
+                HEInstruction::Add { id, op1, op2 } => {
                     let lid = format!("i{}", id);
                     let lop1 = Self::lower_operand(&inplace_map, &mut const_map, op1);
                     let lop2 = Self::lower_operand(&inplace_map, &mut const_map, op2);
@@ -176,12 +182,103 @@ impl HELoweredProgram {
                         },
 
                         (HEOperand::ConstNum(_), HEOperand::ConstNum(_)) => {
-                            panic!("attempting to add two plaintexts---this should be constant folded")
+                            panic!("attempting to add two constants---this should be constant folded")
                         }
                     }
                 },
 
-                HEInstr::Mul { id, op1, op2 } => {
+                HEInstruction::Sub { id, op1, op2 } => {
+                    let lid = format!("i{}", id);
+                    let lop1 = Self::lower_operand(&inplace_map, &mut const_map, op1);
+                    let lop2 = Self::lower_operand(&inplace_map, &mut const_map, op2);
+                    match (op1, op2) {
+                        (HEOperand::Ref(r1), HEOperand::Ref(r2)) => {
+                            match (r1, r2) {
+                                (HERef::Node(nr1), HERef::Node(_))
+                                if !uses[id+1].contains(nr1) && !noinplace => {
+                                    instrs.push(
+                                        HELoweredInstr::SubInplace { op1: lop1, op2: lop2 }
+                                    );
+                                    inplace_map.insert(*id, *nr1);
+                                },
+
+                                (HERef::Plaintext(_), HERef::Plaintext(_)) => {
+                                    panic!("attempting to subtract two plaintexts: {:?} and {:?}", r1, r2)
+                                },
+
+                                (_, HERef::Plaintext(_)) => {
+                                    instrs.push(
+                                        HELoweredInstr::SubPlain { id: lid, op1: lop1, op2: lop2 }
+                                    )
+                                },
+
+                                (HERef::Plaintext(_), _) => {
+                                    instrs.push(
+                                        HELoweredInstr::Negate { id: lid.clone(), op1: lop2 }
+                                    );
+                                    instrs.push(
+                                        HELoweredInstr::AddPlainInplace { op1: lid, op2: lop1 }
+                                    )
+                                },
+
+                                _ => {
+                                    instrs.push(
+                                        HELoweredInstr::Sub { id: lid, op1: lop1, op2: lop2 }
+                                    )
+                                }
+                            }
+                        },
+
+                        (HEOperand::Ref(r1), HEOperand::ConstNum(_)) => {
+                            match r1 {
+                                HERef::Node(nr1)
+                                if !uses[id+1].contains(nr1) && !noinplace => {
+                                    instrs.push(
+                                        HELoweredInstr::SubPlainInplace { op1: lop1, op2: lop2 }
+                                    );
+                                    inplace_map.insert(*id, *nr1);
+                                },
+
+                                _ => {
+                                    instrs.push(
+                                        HELoweredInstr::SubPlain { id: lid, op1: lop1, op2: lop2 }
+                                    )
+                                }
+                            }
+                        },
+
+                        (HEOperand::ConstNum(_), HEOperand::Ref(r2)) => {
+                            match r2 {
+                                HERef::Node(nr2)
+                                if !uses[id+1].contains(nr2) && !noinplace => {
+                                    instrs.push(
+                                        HELoweredInstr::NegateInplace { op1: lop2.clone() }
+                                    );
+                                    instrs.push(
+                                        HELoweredInstr::AddPlainInplace { op1: lop2, op2: lop1 }
+                                    );
+                                    inplace_map.insert(*id, *nr2);
+                                },
+
+                                _ => {
+                                    instrs.push(
+                                        HELoweredInstr::Negate { id: lid.clone(), op1: lop2.clone() }
+                                    );
+                                    instrs.push(
+                                        HELoweredInstr::AddPlainInplace { op1: lid, op2: lop1 }
+                                    )
+                                }
+                            }
+                        },
+
+                        (HEOperand::ConstNum(_), HEOperand::ConstNum(_)) => {
+                            panic!("attempting to subtract two constants---this should be constant folded")
+                        }
+                    }
+                },
+
+
+                HEInstruction::Mul { id, op1, op2 } => {
                     let lid = format!("i{}", id);
                     let lop1 = Self::lower_operand(&inplace_map, &mut const_map, op1);
                     let lop2 = Self::lower_operand(&inplace_map, &mut const_map, op2);
@@ -283,12 +380,12 @@ impl HELoweredProgram {
                         },
 
                         (HEOperand::ConstNum(_), HEOperand::ConstNum(_)) => {
-                            panic!("attempting to multiply two plaintexts---this should be constant folded")
+                            panic!("attempting to multiply two constants---this should be constant folded")
                         }
                     }
                 },
                 
-                HEInstr::Rot { id, op1, op2 } => {
+                HEInstruction::Rot { id, op1, op2 } => {
                     let lid = format!("i{}", id);
                     let lop1 = Self::lower_operand(&inplace_map, &mut const_map, op1);
                     match (op1, op2) {
@@ -341,6 +438,12 @@ impl HELoweredProgram {
             HELoweredInstr::AddInplace { op1, op2 } => op1.clone(),
             HELoweredInstr::AddPlain { id, op1, op2 } => id.clone(),
             HELoweredInstr::AddPlainInplace { op1, op2 } => op1.clone(),
+            HELoweredInstr::Sub { id, op1, op2 } => id.clone(),
+            HELoweredInstr::SubInplace { op1, op2 } => op1.clone(),
+            HELoweredInstr::SubPlain { id, op1, op2 } => id.clone(),
+            HELoweredInstr::SubPlainInplace { op1, op2 } => op1.clone(),
+            HELoweredInstr::Negate { id, op1 } => id.clone(),
+            HELoweredInstr::NegateInplace { op1 } => op1.clone(),
             HELoweredInstr::Mul { id, op1, op2 } => id.clone(),
             HELoweredInstr::MulInplace { op1, op2 } => op1.clone(),
             HELoweredInstr::MulPlain { id, op1, op2 } => id.clone(),

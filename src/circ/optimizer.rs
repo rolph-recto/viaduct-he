@@ -15,6 +15,7 @@ define_language! {
     pub enum HEOptCircuit {
         Num(isize),
         "+" = Add([Id; 2]),
+        "-" = Sub([Id; 2]),
         "*" = Mul([Id; 2]),
         "rot" = Rot([Id; 2]),
         CiphertextRef(Symbol),
@@ -31,10 +32,12 @@ impl From<HECircuit> for RecExpr<HEOptCircuit> {
 #[derive(Clone, ValueEnum)]
 pub enum ExtractorType { GREEDY, LP }
 
-pub const MUL_LATENCY: usize = 20;
-pub const MUL_PLAIN_LATENCY: usize = 8;
 pub const ADD_LATENCY: usize = 8;
 pub const ADD_PLAIN_LATENCY: usize = 4;
+pub const SUB_LATENCY: usize = 8;
+pub const SUB_PLAIN_LATENCY: usize = 4;
+pub const MUL_LATENCY: usize = 20;
+pub const MUL_PLAIN_LATENCY: usize = 8;
 pub const ROT_LATENCY: usize = 1;
 pub const SYM_LATENCY: usize = 0;
 pub const NUM_LATENCY: usize = 0;
@@ -71,6 +74,17 @@ impl Analysis<HEOptCircuit> for HEData {
                 let constval: Option<isize> = 
                     data(id1).constval.and_then(|d1|
                         data(id2).constval.map(|d2| d1 + d2)
+                    );
+
+                let muldepth = max(data(id1).muldepth, data(id2).muldepth);
+
+                HEData { constval, muldepth }
+            },
+
+            HEOptCircuit::Sub([id1, id2]) => {
+                let constval: Option<isize> = 
+                    data(id1).constval.and_then(|d1|
+                        data(id2).constval.map(|d2| d1 - d2)
                     );
 
                 let muldepth = max(data(id1).muldepth, data(id2).muldepth);
@@ -120,11 +134,13 @@ fn make_rules(size: usize) -> Vec<Rewrite<HEOptCircuit, HEData>> {
         rewrite!("add-identity"; "(+ ?a 0)" <=> "?a"),
         rewrite!("add-assoc"; "(+ ?a (+ ?b ?c))" <=> "(+ (+ ?a ?b) ?c)"),
         rewrite!("add-commute"; "(+ ?a ?b)" <=> "(+ ?b ?a)"),
+
         // bidirectional multiplication rules
         rewrite!("mul-identity"; "(* ?a 1)" <=> "?a"),
         rewrite!("mul-assoc"; "(* ?a (* ?b ?c))" <=> "(* (* ?a ?b) ?c)"),
         rewrite!("mul-commute"; "(* ?a ?b)" <=> "(* ?b ?a)"),
         rewrite!("mul-distribute"; "(* (+ ?a ?b) ?c)" <=> "(+ (* ?a ?c) (* ?b ?c))"),
+
         // bidirectional rotation rules
         rewrite!("rot-distribute-mul"; "(rot (* ?a ?b) ?l)" <=> "(* (rot ?a ?l) (rot ?b ?l))"),
         rewrite!("rot-distribute-add"; "(rot (+ ?a ?b) ?l)" <=> "(+ (rot ?a ?l) (rot ?b ?l))"),
@@ -134,6 +150,15 @@ fn make_rules(size: usize) -> Vec<Rewrite<HEOptCircuit, HEData>> {
     rules.extend(vec![
         // unidirectional rules
         rewrite!("mul-annihilator"; "(* ?a 0)" => "0"),
+
+        // a - b = a + (-1 * b)
+        rewrite!("sub-inverse"; "(- ?a ?b)" => {
+            SubInverse {
+                a: "?a".parse().unwrap(),
+                b: "?b".parse().unwrap(),
+            }
+        }),
+
         // constant folding
         rewrite!("add-fold"; "(+ ?a ?b)" => {
             ConstantFold {
@@ -142,6 +167,7 @@ fn make_rules(size: usize) -> Vec<Rewrite<HEOptCircuit, HEData>> {
                 b: "?b".parse().unwrap()
             }
         } if can_fold("?a", "?b")),
+
         rewrite!("mul-fold"; "(* ?a ?b)" => {
             ConstantFold {
                 is_add: false,
@@ -241,11 +267,35 @@ fn can_split_rot(
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct ConstantFold {
-    is_add: bool,
-    a: Var,
-    b: Var,
+struct SubInverse { a: Var, b: Var }
+
+impl Applier<HEOptCircuit, HEData> for SubInverse {
+    fn apply_one(
+        &self,
+        egraph: &mut HEGraph,
+        matched_id: Id,
+        subst: &Subst,
+        _: Option<&PatternAst<HEOptCircuit>>,
+        _: Symbol,
+    ) -> Vec<Id> {
+        let a_id = subst[self.a];
+        let b_id = subst[self.b];
+
+        let neg_one = egraph.add(HEOptCircuit::Num(-1));
+        let neg_b = egraph.add(HEOptCircuit::Mul([neg_one, b_id]));
+        let a_plus_neg_b = egraph.add(HEOptCircuit::Add([a_id, neg_b]));
+
+        if egraph.union(matched_id, a_plus_neg_b) {
+            vec![matched_id]
+        } else {
+            vec![]
+        }
+    }
 }
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ConstantFold { is_add: bool, a: Var, b: Var }
 
 impl Applier<HEOptCircuit, HEData> for ConstantFold {
     fn apply_one(
@@ -275,10 +325,7 @@ impl Applier<HEOptCircuit, HEData> for ConstantFold {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct FactorSplit {
-    a: Var,
-    b: Var,
-}
+struct FactorSplit { a: Var, b: Var }
 
 impl Applier<HEOptCircuit, HEData> for FactorSplit {
     fn apply_one(
@@ -313,11 +360,7 @@ impl Applier<HEOptCircuit, HEData> for FactorSplit {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct RotateWrap {
-    size: isize,
-    x: Var,
-    l: Var,
-}
+struct RotateWrap { size: isize, x: Var, l: Var }
 
 impl Applier<HEOptCircuit, HEData> for RotateWrap {
     fn apply_one(
@@ -342,12 +385,7 @@ impl Applier<HEOptCircuit, HEData> for RotateWrap {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct RotateSquash {
-    size: usize,
-    x: Var,
-    l1: Var,
-    l2: Var,
-}
+struct RotateSquash { size: usize, x: Var, l1: Var, l2: Var }
 
 impl Applier<HEOptCircuit, HEData> for RotateSquash {
     fn apply_one(

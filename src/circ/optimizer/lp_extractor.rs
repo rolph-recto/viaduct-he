@@ -14,6 +14,13 @@ impl LpCostFunction<HEOptCircuit, HEData> for OpSizeFunction {
                 6.0 * (muldepth as f64)
             },
 
+            HEOptCircuit::Sub([id1, id2]) => {
+                let d1 = egraph[*id1].data.muldepth;
+                let d2 = egraph[*id2].data.muldepth;
+                let muldepth = max(d1, d2) + 1;
+                6.0 * (muldepth as f64)
+            },
+
             HEOptCircuit::Mul([id1, id2]) => {
                 let d1 = egraph[*id1].data.muldepth;
                 let d2 = egraph[*id2].data.muldepth;
