@@ -13,7 +13,7 @@ use he_vectorizer::circ::{
         program::HEProgram,
         lowered_program::HELoweredProgram, code_gen::CodeGenerator,
     },
-    optimizer::{HEOptCircuit, ExtractorType, optimize}, HECircuitStore, circ_gen::ClientTransform};
+    optimizer::{HEOptCircuit, ExtractorType, Optimizer}, HECircuitStore, circ_gen::ClientTransform};
 
 #[derive(Parser)]
 #[clap(author, version, about = "optimizer for for vectorized homomorphic encryption circuits", long_about = None)]
@@ -66,7 +66,8 @@ fn main() {
 
     let opt_expr =
         if args.duration > 0 {
-            optimize(&init_expr, args.size, args.duration, args.extractor)
+            let optimizer = Optimizer::new(args.size);
+            optimizer.optimize(&init_expr, args.size, args.duration, args.extractor)
 
         } else {
             init_expr
