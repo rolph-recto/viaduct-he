@@ -1,7 +1,7 @@
 use egg::*;
 use log::*;
 use clap::ValueEnum;
-use std::{time::*, cmp::max};
+use std::{time::*, cmp::{max, min}};
 
 use self::{greedy_extractor::*, lp_extractor::*};
 
@@ -175,6 +175,7 @@ fn make_rules(size: usize) -> Vec<Rewrite<HEOptCircuit, HEData>> {
                 b: "?b".parse().unwrap()
             }
         } if can_fold("?a", "?b")),
+
         rewrite!("factor-split"; "(* ?a ?b)" => {
             FactorSplit {
                 a: "?a".parse().unwrap(),
@@ -183,12 +184,14 @@ fn make_rules(size: usize) -> Vec<Rewrite<HEOptCircuit, HEData>> {
         } if can_split_factor("?a", "?b")),
         // rotation of 0 doesn't do anything
         rewrite!("rot-none"; "(rot ?x ?l)" => "?x" if is_zero("?l")),
+
         // wrap rotation according to vector length
         /*
         rewrite!("rot-wrap"; "(rot ?x ?l)" => {
             RotateWrap { x: "?x".parse().unwrap(), l: "?l".parse().unwrap() }
         } if beyond_vec_length("?l")),
         */
+
         // squash nested rotations into a single rotation
         rewrite!("rot-squash"; "(rot (rot ?x ?l1) ?l2)" => {
             RotateSquash {
@@ -198,20 +201,32 @@ fn make_rules(size: usize) -> Vec<Rewrite<HEOptCircuit, HEData>> {
                 l2: "?l2".parse().unwrap()
             }
         }),
+
         // given an operation on rotated vectors,
         // split rotation before and after the operation
         rewrite!("rot-add-split"; "(+ (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
             RotateSplit {
-                is_add: true,
+                op: RotateSplitOp::Add,
                 x1: "?x1".parse().unwrap(),
                 l1: "?l1".parse().unwrap(),
                 x2: "?x2".parse().unwrap(),
                 l2: "?l2".parse().unwrap(),
             }
         } if can_split_rot("?l1", "?l2")),
+
+        rewrite!("rot-sub-split"; "(- (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
+            RotateSplit {
+                op: RotateSplitOp::Sub,
+                x1: "?x1".parse().unwrap(),
+                l1: "?l1".parse().unwrap(),
+                x2: "?x2".parse().unwrap(),
+                l2: "?l2".parse().unwrap(),
+            }
+        } if can_split_rot("?l1", "?l2")),
+
         rewrite!("rot-mul-split"; "(* (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
             RotateSplit {
-                is_add: false,
+                op: RotateSplitOp::Mul,
                 x1: "?x1".parse().unwrap(),
                 l1: "?l1".parse().unwrap(),
                 x2: "?x2".parse().unwrap(),
@@ -412,8 +427,11 @@ impl Applier<HEOptCircuit, HEData> for RotateSquash {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+enum RotateSplitOp { Add, Sub, Mul }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct RotateSplit {
-    is_add: bool,
+    op: RotateSplitOp,
     x1: Var,
     l1: Var,
     x2: Var,
@@ -435,33 +453,49 @@ impl Applier<HEOptCircuit, HEData> for RotateSplit {
         let l1_val = egraph[subst[self.l1]].data.constval.unwrap();
         let l2_val = egraph[subst[self.l2]].data.constval.unwrap();
 
-        let dir: isize = if l1_val < 0 { 1 } else { -1 };
-        let (mut cur_l1, mut cur_l2) = (l1_val + dir, l2_val + dir);
-        let mut outer_rot = -dir;
+        assert!(l1_val >= 0);
+        assert!(l2_val >= 0);
+
+        let max_outer = min(l1_val as usize, l2_val as usize);
         let mut has_split = false;
+        for i in 1..max_outer {
+            let cur_l1 = l1_val - (i as isize);
+            let cur_l2 = l2_val - (i as isize);
 
-        while l1_val * cur_l1 >= 0 || l2_val * cur_l2 >= 0 {
-            let cur_l1_class = egraph.add(HEOptCircuit::Num(cur_l1));
-            let cur_l2_class = egraph.add(HEOptCircuit::Num(cur_l2));
+            // recall that (rot x 0 ) = x
+            let rot_in1 =
+                if cur_l1 != 0 {
+                    let cur_l1_class = egraph.add(HEOptCircuit::Num(cur_l1));
+                    egraph.add(HEOptCircuit::Rot([x1_class, cur_l1_class]))
 
-            let rot_in1: Id = egraph.add(HEOptCircuit::Rot([x1_class, cur_l1_class]));
-            let rot_in2: Id = egraph.add(HEOptCircuit::Rot([x2_class, cur_l2_class]));
+                } else {
+                    x1_class
+                };
 
-            let op: HEOptCircuit = if self.is_add {
-                HEOptCircuit::Add([rot_in1, rot_in2])
-            } else {
-                HEOptCircuit::Mul([rot_in1, rot_in2])
-            };
+            let rot_in2 = 
+                if cur_l2 != 0 {
+                    let cur_l2_class = egraph.add(HEOptCircuit::Num(cur_l2));
+                    egraph.add(HEOptCircuit::Rot([x2_class, cur_l2_class]))
+                } else {
+                    x2_class
+                };
+
+            let op: HEOptCircuit =
+                match self.op {
+                    RotateSplitOp::Add =>
+                        HEOptCircuit::Add([rot_in1, rot_in2]),
+
+                    RotateSplitOp::Sub =>
+                        HEOptCircuit::Sub([rot_in1, rot_in2]),
+
+                    RotateSplitOp::Mul =>
+                        HEOptCircuit::Add([rot_in1, rot_in2]),
+                };
 
             let op_class = egraph.add(op);
-
-            let outer_rot_class = egraph.add(HEOptCircuit::Num(outer_rot));
+            let outer_rot_class = egraph.add(HEOptCircuit::Num(i as isize));
             let rot_outer = egraph.add(HEOptCircuit::Rot([op_class, outer_rot_class]));
-
             has_split = has_split || egraph.union(matched_id, rot_outer);
-            outer_rot += -dir;
-            cur_l1 += dir;
-            cur_l2 += dir;
         }
 
         if has_split {
