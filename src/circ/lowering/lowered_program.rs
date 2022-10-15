@@ -454,8 +454,14 @@ impl HELoweredProgram {
         };
         HELoweredProgram {
             vec_size, literals, constants, instrs, output,
-            server_inputs: server_inputs.into_iter().collect(),
-            client_inputs: client_inputs.into_iter().collect(),
+            server_inputs:
+                server_inputs.into_iter()
+                .map(|(k,v)| (k, v.as_vec().clone()))
+                .collect(),
+            client_inputs:
+                client_inputs.into_iter()
+                .map(|(k,v)| (k, v.as_vec().clone()))
+                .collect(),
             ciphertexts,
             client_preprocess:
                 client_store.into_iter()

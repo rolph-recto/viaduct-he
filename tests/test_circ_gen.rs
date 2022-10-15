@@ -21,7 +21,7 @@ fn test_mask_iteration_domain() {
 #[test]
 fn test_literal() {
     let mut inputs: HashMap<HEObjectName, Ciphertext> = HashMap::new();
-    inputs.insert("img".to_owned(), Ciphertext { shape: im::vector![10, 10] });
+    inputs.insert("img".to_owned(), Ciphertext { shape: Shape::from(im::vector![10, 10]) });
 
     let mut circ_gen = HECircuitGenerator::new(&inputs);
 
@@ -45,7 +45,7 @@ fn test_literal() {
 #[test]
 fn test_blur() {
     let mut inputs: HashMap<HEObjectName, Ciphertext> = HashMap::new();
-    inputs.insert("img".to_owned(), Ciphertext { shape: im::vector![10, 10] });
+    inputs.insert("img".to_owned(), Ciphertext { shape: Shape::from(im::vector![10, 10]) });
 
     let mut circ_gen = HECircuitGenerator::new(&inputs);
 
@@ -97,8 +97,8 @@ fn test_blur() {
 #[test]
 fn test_matmul() {
     let mut inputs: HashMap<HEObjectName, Ciphertext> = HashMap::new();
-    inputs.insert("A".to_owned(), Ciphertext { shape: im::vector![2, 2, 2] });
-    inputs.insert("B".to_owned(), Ciphertext { shape: im::vector![2, 2, 2] });
+    inputs.insert("A".to_owned(), Ciphertext { shape: Shape::from(im::vector![2, 2, 2]) });
+    inputs.insert("B".to_owned(), Ciphertext { shape: Shape::from(im::vector![2, 2, 2]) });
 
     let mut circ_gen = HECircuitGenerator::new(&inputs);
 

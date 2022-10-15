@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display};
+use std::{collections::HashMap, fmt::Display, ops::Index};
 
 use egg::{RecExpr, Symbol, Id};
 
@@ -10,8 +10,55 @@ pub mod lowering;
 pub mod partial_eval;
 
 pub type Dimension = usize;
-pub type Shape = im::Vector<usize>;
 pub type HEObjectName = String;
+
+#[derive(Clone,Debug)]
+pub struct Shape(im::Vector<usize>);
+
+impl Shape {
+    pub fn num_dims(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn size(&self) -> usize {
+        self.0.iter().fold(1, |acc, x| acc*x)
+    }
+
+    pub fn block_size(&self, dim: usize) -> usize {
+        let mut block_size: usize = 1;
+        for i in (dim+1)..self.0.len() {
+            block_size *= self.0[i];
+        }
+        block_size
+    }
+
+    pub fn as_vec(&self) -> &im::Vector<usize> {
+        &self.0
+    }
+
+    pub fn wrap_offset(&self, offset: isize) -> usize {
+        if offset < 0 {
+            ((self.size() as isize) - offset) as usize
+
+        } else {
+            offset as usize
+        }
+    }
+}
+
+impl Index<usize> for Shape {
+    type Output = usize;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+impl From<im::Vector<usize>> for Shape {
+    fn from(vec: im::Vector<usize>) -> Self {
+        Shape(vec)
+    }
+}
 
 #[derive(Clone,Debug)]
 pub enum HECircuit {
@@ -21,7 +68,7 @@ pub enum HECircuit {
     Add(Box<HECircuit>, Box<HECircuit>),
     Sub(Box<HECircuit>, Box<HECircuit>),
     Mul(Box<HECircuit>, Box<HECircuit>),
-    Rotate(Box<HECircuit>, isize),
+    Rotate(Box<HECircuit>, usize),
 }
 
 impl HECircuit {
@@ -57,7 +104,7 @@ impl HECircuit {
 
             HECircuit::Rotate(op1, op2) => {
                 let id1 = op1.to_optimizer_circuit_recur(expr);
-                let id2 = expr.add(HEOptCircuit::Num(*op2));
+                let id2 = expr.add(HEOptCircuit::Num(*op2 as isize));
                 expr.add(HEOptCircuit::Rot([id1,id2]))
             },
         }

@@ -1,5 +1,4 @@
-use std::{collections::HashMap, ops::Add};
-use serde::Serialize;
+use std::{collections::HashMap};
 
 use crate::util::NameGenerator;
 use super::*;
@@ -106,16 +105,13 @@ impl HECircuitGenerator {
                         circ.clone()
                     };
 
-                let mut block_size: usize = 1;
-                for i in (*dim+1)..shape.len() {
-                    block_size *= shape[i];
-                }
+                let block_size: usize = shape.block_size(*dim);
 
                 for i in 1..shape[*dim] {
                     let rot_circ = 
                         HECircuit::Rotate(
                             Box::new(circ.clone()),
-                            -((i*block_size) as isize)
+                            i*block_size
                         );
 
                     cur = match op {
@@ -178,26 +174,23 @@ impl HECircuitGenerator {
 
                 let mut total_offset = 0;
                 let mut factor = 1;
-                for (&dim, &offset) in shape.iter().zip(amounts).rev() {
+                for (&dim, &offset) in shape.as_vec().iter().zip(amounts).rev() {
                     total_offset += offset * factor;
                     factor *= dim as isize;
                 }
 
-                Ok((HECircuit::Rotate(Box::new(circ), total_offset), Some(shape)))
+                Ok((HECircuit::Rotate(Box::new(circ), shape.wrap_offset(total_offset)), Some(shape)))
             },
 
             IndexFreeExpr::Fill(expr, dim) => {
                 let (circ, shape_opt) = self._gen_circuit(expr)?;
                 let shape =
                     shape_opt.ok_or(String::from("Cannot apply fill transform to dimensionless array"))?;
-                if *dim >= shape.len() {
+                if *dim >= shape.num_dims() {
                     Err(format!("Dimension {} is out of bounds for fill operation", dim))
 
                 } else {
-                    let mut block_size = 1;
-                    for i in dim+1..shape.len() {
-                        block_size *= shape[i]
-                    }
+                    let block_size = shape.block_size(*dim);
 
                     let mut res_circ = circ;
                     for i in 1..shape[*dim] {
@@ -207,7 +200,7 @@ impl HECircuitGenerator {
                                 Box::new(
                                     HECircuit::Rotate(
                                         Box::new(res_circ),
-                                        (i * block_size) as isize
+                                        shape.wrap_offset(-((i * block_size) as isize))
                                     )
                                 )
                             );
@@ -222,7 +215,7 @@ impl HECircuitGenerator {
                 let shape =
                     shape_opt.ok_or(String::from("Cannot apply zero transform to dimensionless array"))?;
 
-                let iter_domain = Self::get_iteration_domain(&shape);
+                let iter_domain = Self::get_iteration_domain(&shape.as_vec());
                 let mut mask: Vec<isize> = Vec::new();
                 for point in iter_domain.iter() {
                     let mut is_zero = true;
@@ -255,7 +248,7 @@ impl HECircuitGenerator {
     fn get_iteration_domain_recur(
         dim: usize,
         head: im::Vector<usize>,
-        rest: Shape
+        rest: im::Vector<usize>
     ) -> im::Vector<im::Vector<usize>> {
         if rest.is_empty() {
             (0..dim)
@@ -275,7 +268,7 @@ impl HECircuitGenerator {
         }
     }
 
-    pub fn get_iteration_domain(dims: &Shape) -> im::Vector<im::Vector<usize>> {
+    pub fn get_iteration_domain(dims: &im::Vector<usize>) -> im::Vector<im::Vector<usize>> {
         if dims.is_empty() {
             im::Vector::new()
 
