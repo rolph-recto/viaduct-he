@@ -8,7 +8,7 @@ use self::{greedy_extractor::*, lp_extractor::*};
 use super::HECircuit;
 
 mod greedy_extractor;
-mod lp_extractor;
+pub mod lp_extractor;
 
 define_language! {
     /// The language used by egg e-graph engine.
