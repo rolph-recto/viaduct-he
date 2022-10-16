@@ -201,7 +201,7 @@ impl Applier<HEOptCircuit, HEData> for AddToMul {
         if bval != 0 {
             let b_inc_id = egraph.add(HEOptCircuit::Num(bval + 1));
             let mul_id = egraph.add(HEOptCircuit::Mul([a_id, b_inc_id]));
-            let add_id = egraph.add(HEOptCircuit::Mul([a_id, mul_id]));
+            let add_id = egraph.add(HEOptCircuit::Add([a_id, mul_id]));
             changed = changed || egraph.union(matched_id, add_id);
         }
 

@@ -139,7 +139,6 @@ impl<'a> HEExtractor<'a> {
                     are_children_const = are_children_const && egraph[*child].data.constval.is_some();
                 }
 
-                // TODO must check that *children* are constant
                 let latency =
                     match node {
                         HEOptCircuit::Num(_) =>
@@ -183,6 +182,8 @@ impl<'a> HEExtractor<'a> {
         Self { egraph, model, class_vars, root }
     }
 
+    // solve LP model and extract solution 
+    // very similar to egg's LpExtractor::solve_multiple
     pub fn solve(self) -> Result<RecExpr<HEOptCircuit>, ResolutionError> {
         let solution = self.model.solve()?;
         let mut expr: RecExpr<HEOptCircuit> = RecExpr::default();
