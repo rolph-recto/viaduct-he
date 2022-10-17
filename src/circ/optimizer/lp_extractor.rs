@@ -240,7 +240,6 @@ impl<'a> HEExtractor<'a> {
 }
 */
 
-/*
 pub struct HEExtractor<'a> {
     egraph: &'a HEGraph,
     model: Model,
@@ -258,7 +257,7 @@ struct ClassVars {
 impl<'a> HEExtractor<'a> {
     /// Create an [`LpExtractor`] using costs from the given [`LpCostFunction`].
     /// See those docs for details.
-    pub fn new(egraph: &'a HEGraph, root: Id) -> Self {
+    pub fn new(egraph: &'a HEGraph, root: Id, latency: HELatencyModel) -> Self {
         let max_order = egraph.total_number_of_nodes() as f64 * 10.0;
         let big_m = 1000000000.0;
 
@@ -344,44 +343,44 @@ impl<'a> HEExtractor<'a> {
 
         for class in egraph.classes() {
             for (node, &node_active) in class.iter().zip(&vars[&class.id].nodes) {
-                let mut are_children_const = true;
+                let mut is_plainop = true;
                 for child in node.children() {
-                    are_children_const = are_children_const && egraph[egraph.find(*child)].data.constval.is_some();
+                    is_plainop = is_plainop && egraph[egraph.find(*child)].data.constval.is_some();
                 }
 
                 let op_latency =
                     match node {
                         HEOptCircuit::Num(_) =>
-                            NUM_LATENCY,
+                            latency.num,
 
                         HEOptCircuit::Add(_) =>
-                            if are_children_const {
-                                ADD_PLAIN_LATENCY
+                            if is_plainop {
+                                latency.add_plain
+
                             } else {
-                                ADD_LATENCY
+                                latency.add
                             },
 
                         HEOptCircuit::Sub(_) =>
-                            if are_children_const {
-                                SUB_PLAIN_LATENCY
+                            if is_plainop {
+                                latency.sub_plain
                             } else {
-                                SUB_LATENCY
+                                latency.sub
                             },
 
                         HEOptCircuit::Mul(_) =>
-                            if are_children_const {
-                                MUL_PLAIN_LATENCY
+                            if is_plainop {
+                                latency.mul_plain
                             } else {
-                                MUL_LATENCY
+                                latency.mul
                             },
 
-                        HEOptCircuit::Rot(_) => 
-                            ROT_LATENCY,
+                        HEOptCircuit::Rot(_) => latency.rot,
 
                         HEOptCircuit::CiphertextRef(_) |
                         HEOptCircuit::PlaintextRef(_) =>
-                            SYM_LATENCY,
-                    } as f64;
+                            latency.sym,
+                    };
 
                 model.set_obj_coeff(node_active, op_latency);
             }
@@ -445,7 +444,6 @@ impl<'a> HEExtractor<'a> {
         expr
     }
 }
-*/
 
 
 // copied from egg's lp_extract module

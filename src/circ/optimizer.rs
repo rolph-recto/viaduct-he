@@ -677,17 +677,17 @@ impl Optimizer {
                 ExtractorType::GREEDY => {
                     info!("using greedy extractor to derive optimized program...");
                     // let extractor = GreedyExtractor::new(egraph, HECostFunction { egraph, count: 0 });
-                    let extractor = Extractor::new(egraph, HECostFunction { egraph, count: 0, latency: HELatencyModel::default() });
+                    let extractor = Extractor::new(egraph, HECostFunction { egraph, latency: HELatencyModel::default() });
                     let (_, opt_expr) = extractor.find_best(root);
                     info!("optimized solution found: {}", opt_expr.pretty(20));
                     opt_expr
                 },
                 ExtractorType::LP => {
                     info!("using LP extractor to derive optimized program...");
-                    let mut lp_extractor = LpExtractor::new(egraph, OpSizeFunction { latency: HELatencyModel::default() });
-                    let solution = lp_extractor.solve(root);
-                    // let mut lp_extractor = HEExtractor::new(egraph, root);
-                    // let solution = lp_extractor.solve().unwrap();
+                    // let mut lp_extractor = LpExtractor::new(egraph, OpSizeFunction { latency: HELatencyModel::default() });
+                    // let solution = lp_extractor.solve(root);
+                    let mut lp_extractor = HEExtractor::new(egraph, root, HELatencyModel::default());
+                    let solution = lp_extractor.solve();
                     info!("optimized solution found: {}", solution.pretty(20));
                     solution
                 }
