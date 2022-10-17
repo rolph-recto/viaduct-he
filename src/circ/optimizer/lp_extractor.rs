@@ -245,6 +245,7 @@ pub struct HEExtractor<'a> {
     model: Model,
     vars: HashMap<Id, ClassVars>,
     root: Id,
+    cycles: HashSet<(Id, usize)>,
 }
 
 struct ClassVars {
@@ -278,7 +279,7 @@ impl<'a> HEExtractor<'a> {
             .collect();
 
         let mut cycles: HashSet<(Id, usize)> = Default::default();
-        find_cycles(egraph, |id, i| {
+        find_cycles(egraph, root, |id, i| {
             cycles.insert((id, i));
         });
 
@@ -393,6 +394,7 @@ impl<'a> HEExtractor<'a> {
             model,
             vars,
             root: egraph.find(root),
+            cycles,
         }
     }
 
@@ -428,7 +430,11 @@ impl<'a> HEExtractor<'a> {
                 continue;
             }
             let v = &self.vars[&id];
-            assert!(solution.col(v.active) > 0.0);
+            assert!(solution.col(v.active) > 0.0,
+                "num nodes: {}; num nodes in cycle: {}",
+                v.nodes.len(),
+                self.cycles.iter().filter(|(id2, _)| id == *id2).count()
+            );
             let node_idx = v.nodes.iter().position(|&n| solution.col(n) > 0.0).unwrap();
             let node = &self.egraph[id].nodes[node_idx];
             if node.all(|child| ids.contains_key(&child)) {
@@ -447,7 +453,7 @@ impl<'a> HEExtractor<'a> {
 
 
 // copied from egg's lp_extract module
-fn find_cycles<L, N>(egraph: &EGraph<L, N>, mut f: impl FnMut(Id, usize))
+fn find_cycles<L, N>(egraph: &EGraph<L, N>, root: Id, mut f: impl FnMut(Id, usize))
 where
     L: Language,
     N: Analysis<L>,
@@ -460,7 +466,8 @@ where
     type Enter = bool;
 
     let mut color: HashMap<Id, Color> = egraph.classes().map(|c| (c.id, Color::White)).collect();
-    let mut stack: Vec<(Enter, Id)> = egraph.classes().map(|c| (true, c.id)).collect();
+    // let mut stack: Vec<(Enter, Id)> = egraph.classes().map(|c| (true, c.id)).collect();
+    let mut stack: Vec<(Enter, Id)> = Vec::from([(true, root)]);
 
     while let Some((enter, id)) = stack.pop() {
         if enter {

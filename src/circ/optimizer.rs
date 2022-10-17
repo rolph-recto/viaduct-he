@@ -614,35 +614,35 @@ impl Optimizer {
 
             // given an operation on rotated vectors,
             // split rotation before and after the operation
-            // rewrite!("rot-add-split"; "(+ (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
-            //     RotateSplit {
-            //         op: RewriteOp::Add,
-            //         x1: "?x1".parse().unwrap(),
-            //         l1: "?l1".parse().unwrap(),
-            //         x2: "?x2".parse().unwrap(),
-            //         l2: "?l2".parse().unwrap(),
-            //     }
-            // } if can_split_rot("?l1", "?l2")),
+            rewrite!("rot-add-split"; "(+ (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
+                RotateSplit {
+                    op: RewriteOp::Add,
+                    x1: "?x1".parse().unwrap(),
+                    l1: "?l1".parse().unwrap(),
+                    x2: "?x2".parse().unwrap(),
+                    l2: "?l2".parse().unwrap(),
+                }
+            } if can_split_rot("?l1", "?l2")),
 
-            // rewrite!("rot-sub-split"; "(- (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
-            //     RotateSplit {
-            //         op: RewriteOp::Sub,
-            //         x1: "?x1".parse().unwrap(),
-            //         l1: "?l1".parse().unwrap(),
-            //         x2: "?x2".parse().unwrap(),
-            //         l2: "?l2".parse().unwrap(),
-            //     }
-            // } if can_split_rot("?l1", "?l2")),
+            rewrite!("rot-sub-split"; "(- (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
+                RotateSplit {
+                    op: RewriteOp::Sub,
+                    x1: "?x1".parse().unwrap(),
+                    l1: "?l1".parse().unwrap(),
+                    x2: "?x2".parse().unwrap(),
+                    l2: "?l2".parse().unwrap(),
+                }
+            } if can_split_rot("?l1", "?l2")),
 
-            // rewrite!("rot-mul-split"; "(* (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
-            //     RotateSplit {
-            //         op: RewriteOp::Mul,
-            //         x1: "?x1".parse().unwrap(),
-            //         l1: "?l1".parse().unwrap(),
-            //         x2: "?x2".parse().unwrap(),
-            //         l2: "?l2".parse().unwrap(),
-            //     }
-            // } if can_split_rot("?l1", "?l2")),
+            rewrite!("rot-mul-split"; "(* (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
+                RotateSplit {
+                    op: RewriteOp::Mul,
+                    x1: "?x1".parse().unwrap(),
+                    l1: "?l1".parse().unwrap(),
+                    x2: "?x2".parse().unwrap(),
+                    l2: "?l2".parse().unwrap(),
+                }
+            } if can_split_rot("?l1", "?l2")),
         ]);
 
         Optimizer { rules }
@@ -677,6 +677,7 @@ impl Optimizer {
                 ExtractorType::GREEDY => {
                     info!("using greedy extractor to derive optimized program...");
                     // let extractor = GreedyExtractor::new(egraph, HECostFunction { egraph, count: 0 });
+                    // let extractor = Extractor::new(egraph, HECostFunction { egraph, latency: HELatencyModel::default() });
                     let extractor = Extractor::new(egraph, HECostFunction { egraph, latency: HELatencyModel::default() });
                     let (_, opt_expr) = extractor.find_best(root);
                     info!("optimized solution found: {}", opt_expr.pretty(20));
@@ -685,9 +686,10 @@ impl Optimizer {
                 ExtractorType::LP => {
                     info!("using LP extractor to derive optimized program...");
                     // let mut lp_extractor = LpExtractor::new(egraph, OpSizeFunction { latency: HELatencyModel::default() });
-                    // let solution = lp_extractor.solve(root);
-                    let mut lp_extractor = HEExtractor::new(egraph, root, HELatencyModel::default());
-                    let solution = lp_extractor.solve();
+                    let mut lp_extractor = LpExtractor::new(egraph, AstSize);
+                    let solution = lp_extractor.solve(root);
+                    // let mut lp_extractor = HEExtractor::new(egraph, root, HELatencyModel::default());
+                    // let solution = lp_extractor.solve();
                     info!("optimized solution found: {}", solution.pretty(20));
                     solution
                 }
