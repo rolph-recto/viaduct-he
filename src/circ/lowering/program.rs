@@ -8,6 +8,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::ops::RangeInclusive;
 
+use crate::circ::optimizer::HELatencyModel;
 use crate::circ::{*, optimizer, optimizer::HEOptCircuit};
 
 pub(crate) type NodeId = usize;
@@ -157,18 +158,18 @@ impl HEProgram {
     }
 
     /// calculate the latency of a program
-    pub fn get_latency(&self) -> usize {
-        let mut latency: usize = 0;
+    pub fn get_latency(&self, model: &HELatencyModel) -> f64 {
+        let mut latency: f64 = 0.0;
         for instr in self.instrs.iter() {
             match instr {
                 HEInstruction::Add { id: _, op1, op2 } => {
                     match (op1, op2) {
                         (HEOperand::ConstNum(_), _) | (_, HEOperand::ConstNum(_)) =>  {
-                            latency += optimizer::ADD_PLAIN_LATENCY
+                            latency += model.add_plain;
                         },
 
                         _ => {
-                            latency += optimizer::ADD_LATENCY
+                            latency += model.add
                         }
                     }
                 },
@@ -176,11 +177,11 @@ impl HEProgram {
                 HEInstruction::Sub { id: _, op1, op2 } => {
                     match (op1, op2) {
                         (HEOperand::ConstNum(_), _) | (_, HEOperand::ConstNum(_)) =>  {
-                            latency += optimizer::ADD_PLAIN_LATENCY
+                            latency += model.add_plain;
                         },
 
                         _ => {
-                            latency += optimizer::ADD_LATENCY
+                            latency += model.add;
                         }
                     }
                 },
@@ -188,17 +189,17 @@ impl HEProgram {
                 HEInstruction::Mul { id: _, op1, op2 } => {
                     match (op1, op2) {
                         (HEOperand::ConstNum(_), _) | (_, HEOperand::ConstNum(_)) =>  {
-                            latency += optimizer::MUL_PLAIN_LATENCY
+                            latency += model.mul_plain;
                         },
 
                         _ => {
-                            latency += optimizer::MUL_LATENCY
+                            latency += model.mul;
                         }
                     }
                 },
                 
                 HEInstruction::Rot { id: _, op1: _, op2: _ } => {
-                    latency += optimizer::ROT_LATENCY
+                    latency += model.rot;
                 }
             }
         }

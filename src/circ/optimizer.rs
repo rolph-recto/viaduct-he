@@ -35,15 +35,33 @@ enum RewriteOp { Add, Sub, Mul }
 #[derive(Clone, ValueEnum)]
 pub enum ExtractorType { GREEDY, LP }
 
-pub const ADD_LATENCY: usize = 8;
-pub const ADD_PLAIN_LATENCY: usize = 4;
-pub const SUB_LATENCY: usize = 8;
-pub const SUB_PLAIN_LATENCY: usize = 4;
-pub const MUL_LATENCY: usize = 20;
-pub const MUL_PLAIN_LATENCY: usize = 8;
-pub const ROT_LATENCY: usize = 1;
-pub const SYM_LATENCY: usize = 0;
-pub const NUM_LATENCY: usize = 0;
+pub struct HELatencyModel {
+    pub add: f64,
+    pub add_plain: f64,
+    pub sub: f64,
+    pub sub_plain: f64,
+    pub mul: f64,
+    pub mul_plain: f64,
+    pub rot: f64,
+    pub num: f64,
+    pub sym: f64,
+}
+
+impl Default for HELatencyModel {
+    fn default() -> Self {
+        Self {
+            add: 8.0,
+            add_plain: 4.0,
+            sub: 8.0,
+            sub_plain: 4.0,
+            mul: 20.0,
+            mul_plain: 8.0,
+            rot: 1.0,
+            num: 0.1,
+            sym: 0.1,
+        }
+    }
+}
 
 pub(crate) type HEGraph = egg::EGraph<HEOptCircuit, HEData>;
 
@@ -63,6 +81,22 @@ impl Analysis<HEOptCircuit> for HEData {
         } else {
             panic!("attmepting to merge numeric exprs with different values: {:?} and {:?} ", to.constval, from.constval);
         }
+        /*
+        match (to.constval, from.constval) {
+            (None, None) | (Some(_), None) => {},
+            (None, Some(from_val)) => {
+                to.constval = Some(from_val);
+            },
+            (Some(to_val), Some(from_val)) => {
+                if to_val != from_val {
+                    panic!("attmepting to merge numeric exprs with different values: {:?} and {:?} ", to_val, from_val);
+                }
+            }
+        }
+
+        to.muldepth = min(to.muldepth, from.muldepth);
+        DidMerge(true, true)
+        */
     }
 
     fn make(egraph: &HEGraph, enode: &HEOptCircuit) -> Self::Data {
@@ -143,15 +177,17 @@ fn is_constant(str: &'static str) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
         egraph[subst[var]].data.constval.is_some()
 }
 
-fn has_nonzero_factor(
+fn has_constant_factor(
     astr: &'static str,
     bstr: &'static str,
 ) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
     let avar = astr.parse().unwrap();
     let bvar = bstr.parse().unwrap();
     move |egraph, _, subst| {
-        match (egraph[subst[avar]].data.constval, egraph[subst[bvar]].data.constval) {
-            (None, Some(bval)) => bval != 0,
+        let a_id = egraph.find(subst[avar]);
+        let b_id = egraph.find(subst[bvar]);
+        match (egraph[a_id].data.constval, egraph[b_id].data.constval) {
+            (None, Some(bval)) => true,
             _ => false
         }
     }
@@ -194,15 +230,14 @@ impl Applier<HEOptCircuit, HEData> for AddToMul {
         _: Symbol,
     ) -> Vec<Id> {
         let a_id = subst[self.a];
-        let b_id = subst[self.b];
+        let b_id = egraph.find(subst[self.b]);
         let bval = egraph[b_id].data.constval.unwrap();
 
         let mut changed = false;
-        if bval != 0 {
+        if bval != -1 {
             let b_inc_id = egraph.add(HEOptCircuit::Num(bval + 1));
             let mul_id = egraph.add(HEOptCircuit::Mul([a_id, b_inc_id]));
-            let add_id = egraph.add(HEOptCircuit::Add([a_id, mul_id]));
-            changed = changed || egraph.union(matched_id, add_id);
+            changed = changed || egraph.union(matched_id, mul_id);
         }
 
         if changed {
@@ -237,7 +272,11 @@ impl Applier<HEOptCircuit, HEData> for MulToAdd {
 
                 let mut acc = egraph.add(HEOptCircuit::Mul([a_id, cur_b_id]));
                 for _ in 0..i {
-                    acc = egraph.add(HEOptCircuit::Add([a_id, acc]));
+                    if bval > 0 {
+                        acc = egraph.add(HEOptCircuit::Add([acc, a_id]));
+                    } else {
+                        acc = egraph.add(HEOptCircuit::Sub([acc, a_id]));
+                    }
                 }
 
                 changed = changed || egraph.union(matched_id, acc);
@@ -423,8 +462,8 @@ impl Applier<HEOptCircuit, HEData> for RotateSplit {
         let l1_val = egraph[subst[self.l1]].data.constval.unwrap();
         let l2_val = egraph[subst[self.l2]].data.constval.unwrap();
 
-        assert!(l1_val >= 0);
-        assert!(l2_val >= 0);
+        assert!(l1_val >= 0, "l1_val is {}", l1_val);
+        assert!(l2_val >= 0, "l2_val is {}", l2_val);
 
         let max_outer = min(l1_val as usize, l2_val as usize);
         let mut has_split = false;
@@ -518,7 +557,7 @@ impl Optimizer {
                     a: "?a".parse().unwrap(),
                     b: "?b".parse().unwrap()
                 }
-            } if has_nonzero_factor("?a", "?b")),
+            } if has_constant_factor("?a", "?b")),
 
             // x * c = x + (x * (c - 1)), where c is a constant
             rewrite!("mul-to-add"; "(* ?a ?b)" => {
@@ -526,7 +565,7 @@ impl Optimizer {
                     a: "?a".parse().unwrap(),
                     b: "?b".parse().unwrap()
                 }
-            } if has_nonzero_factor("?a", "?b")),
+            } if has_constant_factor("?a", "?b")),
 
             // constant folding
             rewrite!("add-fold"; "(+ ?a ?b)" => {
@@ -575,35 +614,35 @@ impl Optimizer {
 
             // given an operation on rotated vectors,
             // split rotation before and after the operation
-            rewrite!("rot-add-split"; "(+ (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
-                RotateSplit {
-                    op: RewriteOp::Add,
-                    x1: "?x1".parse().unwrap(),
-                    l1: "?l1".parse().unwrap(),
-                    x2: "?x2".parse().unwrap(),
-                    l2: "?l2".parse().unwrap(),
-                }
-            } if can_split_rot("?l1", "?l2")),
+            // rewrite!("rot-add-split"; "(+ (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
+            //     RotateSplit {
+            //         op: RewriteOp::Add,
+            //         x1: "?x1".parse().unwrap(),
+            //         l1: "?l1".parse().unwrap(),
+            //         x2: "?x2".parse().unwrap(),
+            //         l2: "?l2".parse().unwrap(),
+            //     }
+            // } if can_split_rot("?l1", "?l2")),
 
-            rewrite!("rot-sub-split"; "(- (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
-                RotateSplit {
-                    op: RewriteOp::Sub,
-                    x1: "?x1".parse().unwrap(),
-                    l1: "?l1".parse().unwrap(),
-                    x2: "?x2".parse().unwrap(),
-                    l2: "?l2".parse().unwrap(),
-                }
-            } if can_split_rot("?l1", "?l2")),
+            // rewrite!("rot-sub-split"; "(- (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
+            //     RotateSplit {
+            //         op: RewriteOp::Sub,
+            //         x1: "?x1".parse().unwrap(),
+            //         l1: "?l1".parse().unwrap(),
+            //         x2: "?x2".parse().unwrap(),
+            //         l2: "?l2".parse().unwrap(),
+            //     }
+            // } if can_split_rot("?l1", "?l2")),
 
-            rewrite!("rot-mul-split"; "(* (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
-                RotateSplit {
-                    op: RewriteOp::Mul,
-                    x1: "?x1".parse().unwrap(),
-                    l1: "?l1".parse().unwrap(),
-                    x2: "?x2".parse().unwrap(),
-                    l2: "?l2".parse().unwrap(),
-                }
-            } if can_split_rot("?l1", "?l2")),
+            // rewrite!("rot-mul-split"; "(* (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
+            //     RotateSplit {
+            //         op: RewriteOp::Mul,
+            //         x1: "?x1".parse().unwrap(),
+            //         l1: "?l1".parse().unwrap(),
+            //         x2: "?x2".parse().unwrap(),
+            //         l2: "?l2".parse().unwrap(),
+            //     }
+            // } if can_split_rot("?l1", "?l2")),
         ]);
 
         Optimizer { rules }
@@ -637,15 +676,20 @@ impl Optimizer {
             match extractor_type {
                 ExtractorType::GREEDY => {
                     info!("using greedy extractor to derive optimized program...");
-                    let extractor = GreedyExtractor::new(egraph, HECostFunction { egraph, count: 0 });
-                    // let extractor = Extractor::new(egraph, HECostFunction { egraph, count: 0 });
+                    // let extractor = GreedyExtractor::new(egraph, HECostFunction { egraph, count: 0 });
+                    let extractor = Extractor::new(egraph, HECostFunction { egraph, count: 0, latency: HELatencyModel::default() });
                     let (_, opt_expr) = extractor.find_best(root);
+                    info!("optimized solution found: {}", opt_expr.pretty(20));
                     opt_expr
                 },
                 ExtractorType::LP => {
                     info!("using LP extractor to derive optimized program...");
-                    let mut lp_extractor = LpExtractor::new(egraph, OpSizeFunction);
-                    lp_extractor.solve(root)
+                    let mut lp_extractor = LpExtractor::new(egraph, OpSizeFunction { latency: HELatencyModel::default() });
+                    let solution = lp_extractor.solve(root);
+                    // let mut lp_extractor = HEExtractor::new(egraph, root);
+                    // let solution = lp_extractor.solve().unwrap();
+                    info!("optimized solution found: {}", solution.pretty(20));
+                    solution
                 }
             };
 

@@ -20,6 +20,7 @@ lalrpop = "0.19.8"
 
 [dependencies]
 clap = { version = "3.2.16", features = ["derive"] }
+coin_cbc = "0.1.7"
 egg = { version = "0.9.0", features = ["lp", "serde-1"] }
 env_logger = "0.9.0"
 gcollections = "1.5.0"

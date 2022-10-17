@@ -140,9 +140,9 @@ dependencies = [
 
 [[package]]
 name = "coin_cbc"
-version = "0.1.6"
+version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08d4d15b4d7c661692f07a2a268f4b255c2a41777d2bf5470ce329011c11d9c5"
+checksum = "8f86c5252b7b745adc0bc8a724171018dd2fc1e63629f7f8ec2f28a66b0d6ed7"
 dependencies = [
  "coin_cbc_sys",
  "lazy_static",
@@ -358,6 +358,7 @@ name = "he_vectorizer"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "coin_cbc",
  "egg",
  "env_logger",
  "gcollections",

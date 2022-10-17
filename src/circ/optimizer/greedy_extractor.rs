@@ -35,88 +35,65 @@ impl PartialOrd for HECost {
 }
 
 pub(crate) struct HECostFunction<'a> {
+    pub latency: HELatencyModel,
     pub egraph: &'a HEGraph,
     pub count: usize
 }
 
 impl<'a> CostFunction<HEOptCircuit> for HECostFunction<'a> {
-    type Cost = HECost;
+    type Cost = f64;
 
     fn cost<C>(&mut self, enode: &HEOptCircuit, mut costs: C) -> Self::Cost
         where C: FnMut(Id) -> Self::Cost
     {
-        let id = self.egraph.find(self.egraph.lookup(enode.clone()).unwrap());
-        let self_data = self.egraph[id].data;
-        
-        let mut self_cost = HECost { muldepth: 0, latency_map: HashMap::new(), cost: 0 };
-        for child in enode.children() {
-            let child_id = self.egraph.find(*child);
-            let child_cost = costs(child_id);
+        let child_muldepth =
+            enode.children().iter().fold(0, |acc, child| {
+                max(acc, self.egraph[*child].data.muldepth)
+            });
 
-            self_cost.muldepth = max(self_cost.muldepth, child_cost.muldepth);
+        let is_plainop =
+            enode.children().iter().any(|child| {
+                self.egraph[*child].data.constval.is_some()
+            });
 
-            for (k, v) in child_cost.latency_map.iter() {
-                self_cost.latency_map.insert(*k, *v);
-                /*
-                if !self_cost.latency_map.contains_key(k) {
-                    self_cost.latency_map.insert(*k, *v);
+        let mut muldepth = child_muldepth;
+        let latency = 
+            match enode {
+                HEOptCircuit::Num(_) => self.latency.num,
 
-                } else if self_cost.latency_map[k] > *v {
-                    self_cost.latency_map.insert(*k, *v);
-                }
-                */
-            }
-        }
+                HEOptCircuit::Add(_) => {
+                    if is_plainop {
+                        self.latency.add_plain
+                    } else {
+                        self.latency.add
+                    }
+                },
 
-        match *enode {
-            HEOptCircuit::Add(_) => {
-                if self_data.constval.is_some() {
-                    self_cost.latency_map.insert(id, ADD_PLAIN_LATENCY);
+                HEOptCircuit::Sub(_) => {
+                    if is_plainop {
+                        self.latency.sub_plain
+                    } else {
+                        self.latency.sub
+                    }
+                },
 
-                } else {
-                    self_cost.latency_map.insert(id, ADD_LATENCY);
-                }
-            },
+                HEOptCircuit::Mul(_) => {
+                    if is_plainop {
+                        self.latency.mul_plain
+                    } else {
+                        muldepth += 1;
+                        self.latency.mul
+                    }
+                },
 
-            HEOptCircuit::Sub(_) => {
-                if self_data.constval.is_some() {
-                    self_cost.latency_map.insert(id, SUB_PLAIN_LATENCY);
+                HEOptCircuit::Rot(_) => self.latency.rot,
 
-                } else {
-                    self_cost.latency_map.insert(id, SUB_LATENCY);
-                }
-            },
+                HEOptCircuit::CiphertextRef(_) => self.latency.sym,
 
-            HEOptCircuit::Mul(_) => {
-                if self_data.constval.is_some() {
-                    self_cost.latency_map.insert(id, MUL_PLAIN_LATENCY);
+                HEOptCircuit::PlaintextRef(_) => self.latency.sym,
+            };
 
-                } else {
-                    self_cost.latency_map.insert(id, MUL_LATENCY);
-                    self_cost.muldepth += 1;
-                }
-            },
-
-            HEOptCircuit::Num(_) => {
-                self_cost.latency_map.insert(id, NUM_LATENCY);
-            },
-
-            HEOptCircuit::Rot(_) => {
-                self_cost.latency_map.insert(id, ROT_LATENCY);
-            },
-
-            HEOptCircuit::CiphertextRef(_) => {
-                self_cost.latency_map.insert(id, SYM_LATENCY);
-            },
-
-            HEOptCircuit::PlaintextRef(_) => {
-                self_cost.latency_map.insert(id, SYM_LATENCY);
-            },
-        }
-
-        self_cost.calculate_cost();
-        self.count += 1;
-        self_cost
+        ((muldepth+1) as f64) * latency
     }
 }
 

@@ -13,7 +13,7 @@ use he_vectorizer::circ::{
         program::HEProgram,
         lowered_program::HELoweredProgram, code_gen::CodeGenerator,
     },
-    optimizer::{HEOptCircuit, ExtractorType, Optimizer}, HECircuitStore, circ_gen::ClientTransform};
+    optimizer::{HEOptCircuit, ExtractorType, Optimizer, HELatencyModel}, HECircuitStore, circ_gen::ClientTransform};
 
 #[derive(Parser)]
 #[clap(author, version, about = "optimizer for for vectorized homomorphic encryption circuits", long_about = None)]
@@ -55,13 +55,15 @@ fn main() {
         std::fs::read_to_string(&args.file)
         .expect(&format!("Could not read file {}", &args.file));
 
+    let latency_model = HELatencyModel::default();
+
     // parse the expression, the type annotation tells it which Language to use
     let init_expr: RecExpr<HEOptCircuit> = input_str.parse().unwrap();
     let init_prog = HEProgram::from(&init_expr);
     // info!("Initial HE expr:\n{}", init_expr.pretty(80));
     info!("Initial HE program (muldepth {}, latency {}ms):",
         init_prog.get_muldepth(),
-        init_prog.get_latency()
+        init_prog.get_latency(&latency_model)
     );
 
     let opt_expr =
@@ -78,7 +80,7 @@ fn main() {
     if args.duration > 0 {
         info!("Optimized HE program (muldepth {}, latency {}ms):",
             opt_prog.get_muldepth(),
-            opt_prog.get_latency()
+            opt_prog.get_latency(&latency_model)
         );
     }
 
