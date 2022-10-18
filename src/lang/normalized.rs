@@ -1,4 +1,4 @@
-use std::cmp::max;
+use std::{cmp::max, ops::Index};
 
 use interval::ops::{Hull, Range};
 use gcollections::ops::{bounded::Bounded, Subset};
@@ -19,7 +19,7 @@ pub enum NormalizedExpr {
     LiteralNode(i64)
 }
 
-type PadSize = (u64, u64);
+type PadSize = (usize, usize);
 
 #[derive(Clone,Debug)]
 pub struct ArrayTransform {
@@ -75,6 +75,39 @@ enum PathInfo {
 struct ConstraintVar(usize);
 
 struct ExtentConstraint { var1: ConstraintVar, var2: ConstraintVar }
+
+#[derive(Clone,Debug)]
+pub enum TransformedExpr {
+    ReduceNode(usize, ExprOperator, Box<TransformedExpr>),
+    OpNode(ExprOperator, Box<TransformedExpr>, Box<TransformedExpr>),
+    TransformNode(ArrayName, ArrayTransformInfo),
+    LiteralNode(i64),
+}
+
+#[derive(Clone, Debug)]
+pub enum TransformedDim {
+    Input(usize),
+    Index(IndexName),
+    Fill(Extent),
+    FillIndex(IndexName),
+}
+
+#[derive(Clone,Debug)]
+pub struct TransformedDimInfo {
+    dim: TransformedDim,
+    pad: PadSize,
+    extent: Extent,
+}
+
+type ArrayTransformInfo = Vec<TransformedDimInfo>;
+
+pub struct TransformedShape(Vec<TransformedDim>);
+
+impl Default for TransformedShape {
+    fn default() -> Self {
+        Self(Vec::new())
+    }
+}
 
 pub struct Normalizer {
     cur_expr_id: usize,
@@ -277,7 +310,7 @@ impl Normalizer {
                     let pad_max = max(0, index_interval.upper() - dim_interval.upper());
                     let extent =
                         Interval::new(dim_interval.lower() - pad_min, dim_interval.upper() + pad_max);
-                    pad_sizes.push((pad_min as u64, pad_max as u64));
+                    pad_sizes.push((pad_min as usize, pad_max as usize));
                     extent_list.push(extent);
                 }
 
@@ -314,6 +347,233 @@ impl Normalizer {
             SourceExpr::LiteralNode(val) => {
                 NormalizedExpr::LiteralNode(*val)
             }
+        }
+    }
+
+    fn lower2(
+        &mut self,
+        expr: &SourceExpr,
+        output_shape: &TransformedShape,
+        store: &ArrayEnvironment,
+        path: &im::Vector<PathInfo>
+    ) -> (TransformedExpr, Option<Vec<usize>>) {
+        match expr {
+            SourceExpr::ForNode(index, extent, body) => {
+                let new_path = 
+                    path +
+                    &im::Vector::unit(PathInfo::Index {
+                        index: index.clone(), extent: *extent
+                    });
+
+                self.lower2(body, output_shape, store, &new_path)
+            },
+
+            SourceExpr::ReduceNode(op, body) => {
+                let new_path = 
+                    &im::Vector::unit(PathInfo::Reduce { op: *op }) + path;
+                let (new_body, reduced_dim_positions_opt) = self.lower2(body, output_shape, store, &new_path);
+                let reduced_dim_positions = reduced_dim_positions_opt.unwrap();
+                let rest = reduced_dim_positions.split_off(1);
+                let dim = *reduced_dim_positions.first().unwrap();
+                (TransformedExpr::ReduceNode(dim, *op, Box::new(new_body)), Some(rest))
+            },
+
+            SourceExpr::OpNode(op, expr1, expr2) => {
+                let (new_expr1, reduced_dim_position1_opt) = self.lower2(expr1, output_shape, store, path);
+                let (new_expr2, reduced_dim_position2_opt) = self.lower2(expr2, output_shape, store, path);
+                let reduced_dim_position_opt =
+                    match (reduced_dim_position1_opt, reduced_dim_position2_opt) {
+                        (None, None) => None,
+                        (None, Some(reduced_dim_position2)) => reduced_dim_position2_opt,
+                        (Some(reduced_dim_position1), None) => reduced_dim_position1_opt,
+                        (Some(reduced_dim_position1), Some(reduced_dim_position2)) => {
+                            assert!(reduced_dim_position1 == reduced_dim_position2);
+                            reduced_dim_position1_opt
+                        }
+                    };
+                (TransformedExpr::OpNode(*op, Box::new(new_expr1), Box::new(new_expr2)), reduced_dim_position_opt)
+            },
+
+            SourceExpr::LiteralNode(lit) => {
+                (TransformedExpr::LiteralNode(*lit), None)
+            },
+
+            SourceExpr::IndexingNode(arr, index_list) => {
+                // first, determine the computed shape of the array
+                // based on path info and the output shape
+
+                // dimensions that are reduced
+                let mut reduced_dims: Vec<(&IndexName, &Extent)> = Vec::new();
+                let mut reduced_dim_position: Vec<usize> = Vec::new();
+
+                // dimensions that are part of the output
+                let mut output_dims: Vec<(&IndexName, &Extent)> = Vec::new();
+
+                // in-scope indices and their extents
+                let mut index_store: IndexEnvironment = im::HashMap::new();
+
+                let mut num_reductions = 0;
+                for info in path.iter() {
+                    match info {
+                        PathInfo::Index { index, extent } => {
+                            if num_reductions > 0 {
+                                reduced_dims.push((index, extent));
+                                num_reductions -= 1;
+                            } else {
+                                output_dims.push((index, extent))
+                            }
+                            index_store.insert(index.clone(), *extent);
+                        },
+                        PathInfo::Reduce { op: _ } => {
+                            num_reductions += 1;
+                        },
+                    }
+                }
+
+                // TODO: support reducing dims not named by an index
+                assert!(num_reductions == 0);
+
+                // output index shape is like output shape,
+                // but the dimensions are now named by index
+                // invariant: every output and reduced dim appears
+                // exactly once in output index shape
+                let mut out_index_shape: TransformedShape = TransformedShape::default();
+                let mut used_rdim = 0;
+                for (i, out_dim) in output_shape.0.iter().enumerate() {
+                    match out_dim {
+                        TransformedDim::Input(dim_index) => {
+                            out_index_shape.0.push(
+                                TransformedDim::Index(output_dims[*dim_index].0.to_string())
+                            );
+                        },
+                        TransformedDim::Fill(extent) => {
+                            if reduced_dims.len() > 0 {
+                                // TODO: have a better heuristic for picking which reduced dim to use
+                                let index = reduced_dims[used_rdim].0;
+                                used_rdim += 1;
+                                out_index_shape.0.push(TransformedDim::Index(index.to_string()));
+                                reduced_dim_position.push(i);
+
+                            } else {
+                                out_index_shape.0.push(TransformedDim::Fill(*extent))
+                            }
+                        },
+                        _ => panic!("output shape should not have index dims")
+                    }
+                }
+
+                // if some reduced dims are not used, they are added to the front
+                if used_rdim < reduced_dims.len() {
+                    for rdim in reduced_dims[used_rdim..].iter() {
+                        out_index_shape.0.insert(
+                            0,
+                             TransformedDim::Index(rdim.0.to_string())
+                        );
+                    }
+                }
+
+                // compute the original shape
+                let mut index_position: HashMap<IndexName, usize> = HashMap::new();
+                let mut orig_shape: Vec<IndexName> = Vec::new();
+                for (i, index_expr) in index_list.iter().enumerate() {
+                    match index_expr.get_single_var() {
+                        Some(var) => {
+                            orig_shape.push(var.clone());
+                            index_position.insert(var, i);
+                        },
+
+                        None => panic!("only one index var required per indexed dimension")
+                    }
+                }
+
+                let mut computed_shape: TransformedShape = TransformedShape::default();
+                for dim in out_index_shape.0 {
+                    match dim {
+                        TransformedDim::Index(index) => {
+                            match index_position.get(&index) {
+                                // indexed dim is in the original shape; add its position
+                                Some(i) => {
+                                    computed_shape.0.push(TransformedDim::Input(*i));
+                                },
+
+                                // index is missing from original shape; add as a fill dimension
+                                None => {
+                                    computed_shape.0.push(TransformedDim::FillIndex(index));
+                                }
+                            }
+                        },
+
+                        // fill dimension from output shape
+                        TransformedDim::Fill(fill_size) => {
+                            computed_shape.0.push(TransformedDim::Fill(fill_size));
+                        },
+
+                        _ => panic!("out index shape should not have input or fill index dims")
+                    }
+                }
+
+                let dim_info: ArrayTransformInfo =
+                    computed_shape.0.into_iter().map(|dim| {
+                        match dim {
+                            // for indexed dims, perform interval analysis to determine padding
+                            TransformedDim::Input(i) => {
+                                let index_expr = &index_list[i];
+                                let index_interval = self.index_expr_to_interval(index_expr, &index_store);
+                                let dim_interval = store[arr][i];
+
+                                let pad_min = max(0, dim_interval.lower() - index_interval.lower());
+                                let pad_max = max(0, index_interval.upper() - dim_interval.upper());
+
+                                let extent =
+                                    Interval::new(dim_interval.lower() - pad_min, dim_interval.upper() + pad_max);
+
+                                TransformedDimInfo {
+                                    dim,
+                                    pad: (pad_min as usize, pad_max as usize),
+                                    extent,
+                                }
+                            },
+
+                            // fill dims never have padding
+                            TransformedDim::FillIndex(ref index) => {
+                                let extent =
+                                    path.iter().map(|info| {
+                                        match info {
+                                            PathInfo::Index { index: path_index, extent } => {
+                                                if index == path_index {
+                                                    Some(*extent)
+                                                } else {
+                                                    None
+                                                }
+                                            }
+                                            PathInfo::Reduce { op: _ } => None,
+                                        }
+                                    })
+                                    .filter_map(|x| x)
+                                    .collect::<Vec<Extent>>()
+                                    .pop().unwrap();
+
+                                TransformedDimInfo {
+                                    dim,
+                                    pad: (0,0),
+                                    extent,
+                                }
+                            },
+
+                            TransformedDim::Fill(extent) => {
+                                TransformedDimInfo {
+                                    dim,
+                                    pad: (0,0),
+                                    extent,
+                                }
+                            },
+
+                            _ => panic!("out index shape should not have input or fill index dims")
+                        }
+                    }).collect();
+
+                (TransformedExpr::TransformNode(arr.to_string(), dim_info), Some(reduced_dim_position))
+            },
         }
     }
 
@@ -441,8 +701,8 @@ impl Normalizer {
                     for (pad, (cur_extent, sol_extent)) in zipped_iter {
                         assert!(cur_extent.is_subset(sol_extent), "extent solution should only add padding, not remove it");
                         if cur_extent != sol_extent {
-                            let new_pad_min = (cur_extent.lower() - sol_extent.lower()) as u64 + pad.0;
-                            let new_pad_max = (sol_extent.upper() - cur_extent.upper()) as u64 + pad.1;
+                            let new_pad_min = (cur_extent.lower() - sol_extent.lower()) as usize + pad.0;
+                            let new_pad_max = (sol_extent.upper() - cur_extent.upper()) as usize + pad.1;
                             new_pad_sizes.push((new_pad_min, new_pad_max));
                         }
                     }
