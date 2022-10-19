@@ -84,12 +84,81 @@ pub enum TransformedExpr {
     LiteralNode(i64),
 }
 
+impl Display for TransformedExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TransformedExpr::ReduceNode(dim, op, body) => {
+                write!(f, "reduce({}, {}, {})", dim, op, body)
+            },
+
+            TransformedExpr::OpNode(op, expr1, expr2) => {
+                write!(f, "({} {} {})", expr1, op, expr2)
+            },
+
+            TransformedExpr::TransformNode(arr, transform) => {
+                write!(f, "{}[{}]", arr, transform)
+            },
+
+            TransformedExpr::LiteralNode(lit) => {
+                write!(f, "{}", lit)
+            },
+        }
+    }
+}
+
+pub trait Transform: Display {}
+
 #[derive(Clone, Debug)]
 pub enum TransformedDim {
     Input(usize),
+    Fill(Extent),
+}
+
+impl Transform for TransformedDim {}
+
+impl Display for TransformedDim {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TransformedDim::Input(i) => write!(f, "{}", i),
+            TransformedDim::Fill(extent) => write!(f, "fill({})", extent),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum TransformedIndexDim {
     Index(IndexName),
     Fill(Extent),
-    FillIndex(IndexName),
+}
+
+impl Transform for TransformedIndexDim {}
+
+impl Display for TransformedIndexDim {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TransformedIndexDim::Index(index) => write!(f, "{}", index),
+            TransformedIndexDim::Fill(extent) => write!(f, "fill({})", extent),
+        }
+    }
+}
+
+pub struct TransformShape<T: Transform>(Vec<T>);
+
+impl<T: Transform> Display for TransformShape<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let strs =
+            self.0.iter()
+            .map(|x| x.to_string())
+            .collect::<Vec<String>>().join(", ");
+
+        write!(f, "[{}]", strs)
+    }
+}
+
+impl<T: Transform> Default for TransformShape<T> {
+    fn default() -> Self {
+        Self(Vec::new())
+    }
 }
 
 #[derive(Clone,Debug)]
@@ -99,13 +168,23 @@ pub struct TransformedDimInfo {
     extent: Extent,
 }
 
-type ArrayTransformInfo = Vec<TransformedDimInfo>;
+impl Display for TransformedDimInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "(pad {} ({},{}))", self.dim, self.pad.0, self.pad.1)
+    }
+}
 
-pub struct TransformedShape(Vec<TransformedDim>);
+#[derive(Clone,Debug)]
+pub struct ArrayTransformInfo(Vec<TransformedDimInfo>);
 
-impl Default for TransformedShape {
-    fn default() -> Self {
-        Self(Vec::new())
+impl Display for ArrayTransformInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let strs =
+            self.0.iter()
+            .map(|x| x.to_string())
+            .collect::<Vec<String>>().join(", ");
+
+        write!(f, "[{}]", strs)
     }
 }
 
@@ -250,7 +329,7 @@ impl Normalizer {
                 let mut reduce_ind: usize = 0;
 
                 // in-scope indices and their extents
-                let mut index_store: IndexEnvironment = im::HashMap::new();
+                let mut index_store: IndexEnvironment = HashMap::new();
 
                 for info in path.iter() {
                     match info {
@@ -350,52 +429,107 @@ impl Normalizer {
         }
     }
 
+    fn compute_expr_extent(&self, expr: &SourceExpr, store: &ArrayEnvironment) -> Shape  {
+        match expr {
+            SourceExpr::ForNode(index, extent, body) => {
+                let body_extent = self.compute_expr_extent(body, store);
+                im::vector![extent.clone()] + body_extent
+            },
+
+            SourceExpr::ReduceNode(_, body) => {
+                let mut body_extent = self.compute_expr_extent(body, store);
+                body_extent.split_off(1)
+            },
+
+            SourceExpr::OpNode(_, expr1, expr2) => {
+                let extent1 = self.compute_expr_extent(expr1, store);
+                let extent2 = self.compute_expr_extent(expr2, store);
+                assert!(extent1 == extent2);
+                extent1
+            },
+
+            SourceExpr::IndexingNode(arr, index_list) => {
+                let arr_extent = store.get(arr).unwrap();
+                arr_extent.clone().split_off(index_list.len())
+            },
+
+            SourceExpr::LiteralNode(_) => im::Vector::new()
+        }
+    }
+
+    fn compute_prog_extent(&mut self, program: &SourceProgram) -> ArrayEnvironment {
+        let mut store: ArrayEnvironment = HashMap::new();
+
+        for input in program.inputs.iter() {
+            if let Some(_) = store.insert(input.0.clone(), input.1.clone()) {
+                panic!("duplicate binding for {}", input.0)
+            }
+        }
+
+        for binding in program.letBindings.iter() {
+            let extent = self.compute_expr_extent(&binding.1, &store);
+            if let Some(_) = store.insert(binding.0.clone(), extent) {
+                panic!("duplicate binding for {}", binding.0)
+            }
+        }
+
+        store
+    }
+
     fn lower2(
         &mut self,
         expr: &SourceExpr,
-        output_shape: &TransformedShape,
+        output_shape: &TransformShape<TransformedDim>,
         store: &ArrayEnvironment,
-        path: &im::Vector<PathInfo>
-    ) -> (TransformedExpr, Option<Vec<usize>>) {
+        path: im::Vector<PathInfo>
+    ) -> Result<(TransformedExpr, Option<Vec<usize>>), String> {
         match expr {
             SourceExpr::ForNode(index, extent, body) => {
                 let new_path = 
                     path +
-                    &im::Vector::unit(PathInfo::Index {
+                    im::Vector::unit(PathInfo::Index {
                         index: index.clone(), extent: *extent
                     });
 
-                self.lower2(body, output_shape, store, &new_path)
+                self.lower2(body, output_shape, store, new_path)
             },
 
             SourceExpr::ReduceNode(op, body) => {
                 let new_path = 
-                    &im::Vector::unit(PathInfo::Reduce { op: *op }) + path;
-                let (new_body, reduced_dim_positions_opt) = self.lower2(body, output_shape, store, &new_path);
-                let reduced_dim_positions = reduced_dim_positions_opt.unwrap();
-                let rest = reduced_dim_positions.split_off(1);
-                let dim = *reduced_dim_positions.first().unwrap();
-                (TransformedExpr::ReduceNode(dim, *op, Box::new(new_body)), Some(rest))
+                    im::Vector::unit(PathInfo::Reduce { op: *op }) + path;
+                let (new_body, reduced_dim_positions_opt) = self.lower2(body, output_shape, store, new_path)?;
+                let mut reduced_dim_position = reduced_dim_positions_opt.unwrap();
+                let rest = reduced_dim_position.split_off(1);
+                let dim = *reduced_dim_position.first().unwrap();
+                Ok((TransformedExpr::ReduceNode(dim, *op, Box::new(new_body)), Some(rest)))
             },
 
             SourceExpr::OpNode(op, expr1, expr2) => {
-                let (new_expr1, reduced_dim_position1_opt) = self.lower2(expr1, output_shape, store, path);
-                let (new_expr2, reduced_dim_position2_opt) = self.lower2(expr2, output_shape, store, path);
+                let (new_expr1, reduced_dim_position1_opt) = self.lower2(expr1, output_shape, store, path.clone())?;
+                let (new_expr2, reduced_dim_position2_opt) = self.lower2(expr2, output_shape, store, path)?;
                 let reduced_dim_position_opt =
-                    match (reduced_dim_position1_opt, reduced_dim_position2_opt) {
-                        (None, None) => None,
-                        (None, Some(reduced_dim_position2)) => reduced_dim_position2_opt,
-                        (Some(reduced_dim_position1), None) => reduced_dim_position1_opt,
+                    match (&reduced_dim_position1_opt, &reduced_dim_position2_opt) {
+                        (None, None) => Ok(None),
+                        (None, Some(_)) => Ok(reduced_dim_position2_opt),
+                        (Some(_), None) => Ok(reduced_dim_position1_opt),
                         (Some(reduced_dim_position1), Some(reduced_dim_position2)) => {
-                            assert!(reduced_dim_position1 == reduced_dim_position2);
-                            reduced_dim_position1_opt
+                            if reduced_dim_position1 == reduced_dim_position2 {
+                                Ok(reduced_dim_position1_opt)
+                            } else {
+                                Err(
+                                    format!("op node operands do not have the same reduced dim positions: {:?} {:?}",
+                                        reduced_dim_position1,
+                                        reduced_dim_position2
+                                    )
+                                )
+                            }
                         }
-                    };
-                (TransformedExpr::OpNode(*op, Box::new(new_expr1), Box::new(new_expr2)), reduced_dim_position_opt)
+                    }?;
+                Ok((TransformedExpr::OpNode(*op, Box::new(new_expr1), Box::new(new_expr2)), reduced_dim_position_opt))
             },
 
             SourceExpr::LiteralNode(lit) => {
-                (TransformedExpr::LiteralNode(*lit), None)
+                Ok((TransformedExpr::LiteralNode(*lit), None))
             },
 
             SourceExpr::IndexingNode(arr, index_list) => {
@@ -410,7 +544,7 @@ impl Normalizer {
                 let mut output_dims: Vec<(&IndexName, &Extent)> = Vec::new();
 
                 // in-scope indices and their extents
-                let mut index_store: IndexEnvironment = im::HashMap::new();
+                let mut index_store: IndexEnvironment = HashMap::new();
 
                 let mut num_reductions = 0;
                 for info in path.iter() {
@@ -431,34 +565,39 @@ impl Normalizer {
                 }
 
                 // TODO: support reducing dims not named by an index
-                assert!(num_reductions == 0);
+                if num_reductions > 0 {
+                    return Err(String::from("All reduced dimensions must be indexed"))
+                }
 
                 // output index shape is like output shape,
                 // but the dimensions are now named by index
                 // invariant: every output and reduced dim appears
                 // exactly once in output index shape
-                let mut out_index_shape: TransformedShape = TransformedShape::default();
+                let mut out_index_shape: TransformShape<TransformedIndexDim> = TransformShape::default();
                 let mut used_rdim = 0;
                 for (i, out_dim) in output_shape.0.iter().enumerate() {
                     match out_dim {
                         TransformedDim::Input(dim_index) => {
                             out_index_shape.0.push(
-                                TransformedDim::Index(output_dims[*dim_index].0.to_string())
+                                TransformedIndexDim::Index(output_dims[*dim_index].0.to_string())
                             );
                         },
+
                         TransformedDim::Fill(extent) => {
                             if reduced_dims.len() > 0 {
                                 // TODO: have a better heuristic for picking which reduced dim to use
                                 let index = reduced_dims[used_rdim].0;
                                 used_rdim += 1;
-                                out_index_shape.0.push(TransformedDim::Index(index.to_string()));
-                                reduced_dim_position.push(i);
+                                out_index_shape.0.push(TransformedIndexDim::Index(index.to_string()));
 
                             } else {
-                                out_index_shape.0.push(TransformedDim::Fill(*extent))
+                                out_index_shape.0.push(TransformedIndexDim::Fill(*extent))
                             }
                         },
-                        _ => panic!("output shape should not have index dims")
+
+                        _ => {
+                            return Err(String::from("output shape should not have index dims"))
+                        }
                     }
                 }
 
@@ -467,8 +606,26 @@ impl Normalizer {
                     for rdim in reduced_dims[used_rdim..].iter() {
                         out_index_shape.0.insert(
                             0,
-                             TransformedDim::Index(rdim.0.to_string())
+                             TransformedIndexDim::Index(rdim.0.to_string())
                         );
+                    }
+                }
+
+                // compute the positions of reduced dimensions
+                for dim in reduced_dims.iter() {
+                    let index_opt =
+                        out_index_shape.0.iter().position(|x|
+                            match x {
+                                TransformedIndexDim::Index(index) => index == dim.0,
+                                TransformedIndexDim::Fill(_) => false,
+                            }
+                        );
+
+                    if let Some(index) = index_opt { 
+                        reduced_dim_position.push(index);
+
+                    } else {
+                        return Err(format!("reduced indexed dimension {} not in output shape", dim.0))
                     }
                 }
 
@@ -482,14 +639,16 @@ impl Normalizer {
                             index_position.insert(var, i);
                         },
 
-                        None => panic!("only one index var required per indexed dimension")
+                        None => {
+                            return Err(String::from("only one index var required per indexed dimension"))
+                        }
                     }
                 }
 
-                let mut computed_shape: TransformedShape = TransformedShape::default();
+                let mut computed_shape: TransformShape<TransformedDim> = TransformShape::default();
                 for dim in out_index_shape.0 {
                     match dim {
-                        TransformedDim::Index(index) => {
+                        TransformedIndexDim::Index(index) => {
                             match index_position.get(&index) {
                                 // indexed dim is in the original shape; add its position
                                 Some(i) => {
@@ -498,21 +657,37 @@ impl Normalizer {
 
                                 // index is missing from original shape; add as a fill dimension
                                 None => {
-                                    computed_shape.0.push(TransformedDim::FillIndex(index));
+                                    let index_extent_opt =
+                                        path.iter().find(|info| 
+                                            match info {
+                                                PathInfo::Index { index: pindex, extent }
+                                                if pindex == &index => true,
+
+                                                _ => false,
+                                            }
+                                        );
+
+                                    if let Some(PathInfo::Index { index: _, extent }) = index_extent_opt {
+                                        computed_shape.0.push(TransformedDim::Fill(*extent));
+                                    } else {
+                                        return Err(format!("cannot index indexed dimension {} in output shape", index));
+                                    }
                                 }
                             }
                         },
 
                         // fill dimension from output shape
-                        TransformedDim::Fill(fill_size) => {
-                            computed_shape.0.push(TransformedDim::Fill(fill_size));
+                        TransformedIndexDim::Fill(extent) => {
+                            computed_shape.0.push(TransformedDim::Fill(extent));
                         },
 
-                        _ => panic!("out index shape should not have input or fill index dims")
+                        _ => {
+                            return Err(String::from("out index shape should not have input or fill index dims"))
+                        }
                     }
                 }
 
-                let dim_info: ArrayTransformInfo =
+                let dim_info: Vec<TransformedDimInfo> =
                     computed_shape.0.into_iter().map(|dim| {
                         match dim {
                             // for indexed dims, perform interval analysis to determine padding
@@ -527,52 +702,26 @@ impl Normalizer {
                                 let extent =
                                     Interval::new(dim_interval.lower() - pad_min, dim_interval.upper() + pad_max);
 
-                                TransformedDimInfo {
+                                Ok(TransformedDimInfo {
                                     dim,
                                     pad: (pad_min as usize, pad_max as usize),
                                     extent,
-                                }
+                                })
                             },
 
                             // fill dims never have padding
-                            TransformedDim::FillIndex(ref index) => {
-                                let extent =
-                                    path.iter().map(|info| {
-                                        match info {
-                                            PathInfo::Index { index: path_index, extent } => {
-                                                if index == path_index {
-                                                    Some(*extent)
-                                                } else {
-                                                    None
-                                                }
-                                            }
-                                            PathInfo::Reduce { op: _ } => None,
-                                        }
-                                    })
-                                    .filter_map(|x| x)
-                                    .collect::<Vec<Extent>>()
-                                    .pop().unwrap();
-
-                                TransformedDimInfo {
-                                    dim,
-                                    pad: (0,0),
-                                    extent,
-                                }
-                            },
-
                             TransformedDim::Fill(extent) => {
-                                TransformedDimInfo {
+                                Ok(TransformedDimInfo {
                                     dim,
                                     pad: (0,0),
                                     extent,
-                                }
+                                })
                             },
-
-                            _ => panic!("out index shape should not have input or fill index dims")
                         }
-                    }).collect();
+                    }).collect::<Result<Vec<TransformedDimInfo>,String>>()?;
 
-                (TransformedExpr::TransformNode(arr.to_string(), dim_info), Some(reduced_dim_position))
+                let transform =  TransformedExpr::TransformNode(arr.to_string(), ArrayTransformInfo(dim_info));
+                Ok((transform, Some(reduced_dim_position)))
             },
         }
     }
@@ -728,7 +877,7 @@ impl Normalizer {
     }
 
     pub fn run(&mut self, program: &SourceProgram) -> Result<NormalizedProgram, String> {
-        let mut store: im::HashMap<ArrayName, Shape> = im::HashMap::new();
+        let mut store: ArrayEnvironment = HashMap::new();
         program.inputs.iter().try_for_each(|input|
             match store.insert(input.0.clone(), input.1.clone()) {
                 Some(_) => Err(format!("duplicate input bindings for {}", input.0)),
@@ -746,5 +895,117 @@ impl Normalizer {
 impl Default for Normalizer {
     fn default() -> Self {
         Normalizer::new()
+    }
+}
+
+#[cfg(test)]
+mod tests{
+    use crate::lang::parser::ProgramParser;
+    use super::*;
+
+    fn test_lowering(src: &str, out_shape: TransformShape<TransformedDim>) {
+        let parser = ProgramParser::new();
+        let program: SourceProgram = parser.parse(src).unwrap();
+
+        let mut normalizer = Normalizer::new();
+        let store = normalizer.compute_prog_extent(&program);
+        let res =
+            normalizer.lower2(&program.expr, &out_shape, &store, im::Vector::new());
+        
+        assert!(res.is_ok());
+        println!("{}", res.unwrap().0);
+
+    }
+
+    #[test]
+    fn imgblur() {
+        let parser = ProgramParser::new();
+        let program: SourceProgram =
+            parser.parse("
+                input img: [(0,16),(0,16)]
+                for x: (0, 16) {
+                    for y: (0, 16) {
+                        img[x-1][y-1] + img[x+1][y+1]
+                    }
+                }
+            ").unwrap();
+
+        let res = Normalizer::new().run(&program);
+        assert!(res.is_ok());
+        println!("{}", res.unwrap().expr)
+    }
+
+    #[test]
+    fn imgblur2() {
+        test_lowering(
+        "input img: [(0,16),(0,16)]
+            for x: (0, 16) {
+                for y: (0, 16) {
+                    img[x-1][y-1] + img[x+1][y+1]
+                }
+            }",
+            TransformShape(vec![
+                TransformedDim::Input(0),
+                TransformedDim::Input(1),
+            ]),
+        );
+    }
+
+    #[test]
+    fn matmatmul() {
+        let parser = ProgramParser::new();
+        let prog: SourceProgram =
+            parser.parse("
+            input A: [(0,4),(0,4)]
+            input B: [(0,4),(0,4)]
+            let x = A + B
+            for i: (0,4) {
+                for j: (0,4) {
+                    sum(for k: (0,4) { A[i][k] * B[k][j] })
+                }
+            }
+            ").unwrap();
+
+        let res = Normalizer::new().run(&prog);
+        assert!(res.is_ok());
+        println!("{}", res.unwrap().expr);
+    }
+
+    #[test]
+    fn matmatmul2() {
+        test_lowering(
+            "input A: [(0,4),(0,4)]
+            input B: [(0,4),(0,4)]
+            let x = A + B
+            for i: (0,4) {
+                for j: (0,4) {
+                    sum(for k: (0,4) { A[i][k] * B[k][j] })
+                }
+            }",
+            TransformShape(vec![
+                TransformedDim::Input(0),
+                // TransformedDim::Fill(Interval::new(0, 4)),
+                TransformedDim::Input(1),
+            ])
+        );
+    }
+
+    #[test]
+    fn matmatmul3() {
+        test_lowering(
+            "input A: [(0,4),(0,4)]
+            input B: [(0,4),(0,4)]
+            let x = A + B
+            for i: (0,4) {
+                for j: (0,4) {
+                    sum(for k: (0,4) { A[i][k] * B[k][j] })
+                }
+            }",
+            TransformShape(vec![
+                TransformedDim::Input(0),
+                TransformedDim::Fill(Interval::new(0, 4)),
+                TransformedDim::Input(1),
+            ])
+        );
     }
 }

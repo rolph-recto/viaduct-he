@@ -16,8 +16,8 @@ pub type Shape = im::Vector<Extent>;
 pub type IndexName = String;
 pub type ArrayName = String;
 
-pub type ArrayEnvironment = im::HashMap<ArrayName, Shape>;
-pub type IndexEnvironment = im::HashMap<IndexName, Extent>;
+pub type ArrayEnvironment = HashMap<ArrayName, Shape>;
+pub type IndexEnvironment = HashMap<IndexName, Extent>;
 
 pub type ExprId = usize;
 

@@ -1,0 +1,72 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'he_vectorizer'",
+            "program": "${workspaceRoot}/target/debug/he_vectorizer",
+            "args": ["--help"],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'he_vectorizer' with cargo",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=he_vectorizer",
+                    "--package=he_vectorizer"
+                ],
+                "filter": {
+                    "name": "he_vectorizer",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'he_vectorizer'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=he_vectorizer",
+                    "--package=he_vectorizer"
+                ],
+                "filter": {
+                    "name": "he_vectorizer",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug integration test 'test_parser'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--test=test_parser",
+                    "--package=he_vectorizer"
+                ],
+                "filter": {
+                    "name": "test_parser",
+                    "kind": "test"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
