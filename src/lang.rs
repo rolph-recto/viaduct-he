@@ -8,7 +8,7 @@ lalrpop_mod!(pub parser);
 
 pub mod extent_analysis;
 pub mod source;
-pub mod normalized;
+pub mod index_elim;
 pub mod typechecker;
 
 pub type Extent = Interval<i64>;

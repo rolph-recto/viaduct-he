@@ -12,11 +12,11 @@ impl NameGenerator {
     pub fn get_fresh_name(&mut self, name: &str) -> String {
         if self.name_map.contains_key(name) {
             let n = self.name_map[name];
-            format!("{}_{}", name, n)
+            format!("{}${}", name, n)
             
         } else {
             self.name_map.insert(String::from(name), 2);
-            return format!("{}_{}", name, 1)
+            return format!("{}${}", name, 1)
         }
     }
 }

@@ -3,7 +3,7 @@ use std::{cmp::max, hash::{*, Hasher}};
 use interval::ops::Range;
 use gcollections::ops::{bounded::Bounded, Subset};
 
-use crate::{lang::{*, source::{*, IndexExpr::*}}, circ::{self, circ_gen::{IndexFreeExpr, IndexFreeExprOperator}, Ciphertext, HEObjectName}};
+use crate::{lang::{*, source::{*, IndexExpr::*}}, circ::{self, circ_gen::{IndexFreeExpr, IndexFreeExprOperator}, Ciphertext, HEObjectName}, util::NameGenerator};
 
 use super::extent_analysis::{ExtentAnalysis, ShapeId};
 
@@ -20,6 +20,7 @@ enum PathInfo {
 #[derive(Eq,PartialEq,Clone,Copy,Debug)]
 pub enum ReducedDimType { Hidden, Reused }
 
+/// expression with associated data about lowering to an index-free representation.
 #[derive(Clone,Debug)]
 pub enum TransformedExpr {
     ReduceNode(ReducedDimType, usize, ExprOperator, Box<TransformedExpr>),
@@ -31,7 +32,7 @@ pub enum TransformedExpr {
 impl Display for TransformedExpr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TransformedExpr::ReduceNode(dim_type, dim, op, body) => {
+            TransformedExpr::ReduceNode(_, dim, op, body) => {
                 write!(f, "reduce({}, {}, {})", dim, op, body)
             },
 
@@ -182,26 +183,57 @@ struct TransformResult {
     transformed_inputs: im::HashSet<ExprId>,
 }
 
-pub struct Normalizer {
+pub struct IndexElimination {
+    // ID of the output expression
     output_id: ExprId,
+
+    // counter for creating fresh expressions IDs
     cur_expr_id: usize,
+
+    // map source-level bindings to their shapes 
+    store: ArrayEnvironment,
+
+    // map from input nodes to their shape
+    input_map: HashMap<ArrayName, Shape>,
+
+    // map from variables to their bound expressions
+    expr_binding_map: HashMap<ArrayName, SourceExpr>,
+
+    // map from expressions to their computed shapes
     transform_info_map: HashMap<ExprId, ArrayTransformInfo>,
+
+    // map from expressions to transformed representation
     transform_map: HashMap<ExprId, TransformedExpr>,
+
+    // topological sort of expressions
+    transform_list: Vec<ExprId>,
+
+    // map from expressions to shape IDs from extent analysis
     shape_map: HashMap<ExprId, (usize, ShapeId)>,
+
+    // module to compute required padding
     extent_analysis: ExtentAnalysis,
+
+    // module to generate fresh names for ciphertexts
+    name_generator: NameGenerator,
 }
 
 static OUTPUT_EXPR_NAME: &'static str = "$root";
 
-impl Normalizer {
+impl IndexElimination {
     pub fn new() -> Self {
-        Normalizer {
+        IndexElimination {
             output_id: 0,
             cur_expr_id: 1,
+            input_map: HashMap::new(),
+            expr_binding_map: HashMap::new(),
             transform_info_map: HashMap::new(),
             transform_map: HashMap::new(),
+            transform_list: Vec::new(),
             shape_map: HashMap::new(),
+            store: HashMap::new(),
             extent_analysis: ExtentAnalysis::new(),
+            name_generator: NameGenerator::new(),
         }
     }
 
@@ -283,27 +315,27 @@ impl Normalizer {
         }
     }
 
-    fn compute_expr_extent(&self, expr: &SourceExpr, store: &ArrayEnvironment) -> Shape  {
+    fn compute_expr_extent(&self, expr: &SourceExpr) -> Shape  {
         match expr {
             SourceExpr::ForNode(_, extent, body) => {
-                let body_extent = self.compute_expr_extent(body, store);
+                let body_extent = self.compute_expr_extent(body);
                 im::vector![extent.clone()] + body_extent
             },
 
             SourceExpr::ReduceNode(_, body) => {
-                let mut body_extent = self.compute_expr_extent(body, store);
+                let mut body_extent = self.compute_expr_extent(body);
                 body_extent.split_off(1)
             },
 
             SourceExpr::OpNode(_, expr1, expr2) => {
-                let extent1 = self.compute_expr_extent(expr1, store);
-                let extent2 = self.compute_expr_extent(expr2, store);
+                let extent1 = self.compute_expr_extent(expr1);
+                let extent2 = self.compute_expr_extent(expr2);
                 assert!(extent1 == extent2);
                 extent1
             },
 
             SourceExpr::IndexingNode(arr, index_list) => {
-                let arr_extent = store.get(arr).unwrap();
+                let arr_extent = self.store.get(arr).unwrap();
                 arr_extent.clone().split_off(index_list.len())
             },
 
@@ -311,41 +343,32 @@ impl Normalizer {
         }
     }
 
-    fn compute_prog_extent(&mut self, program: &SourceProgram) -> ArrayEnvironment {
-        let mut store: ArrayEnvironment = HashMap::new();
-
-        for input in program.inputs.iter() {
-            if let Some(_) = store.insert(input.0.clone(), input.1.clone()) {
-                panic!("duplicate binding for {}", input.0)
+    fn compute_prog_extent(&mut self, program: &SourceProgram) {
+        for (name, input) in self.input_map.iter() {
+            if let Some(_) = self.store.insert(name.clone(), input.clone()) {
+                panic!("duplicate binding for {}", name)
             }
         }
 
-        for binding in program.letBindings.iter() {
-            let extent = self.compute_expr_extent(&binding.1, &store);
-            if let Some(_) = store.insert(binding.0.clone(), extent) {
-                panic!("duplicate binding for {}", binding.0)
+        for (name, expr) in self.expr_binding_map.iter() {
+            let extent = self.compute_expr_extent(expr);
+            if let Some(_) = self.store.insert(name.clone(), extent) {
+                panic!("duplicate binding for {}", name)
             }
         }
-
-        let output_extent = self.compute_expr_extent(&program.expr, &store);
-        if let Some(_) = store.insert(String::from(OUTPUT_EXPR_NAME), output_extent) {
-            panic!("duplicate binding for {}", OUTPUT_EXPR_NAME)
-        }
-
-        store
     }
 
-    fn register_transformed_expr(&mut self, transform: ArrayTransformInfo) -> ExprId{
+    fn register_transformed_expr(&mut self, transform: ArrayTransformInfo) -> ExprId {
         let id = self.fresh_expr_id();
         self.transform_info_map.insert(id, transform);
         id
     }
 
+    // transform expression to compute data about its necessary layout and computation
     fn transform_expr(
         &mut self,
         expr: &SourceExpr,
         output_shape: &TransformShape<TransformedDim>,
-        store: &ArrayEnvironment,
         path: im::Vector<PathInfo>
     ) -> Result<TransformResult, String> {
         match expr {
@@ -356,13 +379,13 @@ impl Normalizer {
                         index: index.clone(), extent: *extent
                     });
 
-                self.transform_expr(body, output_shape, store, new_path)
+                self.transform_expr(body, output_shape, new_path)
             },
 
             SourceExpr::ReduceNode(op, body) => {
                 let new_path = 
                     path + im::Vector::unit(PathInfo::Reduce { op: *op });
-                let body_res = self.transform_expr(body, output_shape, store, new_path)?;
+                let body_res = self.transform_expr(body, output_shape, new_path)?;
                 let mut reduced_dim_position = body_res.reduced_dim_position.unwrap();
                 let rest = reduced_dim_position.split_off(1);
                 let (dim_type, dim ) = *reduced_dim_position.first().unwrap();
@@ -376,8 +399,8 @@ impl Normalizer {
             },
 
             SourceExpr::OpNode(op, expr1, expr2) => {
-                let res1 = self.transform_expr(expr1, output_shape, store, path.clone())?;
-                let res2 = self.transform_expr(expr2, output_shape, store, path)?;
+                let res1 = self.transform_expr(expr1, output_shape, path.clone())?;
+                let res2 = self.transform_expr(expr2, output_shape, path)?;
                 let reduced_dim_position_opt =
                     match (&res1.reduced_dim_position, &res2.reduced_dim_position) {
                         (None, None) => Ok(None),
@@ -607,22 +630,11 @@ impl Normalizer {
         }
     }
 
-    fn transform_program(
-        &mut self, program: &SourceProgram, store: &ArrayEnvironment
-    ) -> Result<IndexFreeExpr, String> {
-        let input_map: HashMap<ArrayName, Shape> =
-            program.inputs.iter().map(|input| {
-                (input.0.clone(), input.1.clone())
-            }).collect();
-
-        let mut expr_binding_map: HashMap<ArrayName, SourceExpr> =
-            program.letBindings.iter().map(|let_binding| {
-                (let_binding.0.clone(), *let_binding.1.clone())
-            }).collect();
-        expr_binding_map.insert(String::from(OUTPUT_EXPR_NAME), program.expr.clone());
-
+    fn transform_program(&mut self) -> Result<IndexFreeExpr, String> {
         let output_extent =
-            store.get(OUTPUT_EXPR_NAME).ok_or(format!("No binding for output expression {}", OUTPUT_EXPR_NAME))?;
+            self.store.get(OUTPUT_EXPR_NAME)
+            .ok_or(format!("No binding for output expression {}", OUTPUT_EXPR_NAME))?;
+
         let output_transform: ArrayTransformInfo =
             ArrayTransformInfo(
                 String::from(OUTPUT_EXPR_NAME),
@@ -638,28 +650,29 @@ impl Normalizer {
 
         // backwards analysis to determine the transformations
         // needed for indexed arrays
-        let mut transform_list: Vec<ExprId> = vec![self.output_id];
+        self.transform_list.push(self.output_id);
         let mut worklist: Vec<ExprId> = vec![self.output_id];
         while !worklist.is_empty() {
             let cur_id = worklist.pop().unwrap();
             let transform = &self.transform_info_map[&cur_id];
+            let cur_expr_opt =
+                self.expr_binding_map.get(&transform.0).map(|x| x.clone());
 
             // add transformed arrays to the worklist, if they are let bound
-            if let Some(cur_expr) = expr_binding_map.get(&transform.0) {
+            if let Some(cur_expr) = cur_expr_opt {
                 let cur_res =
                     self.transform_expr(
-                        cur_expr, 
+                        &cur_expr, 
                         &transform.to_transformed_shape(),
-                        store,
                         im::Vector::new()
                     )?;
 
                 worklist.extend(cur_res.transformed_inputs.iter());
-                transform_list.extend(cur_res.transformed_inputs.iter());
+                self.transform_list.extend(cur_res.transformed_inputs.iter());
                 self.transform_map.insert(cur_id, cur_res.expr);
 
             // for inputs, add directly to the shape map
-            } else if let Some(_) = input_map.get(&transform.0) {
+            } else if let Some(_) = self.input_map.get(&transform.0) {
                 let dims = transform.1.len();
                 let required_shape: Shape = 
                     transform.1.iter()
@@ -675,69 +688,29 @@ impl Normalizer {
             }
         }
 
-        // extent analysis to determine necessary padding
-        transform_list.reverse();
-        for id in transform_list.iter() {
-            // don't process inputs; they don't have mappings in transform_map
-            if let Some(expr) = self.transform_map.get(id).map(|x| x.clone()) {
-                if let Some((head, shape_id)) = self.gen_extent_constraints(&expr) {
-                    self.shape_map.insert(*id, (head, shape_id));
+        // since transform list stores a toposort of expressions
+        // and it was populated above starting from the output expression,
+        // we need to reverse it
+        self.transform_list.reverse();
 
-                    let transform_info = &self.transform_info_map[&id];
-                    let required_shape: Shape =
-                        transform_info.1.iter()
-                        .map(|info| info.extent)
-                        .collect();
-
-                    self.extent_analysis.add_atleast_constraint(shape_id, head, required_shape);
-                }
-            }
-        }
+        // generate constraints for the extent analysis
+        self.gen_extent_constraints_prog();
 
         // apply extent solutions to determine padding
-        let extent_solution = self.extent_analysis.solve();
-        let expr_extent_map: HashMap<ExprId, Shape> =
-            self.shape_map.iter().map(|(id, (head, shape_id))| {
-                let mut shape = extent_solution[shape_id].clone();
-                (*id, shape.split_off(*head))
-            }).collect();
+        self.apply_extent_solution();
 
-        for (id, transform) in self.transform_info_map.iter_mut() {
-            let computed_shape = &expr_extent_map[id];
-            let input_shape =  input_map.get(&transform.0);
+        // lower to index-free expression and return client-side transforms
+        self.lower_to_index_free_prog()
+    }
 
-            // update extents
-            for (i, dim_info) in transform.1.iter_mut().enumerate() {
-                let computed_extent = computed_shape[i];
-                dim_info.extent = computed_extent.clone();
-
-                // if input, compute padding as well
-                if let Some(orig_shape) = input_shape {
-                    match dim_info.dim {
-                        // for input dimensions, add padding
-                        TransformedDim::Input(orig_i) => {
-                            let orig_extent = &orig_shape[orig_i];
-                            let pad_min = (orig_extent.lower() - computed_extent.lower()) as usize;
-                            let pad_max = (computed_extent.upper() - orig_extent.upper()) as usize;
-                            dim_info.pad = (pad_min, pad_max);
-                        },
-
-                        // for fill dimensions, just overwrite the fill extent to the computed one
-                        TransformedDim::Fill(_) => {
-                            dim_info.dim = TransformedDim::Fill(computed_extent);
-                        }
-                    }
-                }
-            }
-        }
-
+    fn lower_to_index_free_prog(&mut self) -> Result<IndexFreeExpr, String> {
         // generate map of client ciphertexts
         let mut client_object_id = 0;
         let mut client_object_map: HashMap<ArrayTransformInfo, HEObjectName> = HashMap::new();
         let mut indfree_expr_map: HashMap<ExprId, IndexFreeExpr> = HashMap::new();
         let mut ciphertext_map: HashMap<HEObjectName, Ciphertext> = HashMap::new();
 
-        for id in transform_list.iter() {
+        for id in self.transform_list.iter() {
             if let Some(expr) = self.transform_map.get(id) { // let-binding
                 let indfree_expr = self.lower_to_index_free_expr(expr, &client_object_map, &indfree_expr_map);
 
@@ -763,17 +736,16 @@ impl Normalizer {
             } else { // input
                 let info = &self.transform_info_map[id];
                 if !client_object_map.contains_key(&info) {
-                    let name = format!("c{}", client_object_id);
-                    client_object_id += 1;
+                    let name = self.name_generator.get_fresh_name(&format!("c${}", info.0));
                     client_object_map.insert(info.clone(), name.clone());
 
                     let shape =
-                        circ::Shape(
+                        circ::Dimensions::from(
                             info.1.iter()
                             .map(|dim| {
                                 (dim.extent.upper() - dim.extent.lower()) as usize
                             })
-                            .collect()
+                            .collect::<im::Vector<usize>>()
                         );
                     ciphertext_map.insert(name, Ciphertext { shape });
                 }
@@ -781,6 +753,76 @@ impl Normalizer {
         }
 
         Ok(indfree_expr_map.remove(&self.output_id).unwrap())
+    }
+
+    /// apply extent solutions to determine padding
+    fn apply_extent_solution(&mut self) {
+        let extent_solution = self.extent_analysis.solve();
+        let expr_extent_map: HashMap<ExprId, Shape> =
+            self.shape_map.iter().map(|(id, (head, shape_id))| {
+                let mut shape = extent_solution[shape_id].clone();
+                (*id, shape.split_off(*head))
+            }).collect();
+
+        for (id, transform) in self.transform_info_map.iter_mut() {
+            let computed_shape = &expr_extent_map[id];
+            let input_shape =  self.input_map.get(&transform.0);
+
+            // update extents
+            for (i, dim_info) in transform.1.iter_mut().enumerate() {
+                let computed_extent = computed_shape[i];
+                dim_info.extent = computed_extent.clone();
+
+                // if input, compute padding as well
+                if let Some(orig_shape) = input_shape {
+                    match dim_info.dim {
+                        // for input dimensions, add padding
+                        TransformedDim::Input(orig_i) => {
+                            let orig_extent = &orig_shape[orig_i];
+                            let pad_min = (orig_extent.lower() - computed_extent.lower()) as usize;
+                            let pad_max = (computed_extent.upper() - orig_extent.upper()) as usize;
+                            dim_info.pad = (pad_min, pad_max);
+                        },
+
+                        // for fill dimensions, just overwrite the fill extent to the computed one
+                        TransformedDim::Fill(_) => {
+                            dim_info.dim = TransformedDim::Fill(computed_extent);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// collect constraints for extent analysis
+    fn gen_extent_constraints_prog(&mut self) {
+        // temporarily move transform_list to a tmp so we can iterate through it
+        // we need to do this because the loop mutates the self data structure,
+        // so the compiler prevents us from immutably borrowing transform_list
+        // to iterate through it.
+        // by moving transform_list to a temporary owned ref, we ensure that
+        // the mutations to self in the loop don't change it
+        let tmp_transform_list = std::mem::replace(&mut self.transform_list, Vec::new());
+
+        for id in tmp_transform_list.iter() {
+            // don't process inputs; they don't have mappings in transform_map
+            if let Some(expr) = self.transform_map.get(id).map(|x| x.clone()) {
+                if let Some((head, shape_id)) = self.gen_extent_constraints_expr(&expr) {
+                    self.shape_map.insert(*id, (head, shape_id));
+
+                    let transform_info = &self.transform_info_map[&id];
+                    let required_shape: Shape =
+                        transform_info.1.iter()
+                        .map(|info| info.extent)
+                        .collect();
+
+                    self.extent_analysis.add_atleast_constraint(shape_id, head, required_shape);
+                }
+            }
+        }
+
+        // restore transform_list
+        self.transform_list = tmp_transform_list;
     }
 
     fn lower_to_index_free_expr(
@@ -846,10 +888,10 @@ impl Normalizer {
         }
     }
 
-    fn gen_extent_constraints(&mut self, expr: &TransformedExpr) -> Option<(usize, ShapeId)> {
+    fn gen_extent_constraints_expr(&mut self, expr: &TransformedExpr) -> Option<(usize, ShapeId)> {
         match expr {
-            TransformedExpr::ReduceNode(dim_type, dim, op, body) => {
-                if let Some((head, shape)) = self.gen_extent_constraints(body) {
+            TransformedExpr::ReduceNode(dim_type, _, _, body) => {
+                if let Some((head, shape)) = self.gen_extent_constraints_expr(body) {
                     match dim_type {
                         ReducedDimType::Hidden => Some((head+1, shape)),
                         ReducedDimType::Reused => Some((head, shape)),
@@ -860,8 +902,8 @@ impl Normalizer {
             },
 
             TransformedExpr::Op(_, expr1, expr2) => {
-                let res_opt1 = self.gen_extent_constraints(expr1);
-                let res_opt2  = self.gen_extent_constraints(expr2);
+                let res_opt1 = self.gen_extent_constraints_expr(expr1);
+                let res_opt2  = self.gen_extent_constraints_expr(expr2);
                 match (res_opt1, res_opt2) {
                     (None, None) => None,
                     (None, Some(res2)) => Some(res2),
@@ -884,14 +926,27 @@ impl Normalizer {
     }
 
     pub fn run(&mut self, program: &SourceProgram) -> Result<IndexFreeExpr, String> {
-        let store = self.compute_prog_extent(program);
-        self.transform_program(program, &store)
+        program.inputs.iter().for_each(|input| {
+            if let Some(_) = self.input_map.insert(input.0.clone(), input.1.clone()) {
+                panic!("duplicate bindings for {}", &input.0)
+            }
+        });
+
+        program.letBindings.iter().for_each(|let_binding| {
+            if let Some(_) = self.expr_binding_map.insert(let_binding.0.clone(), *let_binding.1.clone()) {
+                panic!("duplicate bindings for {}", &let_binding.0)
+            }
+        });
+        self.expr_binding_map.insert(String::from(OUTPUT_EXPR_NAME), program.expr.clone());
+
+        self.compute_prog_extent(program);
+        self.transform_program()
     }
 }
 
-impl Default for Normalizer {
+impl Default for IndexElimination {
     fn default() -> Self {
-        Normalizer::new()
+        IndexElimination::new()
     }
 }
 
@@ -904,7 +959,7 @@ mod tests{
         let parser = ProgramParser::new();
         let program: SourceProgram = parser.parse(src).unwrap();
 
-        let mut normalizer = Normalizer::new();
+        let mut normalizer = IndexElimination::new();
         let res = normalizer.run(&program);
         
         assert!(res.is_ok());
@@ -926,6 +981,25 @@ mod tests{
     }
 
     #[test]
+    fn test_imgblur2() {
+        test_lowering(
+        "input img: [(0,16),(0,16)]
+            let res = 
+                for x: (0, 16) {
+                    for y: (0, 16) {
+                        img[x-1][y-1] + img[x+1][y+1]
+                    }
+                }
+            for x: (0, 16) {
+                for y: (0, 16) {
+                    res[x-2][y-2] + res[x+2][y+2]
+                }
+            }
+            "
+        );
+    }
+
+    #[test]
     fn test_matmatmul() {
         test_lowering(
             "input A: [(0,4),(0,4)]
@@ -942,18 +1016,18 @@ mod tests{
     #[test]
     fn test_matmatmul2() {
         test_lowering(
-            "input A: [(0,4),(0,4)]
+            "input A1: [(0,4),(0,4)]
+            input A2: [(0,4),(0,4)]
             input B: [(0,4),(0,4)]
-            let x = A + B
             let res =
                 for i: (0,4) {
                     for j: (0,4) {
-                        sum(for k: (0,4) { A[i][k] * B[k][j] })
+                        sum(for k: (0,4) { A1[i][k] * B[k][j] })
                     }
                 }
             for i: (0,4) {
                 for j: (0,4) {
-                    sum(for k: (0,4) { A[i][k] * res[k][j] })
+                    sum(for k: (0,4) { A2[i][k] * res[k][j] })
                 }
             }
             "

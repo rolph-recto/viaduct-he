@@ -9,13 +9,12 @@ pub mod optimizer;
 pub mod lowering;
 pub mod partial_eval;
 
-pub type Dimension = usize;
 pub type HEObjectName = String;
 
 #[derive(Clone,Debug)]
-pub struct Shape(pub im::Vector<usize>);
+pub struct Dimensions(im::Vector<usize>);
 
-impl Shape {
+impl Dimensions {
     pub fn num_dims(&self) -> usize {
         self.0.len()
     }
@@ -46,7 +45,7 @@ impl Shape {
     }
 }
 
-impl Index<usize> for Shape {
+impl Index<usize> for Dimensions {
     type Output = usize;
 
     fn index(&self, index: usize) -> &Self::Output {
@@ -54,9 +53,9 @@ impl Index<usize> for Shape {
     }
 }
 
-impl From<im::Vector<usize>> for Shape {
+impl From<im::Vector<usize>> for Dimensions {
     fn from(vec: im::Vector<usize>) -> Self {
-        Shape(vec)
+        Dimensions(vec)
     }
 }
 
@@ -145,10 +144,10 @@ impl Display for HECircuit {
 }
 
 #[derive(Clone,Debug)]
-pub struct Ciphertext { pub shape: Shape }
+pub struct Ciphertext { pub shape: Dimensions }
 
 #[derive(Clone,Debug)]
-pub struct Plaintext { pub shape: Shape, pub value: im::Vector<isize> }
+pub struct Plaintext { pub shape: Dimensions, pub value: im::Vector<isize> }
 
 pub struct HECircuitStore {
     pub ciphertexts: HashMap<HEObjectName, Ciphertext>,

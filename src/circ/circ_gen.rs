@@ -59,7 +59,7 @@ pub enum IndexFreeExpr {
     // TRANSFORMATIONS
 
     // fill the following dimensions of an array by rotating it
-    Fill(Box<IndexFreeExpr>, Dimension),
+    Fill(Box<IndexFreeExpr>, usize),
 
     // offset array by a given amount in each dimension
     Offset(Box<IndexFreeExpr>, im::Vector<isize>),
@@ -86,7 +86,7 @@ impl HECircuitGenerator {
         Ok((circuit, self.store.plaintexts.clone()))
     }
 
-    fn _gen_circuit(&mut self, expr: &IndexFreeExpr) -> Result<(HECircuit, Option<Shape>), String> {
+    fn _gen_circuit(&mut self, expr: &IndexFreeExpr) -> Result<(HECircuit, Option<Dimensions>), String> {
         match expr {
             // TODO optimize this
             IndexFreeExpr::ReduceNode(dim, op, body) => {
@@ -288,7 +288,7 @@ impl HECircuitGenerator {
         }
     }
 
-    fn register_plaintext(&mut self, name: &str, shape: &Shape, value: im::Vector<isize>) -> String {
+    fn register_plaintext(&mut self, name: &str, shape: &Dimensions, value: im::Vector<isize>) -> String {
         let fresh_name = self.name_generator.get_fresh_name(name);
         self.store.plaintexts.insert(
             fresh_name.clone(),
@@ -314,7 +314,7 @@ mod tests {
     #[test]
     fn test_literal() {
         let mut inputs: HashMap<HEObjectName, Ciphertext> = HashMap::new();
-        inputs.insert("img".to_owned(), Ciphertext { shape: Shape::from(im::vector![10, 10]) });
+        inputs.insert("img".to_owned(), Ciphertext { shape: Dimensions::from(im::vector![10, 10]) });
 
         let mut circ_gen = HECircuitGenerator::new(&inputs);
 
@@ -338,7 +338,7 @@ mod tests {
     #[test]
     fn test_blur() {
         let mut inputs: HashMap<HEObjectName, Ciphertext> = HashMap::new();
-        inputs.insert("img".to_owned(), Ciphertext { shape: Shape::from(im::vector![10, 10]) });
+        inputs.insert("img".to_owned(), Ciphertext { shape: Dimensions::from(im::vector![10, 10]) });
 
         let mut circ_gen = HECircuitGenerator::new(&inputs);
 
@@ -390,8 +390,8 @@ mod tests {
     #[test]
     fn test_matmul() {
         let mut inputs: HashMap<HEObjectName, Ciphertext> = HashMap::new();
-        inputs.insert("A".to_owned(), Ciphertext { shape: Shape::from(im::vector![2, 2, 2]) });
-        inputs.insert("B".to_owned(), Ciphertext { shape: Shape::from(im::vector![2, 2, 2]) });
+        inputs.insert("A".to_owned(), Ciphertext { shape: Dimensions::from(im::vector![2, 2, 2]) });
+        inputs.insert("B".to_owned(), Ciphertext { shape: Dimensions::from(im::vector![2, 2, 2]) });
 
         let mut circ_gen = HECircuitGenerator::new(&inputs);
 

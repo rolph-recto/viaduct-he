@@ -88,8 +88,8 @@ impl HELoweredProgram {
         prog: &HEProgram,
         store: &HECircuitStore,
         client_store: HEClientStore,
-        server_inputs: HashMap<HEObjectName,Shape>,
-        client_inputs: HashMap<HEObjectName,Shape>,
+        server_inputs: HashMap<HEObjectName,Dimensions>,
+        client_inputs: HashMap<HEObjectName,Dimensions>,
     ) -> HELoweredProgram {
         let uses = prog.analyze_use();
         let mut inplace_map: HashMap<NodeId, NodeId> = HashMap::new();
