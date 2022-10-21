@@ -223,10 +223,10 @@ static OUTPUT_EXPR_NAME: &'static str = "$root";
 impl IndexElimination {
     pub fn new() -> Self {
         IndexElimination {
-            output_id: 0,
-            cur_expr_id: 1,
             input_map: HashMap::new(),
             expr_binding_map: HashMap::new(),
+            output_id: 0,
+            cur_expr_id: 1,
             transform_info_map: HashMap::new(),
             transform_map: HashMap::new(),
             transform_list: Vec::new(),
@@ -335,26 +335,34 @@ impl IndexElimination {
             },
 
             SourceExpr::IndexingNode(arr, index_list) => {
-                let arr_extent = self.store.get(arr).unwrap();
-                arr_extent.clone().split_off(index_list.len())
+                if let Some(arr_extent) = self.store.get(arr) {
+                    arr_extent.clone().split_off(index_list.len())
+                } else {
+                    panic!("no binding for {}", arr)
+                }
             },
 
             SourceExpr::LiteralNode(_) => im::Vector::new()
         }
     }
 
-    fn compute_prog_extent(&mut self, program: &SourceProgram) {
-        for (name, input) in self.input_map.iter() {
-            if let Some(_) = self.store.insert(name.clone(), input.clone()) {
-                panic!("duplicate binding for {}", name)
+    fn compute_extent_prog(&mut self, program: &SourceProgram) {
+        for input in program.inputs.iter() {
+            if let Some(_) = self.store.insert(input.0.clone(), input.1.clone()) {
+                panic!("duplicate binding for {}", input.0)
             }
         }
 
-        for (name, expr) in self.expr_binding_map.iter() {
-            let extent = self.compute_expr_extent(expr);
-            if let Some(_) = self.store.insert(name.clone(), extent) {
-                panic!("duplicate binding for {}", name)
+        for binding in program.letBindings.iter() {
+            let extent = self.compute_expr_extent(&*binding.1);
+            if let Some(_) = self.store.insert(binding.0.clone(), extent) {
+                panic!("duplicate binding for {}", binding.0)
             }
+        }
+
+        let output_extent = self.compute_expr_extent(&program.expr);
+        if let Some(_) = self.store.insert(String::from(OUTPUT_EXPR_NAME), output_extent) {
+            panic!("duplicate binding for {}", OUTPUT_EXPR_NAME)
         }
     }
 
@@ -939,7 +947,7 @@ impl IndexElimination {
         });
         self.expr_binding_map.insert(String::from(OUTPUT_EXPR_NAME), program.expr.clone());
 
-        self.compute_prog_extent(program);
+        self.compute_extent_prog(program);
         self.transform_program()
     }
 }
@@ -959,8 +967,8 @@ mod tests{
         let parser = ProgramParser::new();
         let program: SourceProgram = parser.parse(src).unwrap();
 
-        let mut normalizer = IndexElimination::new();
-        let res = normalizer.run(&program);
+        let mut index_elim = IndexElimination::new();
+        let res = index_elim.run(&program);
         
         assert!(res.is_ok());
 
