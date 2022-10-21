@@ -131,11 +131,12 @@ impl<T: Transform> Default for TransformShape<T> {
     }
 }
 
-#[derive(Clone,Debug,Eq,PartialEq)]
+#[derive(Clone,Debug,Eq)]
 pub struct TransformedDimInfo {
     dim: TransformedDim,
     pad: PadSize,
     extent: Extent,
+    offset: isize,
 }
 
 impl TransformedDimInfo {
@@ -164,6 +165,12 @@ impl Display for TransformedDimInfo {
     }
 }
 
+impl PartialEq for TransformedDimInfo {
+    fn eq(&self, other: &Self) -> bool {
+        self.dim == other.dim && self.pad == other.pad && self.extent == other.extent
+    }
+}
+
 #[derive(Clone,Eq,PartialEq,Debug)]
 pub struct ArrayTransformInfo(ArrayName, Vec<TransformedDimInfo>);
 
@@ -174,6 +181,12 @@ impl ArrayTransformInfo {
             .map(|dim_info| dim_info.dim.clone())
             .collect()
         )
+    }
+
+    fn to_shape(&self) -> Shape {
+        self.1.iter().map(|dim_info| {
+            dim_info.extent.clone()
+        }).collect()
     }
 }
 
@@ -287,7 +300,7 @@ impl IndexElimination {
         }
     }
 
-    fn get_linear_indexing_data(&self, index_expr: &IndexExpr, index_var: &IndexName) -> Option<SimpleIndexingData> {
+    fn get_simple_indexing_data(&self, index_expr: &IndexExpr, index_var: &IndexName) -> Option<SimpleIndexingData> {
         match index_expr {
             IndexVar(v) => {
                 if v == index_var {
@@ -302,8 +315,8 @@ impl IndexElimination {
             },
 
             IndexOp(op, expr1, expr2) => {
-                let data1 = self.get_linear_indexing_data(expr1, index_var)?;
-                let data2 = self.get_linear_indexing_data(expr2, index_var)?;
+                let data1 = self.get_simple_indexing_data(expr1, index_var)?;
+                let data2 = self.get_simple_indexing_data(expr2, index_var)?;
                 match op {
                     Operator::Add => {
                         Some(SimpleIndexingData {
@@ -641,7 +654,26 @@ impl IndexElimination {
                                 // fill dims never have padding
                                 TransformedDim::Fill(extent) => extent
                             };
-                        Ok(TransformedDimInfo { dim, pad: (0,0), extent })
+
+                        let offset: isize =
+                            match dim {
+                                // for indexed dims, perform interval analysis to determine padding
+                                TransformedDim::Input(i) => {
+                                    let index_expr = &index_list[i];
+                                    let index_var = index_expr.get_single_var().unwrap();
+                                    if let Some(data) = self.get_simple_indexing_data(index_expr, &index_var) {
+                                        data.offset
+
+                                    } else {
+                                        panic!("index expr is not simple")
+                                    }
+                                },
+
+                                // fill dims never have padding
+                                TransformedDim::Fill(_) => 0
+                            };
+
+                        Ok(TransformedDimInfo { dim, pad: (0,0), extent, offset })
                     }).collect::<Result<Vec<TransformedDimInfo>,String>>()?;
 
                 let expr_id =
@@ -767,53 +799,37 @@ impl IndexElimination {
         }
     }
 
-    fn lower_to_index_free_expr(
-        &self,
-        expr: &TransformedExpr,
-        client_object_map: &HashMap<ArrayTransformInfo, HEObjectName>,
-        indfree_expr_map: &mut HashMap<ExprId, IndexFreeExpr>,
-    ) -> IndexFreeExpr {
-        match expr {
-            TransformedExpr::ReduceNode(dim_type, dim, op, body) => {
-                let new_body = self.lower_to_index_free_expr(body, client_object_map, indfree_expr_map);
-                match dim_type {
-                    ReducedDimType::Hidden => {
-                        IndexFreeExpr::Reduce(*dim, *op, Box::new(new_body))
-                    },
+    fn fill_and_rotate(&self, info: &ArrayTransformInfo, expr: IndexFreeExpr) -> IndexFreeExpr {
+        // fill
+        let fill_dims: im::Vector<usize> =
+            info.1.iter().enumerate()
+            .filter(|(_, dim_info)| dim_info.is_fill())
+            .map(|(i,_)| i)
+            .collect();
 
-                    // if a dim is reused, zero it out
-                    ReducedDimType::Reused => {
-                        IndexFreeExpr::Zero(
-                            Box::new(
-                                IndexFreeExpr::Reduce(*dim, *op, Box::new(new_body))
-                            ),
-                            *dim
-                        )
-                    }
-                }
-            },
+        let filled_expr =
+            fill_dims.iter().fold(expr, |acc, dim| {
+                IndexFreeExpr::Fill(Box::new(acc), *dim)
+            });
 
-            TransformedExpr::Op(op, expr1, expr2) => {
-                let new_expr1 = self.lower_to_index_free_expr(expr1, client_object_map, indfree_expr_map);
-                let new_expr2 = self.lower_to_index_free_expr(expr2, client_object_map, indfree_expr_map);
-                IndexFreeExpr::Op(*op, Box::new(new_expr1), Box::new(new_expr2))
-            },
+        let need_offset = 
+            info.1.iter()
+            .any(|dim_info| dim_info.offset != 0);
 
-            TransformedExpr::Literal(lit) => {
-                IndexFreeExpr::Literal(*lit)
-            },
+        let offset_expr =
+            if need_offset {
+                IndexFreeExpr::Offset(
+                    Box::new(filled_expr),
+                    info.1.iter().map(|dim_info| {
+                        dim_info.offset
+                    }).collect()
+                )
 
-            TransformedExpr::ExprRef(id) => {
-                if self.transform_map.contains_key(id) { // let-binding
-                    indfree_expr_map.remove(id).unwrap()
+            } else {
+                filled_expr
+            };
 
-                } else { // input
-                    let info = &self.transform_info_map[id];
-                    let name = &client_object_map[info];
-                    IndexFreeExpr::InputArray(String::from(name))
-                }
-            }
-        }
+        offset_expr
     }
 
     /// generate client transformation from transform info
@@ -911,6 +927,56 @@ impl IndexElimination {
         expand_transform
     }
 
+    fn lower_to_index_free_expr(
+        &self,
+        expr: &TransformedExpr,
+        client_object_map: &HashMap<ArrayTransformInfo, HEObjectName>,
+        indfree_expr_map: &mut HashMap<ExprId, IndexFreeExpr>,
+    ) -> IndexFreeExpr {
+        match expr {
+            TransformedExpr::ReduceNode(dim_type, dim, op, body) => {
+                let new_body = self.lower_to_index_free_expr(body, client_object_map, indfree_expr_map);
+                match dim_type {
+                    ReducedDimType::Hidden => {
+                        IndexFreeExpr::Reduce(*dim, *op, Box::new(new_body))
+                    },
+
+                    // if a dim is reused, zero it out
+                    ReducedDimType::Reused => {
+                        IndexFreeExpr::Zero(
+                            Box::new(
+                                IndexFreeExpr::Reduce(*dim, *op, Box::new(new_body))
+                            ),
+                            *dim
+                        )
+                    }
+                }
+            },
+
+            TransformedExpr::Op(op, expr1, expr2) => {
+                let new_expr1 = self.lower_to_index_free_expr(expr1, client_object_map, indfree_expr_map);
+                let new_expr2 = self.lower_to_index_free_expr(expr2, client_object_map, indfree_expr_map);
+                IndexFreeExpr::Op(*op, Box::new(new_expr1), Box::new(new_expr2))
+            },
+
+            TransformedExpr::Literal(lit) => {
+                IndexFreeExpr::Literal(*lit)
+            },
+
+            TransformedExpr::ExprRef(id) => {
+                if self.transform_map.contains_key(id) { // let-binding
+                    indfree_expr_map.remove(id).unwrap()
+
+                } else { // input
+                    let info = &self.transform_info_map[id];
+                    let name = &client_object_map[info];
+                    let input = IndexFreeExpr::InputArray(String::from(name));
+                    self.fill_and_rotate(info, input)
+                }
+            }
+        }
+    }
+
     fn lower_to_index_free_prog(&mut self) -> Result<IndexFreeProgram, String> {
         // generate map of client ciphertexts
         let mut transform_object_map: HashMap<ArrayTransformInfo, HEObjectName> = HashMap::new();
@@ -923,22 +989,8 @@ impl IndexElimination {
 
                 // add fills
                 let info = &self.transform_info_map[id];
-                let fill_dims: Vec<usize> = 
-                    info.1.iter().enumerate()
-                    .filter(|(i, dim_info)| {
-                        match dim_info.dim {
-                            TransformedDim::Input(_) => false,
-                            TransformedDim::Fill(_) => true
-                        }
-                    })
-                    .map(|(i, _)| i)
-                    .collect();
-
-                let filled_expr =
-                    fill_dims.iter().fold(indfree_expr, |acc, dim| {
-                        IndexFreeExpr::Fill(Box::new(acc), *dim)
-                    });
-                indfree_expr_map.insert(*id, filled_expr);
+                let final_expr = self.fill_and_rotate(info, indfree_expr);
+                indfree_expr_map.insert(*id, final_expr);
 
             } else { // input
                 let info = &self.transform_info_map[id];
@@ -982,7 +1034,8 @@ impl IndexElimination {
                     TransformedDimInfo {
                         dim: TransformedDim::Input(i),
                         pad: (0, 0),
-                        extent: extent.clone()
+                        extent: extent.clone(),
+                        offset: 0,
                     }
                 }).collect()
             );
@@ -1114,6 +1167,26 @@ mod tests{
             for x: (0, 16) {
                 for y: (0, 16) {
                     res[x-2][y-2] + res[x+2][y+2]
+                }
+            }
+            "
+        );
+    }
+
+    #[test]
+    fn test_convolve() {
+        test_lowering(
+        "input img: [(0,16),(0,16)]
+            let conv1 = 
+                for x: (0, 15) {
+                    for y: (0, 15) {
+                        img[x][y] + img[x+1][y+1]
+                    }
+                }
+
+            for x: (0, 14) {
+                for y: (0, 14) {
+                    conv1[x][y] + conv1[x+1][y+1]
                 }
             }
             "

@@ -1,8 +1,9 @@
 use std::{collections::HashMap, fmt::Display, ops::Index};
 
 use egg::{RecExpr, Symbol, Id};
+use gcollections::ops::Bounded;
 
-use crate::lang::HEObjectName;
+use crate::lang::{HEObjectName, Shape};
 
 use self::optimizer::HEOptCircuit;
 
@@ -56,6 +57,16 @@ impl Index<usize> for Dimensions {
 impl From<im::Vector<usize>> for Dimensions {
     fn from(vec: im::Vector<usize>) -> Self {
         Dimensions(vec)
+    }
+}
+
+impl From<Shape> for Dimensions {
+    fn from(shape: Shape) -> Self {
+        Dimensions(
+            shape.into_iter().map(|interval| {
+                (interval.upper() - interval.lower()) as usize
+            }).collect()
+        )
     }
 }
 
