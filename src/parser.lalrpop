@@ -1,34 +1,34 @@
-use crate::lang::{*, ExprOperator::*, source::{*, IndexExpr::*, SourceExpr::*}};
+use crate::lang::{*, Operator::*, source::{*, IndexExpr::*, SourceExpr::*}};
 use interval::{Interval, ops::Range};
 use std::str::FromStr;
 
 grammar;
 
 pub Program: SourceProgram = {
-    <inputs:InputList> <letBindings:LetNodeList> <expr:Expr> => SourceProgram { inputs, letBindings, expr },
-    <letBindings:LetNodeList> <expr:Expr> => SourceProgram { inputs: im::Vector::new(), letBindings, expr },
-    <inputs:InputList> <expr:Expr> => SourceProgram { inputs, letBindings: im::Vector::new(), expr },
-    <expr:Expr> => SourceProgram { inputs: im::Vector::new(), letBindings: im::Vector::new(), expr }
+    <inputs:InputList> <let_bindings:LetBindingList> <expr:Expr> => SourceProgram { inputs, let_bindings, expr },
+    <let_bindings:LetBindingList> <expr:Expr> => SourceProgram { inputs: im::Vector::new(), let_bindings, expr },
+    <inputs:InputList> <expr:Expr> => SourceProgram { inputs, let_bindings: im::Vector::new(), expr },
+    <expr:Expr> => SourceProgram { inputs: im::Vector::new(), let_bindings: im::Vector::new(), expr }
 }
 
-InputList: im::Vector<InputNode> = {
-    <il:InputList> <i:InputNode> => il + im::Vector::unit(i),
-    <i:InputNode> => im::Vector::unit(i)
+InputList: im::Vector<Input> = {
+    <il:InputList> <i:Input> => il + im::Vector::unit(i),
+    <i:Input> => im::Vector::unit(i)
 }
 
-InputNode: InputNode = {
-    "input" <arr:Ident> ":" "[" <e:ExtentList> "]" => InputNode(arr, e),
-    "input" <arr:Ident> => InputNode(arr, im::Vector::new()),
+Input: Input = {
+    "input" <arr:Ident> ":" "[" <e:ExtentList> "]" => Input(arr, e),
+    "input" <arr:Ident> => Input(arr, im::Vector::new()),
 }
 
-LetNodeList: im::Vector<LetNode> = {
-    <ll:LetNodeList> <l:LetNode> => ll + im::Vector::unit(l),
-    <l:LetNode> => im::Vector::unit(l)
+LetBindingList: im::Vector<LetBinding> = {
+    <ll:LetBindingList> <l:LetBinding> => ll + im::Vector::unit(l),
+    <l:LetBinding> => im::Vector::unit(l)
 }   
 
-LetNode: LetNode = {
+LetBinding: LetBinding = {
     "let" <var:Ident> "=" <rhs:Expr> => {
-        LetNode(var, Box::new(rhs))
+        LetBinding(var, Box::new(rhs))
     },
 }
 
@@ -40,34 +40,34 @@ Expr: SourceExpr = {
 // factor grammar this way so multiplication is always lower
 // in the parse tree than add or subtraction
 AddSubExpr: SourceExpr = {
-    <l:Expr> "+" <r:MulExpr> => OpNode(OpAdd, Box::new(l), Box::new(r)),
-    <l:Expr> "-" <r:MulExpr> => OpNode(OpSub, Box::new(l), Box::new(r)),
+    <l:Expr> "+" <r:MulExpr> => ExprOp(Add, Box::new(l), Box::new(r)),
+    <l:Expr> "-" <r:MulExpr> => ExprOp(Sub, Box::new(l), Box::new(r)),
 }
 
 MulExpr: SourceExpr = {
-    <l:MulExpr> "*" <r:TermExpr> => OpNode(OpMul, Box::new(l), Box::new(r)),
+    <l:MulExpr> "*" <r:TermExpr> => ExprOp(Mul, Box::new(l), Box::new(r)),
     <t:TermExpr> => t
 }
 
 TermExpr: SourceExpr = {
     "(" <e:Expr> ")" => e,
 
-    <n:Num> => LiteralNode(n),
+    <n:Num> => Literal(n),
 
     "for" <x:Ident> ":" <e:Extent> "{" <body:Expr> "}" => {
-        ForNode(x, e, Box::new(body))
+        For(x, e, Box::new(body))
     },
 
-    "sum" "(" <body:Expr> ")" => ReduceNode(OpAdd, Box::new(body)),
+    "sum" "(" <body:Expr> ")" => Reduce(Add, Box::new(body)),
 
-    "product" "(" <body:Expr> ")" => ReduceNode(OpMul, Box::new(body)),
+    "product" "(" <body:Expr> ")" => Reduce(Mul, Box::new(body)),
 
-    <ie:IndexingNode> => IndexingNode(ie.0, ie.1)
+    <ie:Indexing> => Indexing(ie.0, ie.1)
 }
 
-IndexingNode: (ArrayName, im::Vector<IndexExpr>) = {
+Indexing: (ArrayName, im::Vector<IndexExpr>) = {
     <i:Ident> => (i, im::Vector::new()),
-    <ie:IndexingNode> "[" <i:IndexExpr> "]" => (ie.0, ie.1 + im::Vector::unit(i)),
+    <ie:Indexing> "[" <i:IndexExpr> "]" => (ie.0, ie.1 + im::Vector::unit(i)),
 }
 
 IndexExpr: IndexExpr = {
@@ -76,12 +76,12 @@ IndexExpr: IndexExpr = {
 }
 
 IndexAddSubExpr: IndexExpr = {
-    <l:IndexExpr> "+" <r:IndexMulExpr> => IndexOp(OpAdd, Box::new(l), Box::new(r)),
-    <l:IndexExpr> "-" <r:IndexMulExpr> => IndexOp(OpSub, Box::new(l), Box::new(r)),
+    <l:IndexExpr> "+" <r:IndexMulExpr> => IndexOp(Add, Box::new(l), Box::new(r)),
+    <l:IndexExpr> "-" <r:IndexMulExpr> => IndexOp(Sub, Box::new(l), Box::new(r)),
 }
 
 IndexMulExpr: IndexExpr = {
-    <l:IndexMulExpr> "*" <r:IndexTermExpr> => IndexOp(OpMul, Box::new(l), Box::new(r)),
+    <l:IndexMulExpr> "*" <r:IndexTermExpr> => IndexOp(Mul, Box::new(l), Box::new(r)),
     <e:IndexTermExpr> => e,
 }
 

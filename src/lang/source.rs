@@ -2,8 +2,8 @@ use crate::lang::*;
 
 #[derive(Clone,Debug)]
 pub struct SourceProgram {
-    pub inputs: im::Vector<InputNode>,
-    pub letBindings: im::Vector<LetNode>,
+    pub inputs: im::Vector<Input>,
+    pub let_bindings: im::Vector<LetBinding>,
     pub expr: SourceExpr
 }
 
@@ -17,54 +17,54 @@ impl Display for SourceProgram {
 }
 
 #[derive(Clone,Debug)]
-pub struct InputNode(pub ArrayName, pub Shape);
+pub struct Input(pub ArrayName, pub Shape);
 
-impl Display for InputNode {
+impl Display for Input {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "input {}: {:?}", self.0, self.1)
     }
 }
 
 #[derive(Clone,Debug)]
-pub struct LetNode(pub ArrayName, pub Box<SourceExpr>);
+pub struct LetBinding(pub ArrayName, pub Box<SourceExpr>);
 
 #[derive(Clone,Debug)]
 pub enum SourceExpr {
-    ForNode(IndexName, Extent, Box<SourceExpr>),
-    ReduceNode(ExprOperator, Box<SourceExpr>),
-    OpNode(ExprOperator, Box<SourceExpr>, Box<SourceExpr>),
-    IndexingNode(ArrayName, im::Vector<IndexExpr>),
-    LiteralNode(isize)
+    For(IndexName, Extent, Box<SourceExpr>),
+    Reduce(Operator, Box<SourceExpr>),
+    ExprOp(Operator, Box<SourceExpr>, Box<SourceExpr>),
+    Indexing(ArrayName, im::Vector<IndexExpr>),
+    Literal(isize)
 }
 
 impl Display for SourceExpr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use SourceExpr::*;
         match self {
-            ForNode(index, extent, body) => {
+            For(index, extent, body) => {
                 write!(f, "for {} : {} in {}", index, extent, body)
             },
 
-            ReduceNode(op, body) => {
+            Reduce(op, body) => {
                 let reduce_op_str = 
                     match op {
-                        ExprOperator::OpAdd => "sum",
-                        ExprOperator::OpSub => "sum_sub",
-                        ExprOperator::OpMul => "product"
+                        Operator::Add => "sum",
+                        Operator::Sub => "sum_sub",
+                        Operator::Mul => "product"
                     };
 
                 write!(f, "{}({})", reduce_op_str, body)
             },
 
-            OpNode(op, expr1, expr2) => {
+            ExprOp(op, expr1, expr2) => {
                 write!(f, "({} {} {})", expr1, op, expr2)
             },
 
-            IndexingNode(arr, index_list) => {
+            Indexing(arr, index_list) => {
                 write!(f, "{}{:?}", arr, index_list)
             },
 
-            LiteralNode(val) => {
+            Literal(val) => {
                 write!(f, "{}", val)
             },
         }
@@ -75,7 +75,7 @@ impl Display for SourceExpr {
 pub enum IndexExpr {
     IndexVar(IndexName),
     IndexLiteral(isize),
-    IndexOp(ExprOperator, Box<IndexExpr>, Box<IndexExpr>)
+    IndexOp(Operator, Box<IndexExpr>, Box<IndexExpr>)
 }
 
 impl IndexExpr {

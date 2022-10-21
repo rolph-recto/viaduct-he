@@ -19,7 +19,7 @@ impl TypeChecker {
             }
         )?;
         
-        program.letBindings.iter().try_for_each(|let_node| {
+        program.let_bindings.iter().try_for_each(|let_node| {
             let rhs_dims = self.runWithStores(&let_node.1, &store)?;
             match store.insert(let_node.0.as_ref(), rhs_dims) {
                 Some(_) => Err(format!("duplicate bindings for {}", &let_node.0)),
@@ -32,12 +32,12 @@ impl TypeChecker {
 
     fn runWithStores(&self, expr: &SourceExpr, store: &im::HashMap<&str, usize>) -> Result<usize, String> {
         match expr {
-            ForNode(index, extent, body) => {
+            For(index, extent, body) => {
                 let dim = self.runWithStores(body, store)?;
                 Ok(dim+1)
             }
 
-            ReduceNode(_, body) => {
+            Reduce(_, body) => {
                 let body_dim = self.runWithStores(body, store)?;
                 if body_dim > 0 {
                     Ok(body_dim-1)
@@ -47,7 +47,7 @@ impl TypeChecker {
                 }
             },
 
-            OpNode(_, expr1, expr2) => {
+            ExprOp(_, expr1, expr2) => {
                 let dim1 = self.runWithStores(expr1, store)?;
                 let dim2 = self.runWithStores(expr2, store)?;
 
@@ -58,7 +58,7 @@ impl TypeChecker {
                 }
             }
 
-            IndexingNode(arr, index_list) => {
+            Indexing(arr, index_list) => {
                 let arr_dim: usize =
                     *store.get(arr.as_str())
                          .ok_or(format!("array {} not in store", arr))?;
@@ -71,7 +71,7 @@ impl TypeChecker {
                 }
             },
 
-            LiteralNode(_) => Ok(0)
+            Literal(_) => Ok(0)
         }
     }
 }

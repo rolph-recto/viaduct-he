@@ -1,12 +1,7 @@
 use std::{collections::HashMap};
 
-use crate::util::NameGenerator;
+use crate::{util::NameGenerator, lang::Operator};
 use super::*;
-
-#[derive(Clone,Debug)]
-pub enum IndexFreeExprOperator {
-    OpAdd, OpMul, OpSub
-}
 
 #[derive(Clone,Debug)]
 pub enum ClientTransform {
@@ -39,15 +34,21 @@ impl ClientTransform {
     }
 }
 
+impl Display for ClientTransform {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_python_str())
+    }
+}
+
 pub type HEClientStore = HashMap<HEObjectName, ClientTransform>;
 
 #[derive(Clone,Debug)]
 pub enum IndexFreeExpr {
     // reduction
-    ReduceNode(usize, IndexFreeExprOperator, Box<IndexFreeExpr>),
+    Reduce(usize, Operator, Box<IndexFreeExpr>),
 
     // element-wise operation
-    OpNode(IndexFreeExprOperator, Box<IndexFreeExpr>, Box<IndexFreeExpr>),
+    Op(Operator, Box<IndexFreeExpr>, Box<IndexFreeExpr>),
 
     // array received from the client
     InputArray(HEObjectName),
@@ -66,6 +67,40 @@ pub enum IndexFreeExpr {
 
     // zero out a dimension
     Zero(Box<IndexFreeExpr>, usize),
+}
+
+impl Display for IndexFreeExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IndexFreeExpr::Reduce(dim, op, body) => {
+                write!(f, "reduce({}, {}, {})", dim, op, body)
+            },
+
+            IndexFreeExpr::Op(op,expr1, expr2) => {
+                write!(f, "({} {} {})", expr1, op, expr2)
+            },
+
+            IndexFreeExpr::InputArray(arr) => {
+                write!(f, "{}", arr)
+            },
+
+            IndexFreeExpr::Literal(lit) => {
+                write!(f, "{}", lit)
+            },
+
+            IndexFreeExpr::Fill(expr, dim) => {
+                write!(f, "fill({}, {})", expr, dim)
+            },
+
+            IndexFreeExpr::Offset(expr, dim_offsets) => {
+                write!(f, "offset({}, {:?})", expr, dim_offsets)
+            },
+            
+            IndexFreeExpr::Zero(expr, dim) => {
+                write!(f, "zero({}, {})", expr, dim)
+            },
+        }
+    }
 }
 
 pub struct HECircuitGenerator {
@@ -89,13 +124,13 @@ impl HECircuitGenerator {
     fn _gen_circuit(&mut self, expr: &IndexFreeExpr) -> Result<(HECircuit, Option<Dimensions>), String> {
         match expr {
             // TODO optimize this
-            IndexFreeExpr::ReduceNode(dim, op, body) => {
+            IndexFreeExpr::Reduce(dim, op, body) => {
                 let (circ, shape_opt) = self._gen_circuit(body)?;
                 let shape =
                     shape_opt.ok_or(String::from("Cannot reduce dimensionless array"))?;
             
                 let mut cur =
-                    if let IndexFreeExprOperator::OpSub = op {
+                    if let Operator::Sub = op {
                         HECircuit::Sub(
                             Box::new(HECircuit::Literal(0)),
                             Box::new(circ.clone())
@@ -115,13 +150,13 @@ impl HECircuitGenerator {
                         );
 
                     cur = match op {
-                        IndexFreeExprOperator::OpAdd => 
+                        Operator::Add => 
                             HECircuit::Add(Box::new(cur), Box::new(rot_circ)),
 
-                        IndexFreeExprOperator::OpMul =>
+                        Operator::Mul =>
                             HECircuit::Mul(Box::new(cur), Box::new(rot_circ)),
 
-                        IndexFreeExprOperator::OpSub =>
+                        Operator::Sub =>
                             HECircuit::Sub(Box::new(cur), Box::new(rot_circ)),
                     }
                 }
@@ -129,20 +164,20 @@ impl HECircuitGenerator {
                 Ok((cur, Some(shape)))
             },
 
-            IndexFreeExpr::OpNode(op, expr1, expr2) => {
+            IndexFreeExpr::Op(op, expr1, expr2) => {
                 let (circ1, shape1_opt) = self._gen_circuit(expr1)?;
                 let (circ2, shape2_opt) = self._gen_circuit(expr2)?;
                 let out_circ =
                     match op {
-                        IndexFreeExprOperator::OpAdd => {
+                        Operator::Add => {
                             HECircuit::Add(Box::new(circ1), Box::new(circ2))
                         },
 
-                        IndexFreeExprOperator::OpMul => {
+                        Operator::Mul => {
                             HECircuit::Mul(Box::new(circ1), Box::new(circ2))
                         },
 
-                        IndexFreeExprOperator::OpSub => {
+                        Operator::Sub => {
                             HECircuit::Sub(Box::new(circ1), Box::new(circ2))
                         },
                     };
@@ -319,8 +354,8 @@ mod tests {
         let mut circ_gen = HECircuitGenerator::new(&inputs);
 
         let expr =
-            OpNode(
-                IndexFreeExprOperator::OpAdd,
+            Op(
+                Operator::Add,
                 Box::new(
                     Offset(
                         Box::new(InputArray("img".to_owned())),
@@ -343,11 +378,11 @@ mod tests {
         let mut circ_gen = HECircuitGenerator::new(&inputs);
 
         let expr = 
-            OpNode(
-                IndexFreeExprOperator::OpAdd,
+            Op(
+                Operator::Add,
                 Box::new(
-                    OpNode(
-                        IndexFreeExprOperator::OpAdd,
+                    Op(
+                        Operator::Add,
                         Box::new(
                             Offset(
                                 Box::new(InputArray("img".to_owned())),
@@ -363,8 +398,8 @@ mod tests {
                     )
                 ),
                 Box::new(
-                    OpNode(
-                        IndexFreeExprOperator::OpAdd,
+                    Op(
+                        Operator::Add,
                         Box::new(
                             Offset(
                                 Box::new(InputArray("img".to_owned())),
@@ -402,16 +437,16 @@ mod tests {
             Fill(Box::new(InputArray("B".to_owned())), 0);
 
         let mul_AB =
-            OpNode(
-                IndexFreeExprOperator::OpMul,
+            Op(
+                Operator::Mul,
                 Box::new(filled_A),
                 Box::new(filled_B),
             );
         
         let add_AB = 
-            ReduceNode(
+            Reduce(
                 1,
-                IndexFreeExprOperator::OpAdd,
+                Operator::Add,
                 Box::new(mul_AB)
             );
 

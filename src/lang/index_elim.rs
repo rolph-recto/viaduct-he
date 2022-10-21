@@ -1,9 +1,21 @@
-use std::{cmp::max, hash::{*, Hasher}};
+use std::hash::{*, Hasher};
 
 use interval::ops::Range;
-use gcollections::ops::{bounded::Bounded, Subset};
+use gcollections::ops::{bounded::Bounded};
 
-use crate::{lang::{*, source::{*, IndexExpr::*}}, circ::{self, circ_gen::{IndexFreeExpr, IndexFreeExprOperator}, Ciphertext, HEObjectName}, util::NameGenerator};
+use crate::{
+    lang::{
+        *,
+        source::{*, IndexExpr::*}
+    },
+    circ::{
+        self,
+        Ciphertext,
+        HEObjectName,
+        circ_gen::IndexFreeExpr,
+    },
+    util::NameGenerator
+};
 
 use super::extent_analysis::{ExtentAnalysis, ShapeId};
 
@@ -14,7 +26,7 @@ struct SimpleIndexingData { scale: isize, offset: isize }
 #[derive(Clone,Debug)]
 enum PathInfo {
     Index { index: IndexName, extent: Extent },
-    Reduce { op: ExprOperator }
+    Reduce { op: Operator }
 }
 
 #[derive(Eq,PartialEq,Clone,Copy,Debug)]
@@ -23,8 +35,8 @@ pub enum ReducedDimType { Hidden, Reused }
 /// expression with associated data about lowering to an index-free representation.
 #[derive(Clone,Debug)]
 pub enum TransformedExpr {
-    ReduceNode(ReducedDimType, usize, ExprOperator, Box<TransformedExpr>),
-    Op(ExprOperator, Box<TransformedExpr>, Box<TransformedExpr>),
+    ReduceNode(ReducedDimType, usize, Operator, Box<TransformedExpr>),
+    Op(Operator, Box<TransformedExpr>, Box<TransformedExpr>),
     Literal(isize),
     ExprRef(ExprId),
 }
@@ -257,9 +269,9 @@ impl IndexElimination {
                 let interval1 = self.index_expr_to_interval(expr1, index_store);
                 let interval2 = self.index_expr_to_interval(expr2, index_store);
                 match op {
-                    ExprOperator::OpAdd => interval1 + interval2,
-                    ExprOperator::OpSub => interval1 - interval2,
-                    ExprOperator::OpMul => interval1 * interval2,
+                    Operator::Add => interval1 + interval2,
+                    Operator::Sub => interval1 - interval2,
+                    Operator::Mul => interval1 * interval2,
                 }
             }
         }
@@ -283,19 +295,19 @@ impl IndexElimination {
                 let data1 = self.get_linear_indexing_data(expr1, index_var)?;
                 let data2 = self.get_linear_indexing_data(expr2, index_var)?;
                 match op {
-                    ExprOperator::OpAdd => {
+                    Operator::Add => {
                         Some(SimpleIndexingData {
                             scale: data1.scale + data2.scale,
                             offset: data1.offset + data2.offset
                         })
                     },
-                    ExprOperator::OpSub => {
+                    Operator::Sub => {
                         Some(SimpleIndexingData {
                             scale: data1.scale - data2.scale,
                             offset: data1.offset - data2.offset
                         })
                     },
-                    ExprOperator::OpMul => {
+                    Operator::Mul => {
                         if data1.scale == 0 {
                             Some(SimpleIndexingData {
                                 scale: data2.scale * data1.offset,
@@ -317,24 +329,24 @@ impl IndexElimination {
 
     fn compute_expr_extent(&self, expr: &SourceExpr) -> Shape  {
         match expr {
-            SourceExpr::ForNode(_, extent, body) => {
+            SourceExpr::For(_, extent, body) => {
                 let body_extent = self.compute_expr_extent(body);
                 im::vector![extent.clone()] + body_extent
             },
 
-            SourceExpr::ReduceNode(_, body) => {
+            SourceExpr::Reduce(_, body) => {
                 let mut body_extent = self.compute_expr_extent(body);
                 body_extent.split_off(1)
             },
 
-            SourceExpr::OpNode(_, expr1, expr2) => {
+            SourceExpr::ExprOp(_, expr1, expr2) => {
                 let extent1 = self.compute_expr_extent(expr1);
                 let extent2 = self.compute_expr_extent(expr2);
                 assert!(extent1 == extent2);
                 extent1
             },
 
-            SourceExpr::IndexingNode(arr, index_list) => {
+            SourceExpr::Indexing(arr, index_list) => {
                 if let Some(arr_extent) = self.store.get(arr) {
                     arr_extent.clone().split_off(index_list.len())
                 } else {
@@ -342,7 +354,7 @@ impl IndexElimination {
                 }
             },
 
-            SourceExpr::LiteralNode(_) => im::Vector::new()
+            SourceExpr::Literal(_) => im::Vector::new()
         }
     }
 
@@ -353,7 +365,7 @@ impl IndexElimination {
             }
         }
 
-        for binding in program.letBindings.iter() {
+        for binding in program.let_bindings.iter() {
             let extent = self.compute_expr_extent(&*binding.1);
             if let Some(_) = self.store.insert(binding.0.clone(), extent) {
                 panic!("duplicate binding for {}", binding.0)
@@ -380,7 +392,7 @@ impl IndexElimination {
         path: im::Vector<PathInfo>
     ) -> Result<TransformResult, String> {
         match expr {
-            SourceExpr::ForNode(index, extent, body) => {
+            SourceExpr::For(index, extent, body) => {
                 let new_path = 
                     path +
                     im::Vector::unit(PathInfo::Index {
@@ -390,7 +402,7 @@ impl IndexElimination {
                 self.transform_expr(body, output_shape, new_path)
             },
 
-            SourceExpr::ReduceNode(op, body) => {
+            SourceExpr::Reduce(op, body) => {
                 let new_path = 
                     path + im::Vector::unit(PathInfo::Reduce { op: *op });
                 let body_res = self.transform_expr(body, output_shape, new_path)?;
@@ -406,7 +418,7 @@ impl IndexElimination {
                 Ok(res)
             },
 
-            SourceExpr::OpNode(op, expr1, expr2) => {
+            SourceExpr::ExprOp(op, expr1, expr2) => {
                 let res1 = self.transform_expr(expr1, output_shape, path.clone())?;
                 let res2 = self.transform_expr(expr2, output_shape, path)?;
                 let reduced_dim_position_opt =
@@ -436,7 +448,7 @@ impl IndexElimination {
                 Ok(res)
             },
 
-            SourceExpr::LiteralNode(lit) => {
+            SourceExpr::Literal(lit) => {
                 Ok(TransformResult {
                     expr: TransformedExpr::Literal(*lit as isize),
                     reduced_dim_position: None,
@@ -444,7 +456,7 @@ impl IndexElimination {
                 })
             },
 
-            SourceExpr::IndexingNode(array, index_list) => {
+            SourceExpr::Indexing(array, index_list) => {
                 // first, determine the computed shape of the array
                 // based on path info and the output shape
 
@@ -713,7 +725,6 @@ impl IndexElimination {
 
     fn lower_to_index_free_prog(&mut self) -> Result<IndexFreeExpr, String> {
         // generate map of client ciphertexts
-        let mut client_object_id = 0;
         let mut client_object_map: HashMap<ArrayTransformInfo, HEObjectName> = HashMap::new();
         let mut indfree_expr_map: HashMap<ExprId, IndexFreeExpr> = HashMap::new();
         let mut ciphertext_map: HashMap<HEObjectName, Ciphertext> = HashMap::new();
@@ -842,23 +853,16 @@ impl IndexElimination {
         match expr {
             TransformedExpr::ReduceNode(dim_type, dim, op, body) => {
                 let new_body = self.lower_to_index_free_expr(body, client_object_map, indfree_expr_map);
-                let new_op =
-                    match op {
-                        ExprOperator::OpAdd => IndexFreeExprOperator::OpAdd,
-                        ExprOperator::OpSub => IndexFreeExprOperator::OpSub,
-                        ExprOperator::OpMul => IndexFreeExprOperator::OpMul,
-                    };
-
                 match dim_type {
                     ReducedDimType::Hidden => {
-                        IndexFreeExpr::ReduceNode(*dim, new_op, Box::new(new_body))
+                        IndexFreeExpr::Reduce(*dim, *op, Box::new(new_body))
                     },
 
                     // if a dim is reused, zero it out
                     ReducedDimType::Reused => {
                         IndexFreeExpr::Zero(
                             Box::new(
-                                IndexFreeExpr::ReduceNode(*dim, new_op, Box::new(new_body))
+                                IndexFreeExpr::Reduce(*dim, *op, Box::new(new_body))
                             ),
                             *dim
                         )
@@ -867,16 +871,9 @@ impl IndexElimination {
             },
 
             TransformedExpr::Op(op, expr1, expr2) => {
-                let new_op =
-                    match op {
-                        ExprOperator::OpAdd => IndexFreeExprOperator::OpAdd,
-                        ExprOperator::OpSub => IndexFreeExprOperator::OpSub,
-                        ExprOperator::OpMul => IndexFreeExprOperator::OpMul,
-                    };
-
                 let new_expr1 = self.lower_to_index_free_expr(expr1, client_object_map, indfree_expr_map);
                 let new_expr2 = self.lower_to_index_free_expr(expr2, client_object_map, indfree_expr_map);
-                IndexFreeExpr::OpNode(new_op, Box::new(new_expr1), Box::new(new_expr2))
+                IndexFreeExpr::Op(*op, Box::new(new_expr1), Box::new(new_expr2))
             },
 
             TransformedExpr::Literal(lit) => {
@@ -940,7 +937,7 @@ impl IndexElimination {
             }
         });
 
-        program.letBindings.iter().for_each(|let_binding| {
+        program.let_bindings.iter().for_each(|let_binding| {
             if let Some(_) = self.expr_binding_map.insert(let_binding.0.clone(), *let_binding.1.clone()) {
                 panic!("duplicate bindings for {}", &let_binding.0)
             }
