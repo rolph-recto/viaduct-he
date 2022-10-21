@@ -6,6 +6,7 @@ use lalrpop_util::lalrpop_mod;
 
 lalrpop_mod!(pub parser);
 
+pub mod extent_analysis;
 pub mod source;
 pub mod normalized;
 pub mod typechecker;
