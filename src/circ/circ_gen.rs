@@ -1,4 +1,4 @@
-use std::{collections::HashMap};
+use std::collections::HashMap;
 
 use crate::{
     circ::{Ciphertext, Plaintext, Dimensions, HECircuit, HECircuitStore},
@@ -335,28 +335,28 @@ mod tests {
 
         let mut circ_gen = HECircuitGenerator::new(&inputs);
 
-        let filled_A =
+        let filled_a =
             Fill(Box::new(InputArray("A".to_owned())), 2);
 
-        let filled_B = 
+        let filled_b = 
             Fill(Box::new(InputArray("B".to_owned())), 0);
 
-        let mul_AB =
+        let mul_ab =
             Op(
                 Operator::Mul,
-                Box::new(filled_A),
-                Box::new(filled_B),
+                Box::new(filled_a),
+                Box::new(filled_b),
             );
         
-        let add_AB = 
+        let add_ab = 
             Reduce(
                 1,
                 Operator::Add,
-                Box::new(mul_AB)
+                Box::new(mul_ab)
             );
 
         let zero_expr = 
-            Zero(Box::new(add_AB), 1);
+            Zero(Box::new(add_ab), 1);
 
         // let expr = 
         //     Fill(Box::new(zero_expr), 1);

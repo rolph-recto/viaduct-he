@@ -138,6 +138,22 @@ pub struct TransformedDimInfo {
     extent: Extent,
 }
 
+impl TransformedDimInfo {
+    pub fn is_input(&self) -> bool {
+        match self.dim {
+            TransformedDim::Input(_) => true,
+            TransformedDim::Fill(_) => false,
+        }
+    }
+
+    pub fn is_fill(&self) -> bool {
+        match self.dim {
+            TransformedDim::Input(_) => false,
+            TransformedDim::Fill(_) => true,
+        }
+    }
+}
+
 impl Display for TransformedDimInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.pad != (0,0) {
@@ -644,7 +660,317 @@ impl IndexElimination {
         }
     }
 
-    fn transform_program(&mut self) -> Result<IndexFreeExpr, String> {
+    fn gen_extent_constraints_expr(&mut self, expr: &TransformedExpr) -> Option<(usize, ShapeId)> {
+        match expr {
+            TransformedExpr::ReduceNode(dim_type, _, _, body) => {
+                if let Some((head, shape)) = self.gen_extent_constraints_expr(body) {
+                    match dim_type {
+                        ReducedDimType::Hidden => Some((head+1, shape)),
+                        ReducedDimType::Reused => Some((head, shape)),
+                    }
+                } else {
+                    panic!("attempting to reduce dimension of scalar value")
+                }
+            },
+
+            TransformedExpr::Op(_, expr1, expr2) => {
+                let res_opt1 = self.gen_extent_constraints_expr(expr1);
+                let res_opt2  = self.gen_extent_constraints_expr(expr2);
+                match (res_opt1, res_opt2) {
+                    (None, None) => None,
+                    (None, Some(res2)) => Some(res2),
+                    (Some(res1), None) => Some(res1),
+                    (Some((head1, shape1)), Some((head2, shape2))) => {
+                        self.extent_analysis.add_equals_constraint(shape1, head1, shape2, head2);
+
+                        // arbitrarily return the first shape, since it should
+                        // be the same as the second shape anyway
+                        Some((head1, shape1))
+                    }
+                }
+            },
+
+            TransformedExpr::Literal(_) => None,
+
+            TransformedExpr::ExprRef(id) =>
+                self.shape_map.get(id).map(|x| *x)
+        }
+    }
+
+    /// collect constraints for extent analysis
+    fn gen_extent_constraints_prog(&mut self) {
+        // temporarily move transform_list to a tmp so we can iterate through it
+        // we need to do this because the loop mutates the self data structure,
+        // so the compiler prevents us from immutably borrowing transform_list
+        // to iterate through it.
+        // by moving transform_list to a temporary owned ref, we ensure that
+        // the mutations to self in the loop don't change it
+        let tmp_transform_list = std::mem::replace(&mut self.transform_list, Vec::new());
+
+        for id in tmp_transform_list.iter() {
+            // don't process inputs; they don't have mappings in transform_map
+            if let Some(expr) = self.transform_map.get(id).map(|x| x.clone()) {
+                if let Some((head, shape_id)) = self.gen_extent_constraints_expr(&expr) {
+                    self.shape_map.insert(*id, (head, shape_id));
+
+                    let transform_info = &self.transform_info_map[&id];
+                    let required_shape: Shape =
+                        transform_info.1.iter()
+                        .map(|info| info.extent)
+                        .collect();
+
+                    self.extent_analysis.add_atleast_constraint(shape_id, head, required_shape);
+                }
+            }
+        }
+
+        // restore transform_list
+        self.transform_list = tmp_transform_list;
+    }
+
+    /// apply extent solutions to determine padding
+    fn apply_extent_solution(&mut self) {
+        let extent_solution = self.extent_analysis.solve();
+        let expr_extent_map: HashMap<ExprId, Shape> =
+            self.shape_map.iter().map(|(id, (head, shape_id))| {
+                let mut shape = extent_solution[shape_id].clone();
+                (*id, shape.split_off(*head))
+            }).collect();
+
+        for (id, transform) in self.transform_info_map.iter_mut() {
+            let computed_shape = &expr_extent_map[id];
+            let input_shape =  self.input_map.get(&transform.0);
+
+            // update extents
+            for (i, dim_info) in transform.1.iter_mut().enumerate() {
+                let computed_extent = computed_shape[i];
+                dim_info.extent = computed_extent.clone();
+
+                // if input, compute padding as well
+                if let Some(orig_shape) = input_shape {
+                    match dim_info.dim {
+                        // for input dimensions, add padding
+                        TransformedDim::Input(orig_i) => {
+                            let orig_extent = &orig_shape[orig_i];
+                            let pad_min = (orig_extent.lower() - computed_extent.lower()) as usize;
+                            let pad_max = (computed_extent.upper() - orig_extent.upper()) as usize;
+                            dim_info.pad = (pad_min, pad_max);
+                        },
+
+                        // for fill dimensions, just overwrite the fill extent to the computed one
+                        TransformedDim::Fill(_) => {
+                            dim_info.dim = TransformedDim::Fill(computed_extent);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn lower_to_index_free_expr(
+        &self,
+        expr: &TransformedExpr,
+        client_object_map: &HashMap<ArrayTransformInfo, HEObjectName>,
+        indfree_expr_map: &mut HashMap<ExprId, IndexFreeExpr>,
+    ) -> IndexFreeExpr {
+        match expr {
+            TransformedExpr::ReduceNode(dim_type, dim, op, body) => {
+                let new_body = self.lower_to_index_free_expr(body, client_object_map, indfree_expr_map);
+                match dim_type {
+                    ReducedDimType::Hidden => {
+                        IndexFreeExpr::Reduce(*dim, *op, Box::new(new_body))
+                    },
+
+                    // if a dim is reused, zero it out
+                    ReducedDimType::Reused => {
+                        IndexFreeExpr::Zero(
+                            Box::new(
+                                IndexFreeExpr::Reduce(*dim, *op, Box::new(new_body))
+                            ),
+                            *dim
+                        )
+                    }
+                }
+            },
+
+            TransformedExpr::Op(op, expr1, expr2) => {
+                let new_expr1 = self.lower_to_index_free_expr(expr1, client_object_map, indfree_expr_map);
+                let new_expr2 = self.lower_to_index_free_expr(expr2, client_object_map, indfree_expr_map);
+                IndexFreeExpr::Op(*op, Box::new(new_expr1), Box::new(new_expr2))
+            },
+
+            TransformedExpr::Literal(lit) => {
+                IndexFreeExpr::Literal(*lit)
+            },
+
+            TransformedExpr::ExprRef(id) => {
+                if self.transform_map.contains_key(id) { // let-binding
+                    indfree_expr_map.remove(id).unwrap()
+
+                } else { // input
+                    let info = &self.transform_info_map[id];
+                    let name = &client_object_map[info];
+                    IndexFreeExpr::InputArray(String::from(name))
+                }
+            }
+        }
+    }
+
+    /// generate client transformation from transform info
+    fn lower_to_client_transform(&self, info: &ArrayTransformInfo) -> ClientTransform {
+        let input_array = ClientTransform::InputArray(info.0.clone());
+
+        let cmp_input_dims =
+            |dim1: &&TransformedDimInfo, dim2: &&TransformedDimInfo| -> std::cmp::Ordering {
+                match (&dim1.dim, &dim2.dim){
+                    (TransformedDim::Input(i1), TransformedDim::Input(i2)) => {
+                        i1.cmp(i2)
+                    },
+
+                    _ => {
+                        panic!("fill dim cannot be one of the original dims")
+                    }
+                }
+            };
+
+        let transposed_dims: Vec<&TransformedDimInfo> =
+            info.1.iter()
+            .filter(|dim_info| dim_info.is_input())
+            .collect();
+
+        let need_transpose =
+            transposed_dims.iter().enumerate().any(|(i, dim_info)| {
+                match dim_info.dim {
+                    TransformedDim::Input(idim) => i != idim,
+                    TransformedDim::Fill(_) => true,
+                }
+            });
+
+        let mut orig_dims = transposed_dims.clone();
+
+        if need_transpose {
+            orig_dims.sort_by(cmp_input_dims);
+        }
+
+        // pad
+        let need_padding =
+            orig_dims.iter().any(|dim_info| {
+                dim_info.pad.0 != 0 || dim_info.pad.1 != 0
+            });
+
+        let padded_transform =
+            if need_padding {
+                ClientTransform::Pad(
+                    Box::new(input_array),
+                    transposed_dims.iter()
+                    .map(|dim_info| dim_info.pad)
+                    .collect::<im::Vector<PadSize>>()
+                )
+
+            } else {
+                input_array
+            };
+
+        // transpose
+        let transpose_transform =
+            if need_transpose {
+                ClientTransform::Transpose(
+                    Box::new(padded_transform),
+                    transposed_dims.iter().map(|dim_info| {
+                        match dim_info.dim {
+                            TransformedDim::Input(i) => i,
+
+                            TransformedDim::Fill(_) => {
+                                panic!("fill dim should not be an original dim")
+                            }
+                        }
+                    }).collect()
+                )
+
+            } else {
+                padded_transform
+            };
+
+        // extend with new dimensions
+        let fill_dims: Vec<(usize, &TransformedDimInfo)> = 
+            info.1.iter().enumerate()
+            .filter(|(_, dim_info)| dim_info.is_fill())
+            .collect();
+
+        let expand_transform =
+            if fill_dims.is_empty() {
+                transpose_transform
+
+            } else {
+                ClientTransform::Expand(
+                    Box::new(transpose_transform),
+                    fill_dims.iter().map(|(i,_)| *i).collect()
+                )
+            };
+
+        expand_transform
+    }
+
+    fn lower_to_index_free_prog(&mut self) -> Result<IndexFreeProgram, String> {
+        // generate map of client ciphertexts
+        let mut transform_object_map: HashMap<ArrayTransformInfo, HEObjectName> = HashMap::new();
+        let mut indfree_expr_map: HashMap<ExprId, IndexFreeExpr> = HashMap::new();
+        let mut ciphertext_map: HashMap<HEObjectName, Ciphertext> = HashMap::new();
+
+        for id in self.transform_list.iter() {
+            if let Some(cur_expr) = self.transform_map.get(id) { // let-binding
+                let indfree_expr = self.lower_to_index_free_expr(cur_expr, &transform_object_map, &mut indfree_expr_map);
+
+                // add fills
+                let info = &self.transform_info_map[id];
+                let fill_dims: Vec<usize> = 
+                    info.1.iter().enumerate()
+                    .filter(|(i, dim_info)| {
+                        match dim_info.dim {
+                            TransformedDim::Input(_) => false,
+                            TransformedDim::Fill(_) => true
+                        }
+                    })
+                    .map(|(i, _)| i)
+                    .collect();
+
+                let filled_expr =
+                    fill_dims.iter().fold(indfree_expr, |acc, dim| {
+                        IndexFreeExpr::Fill(Box::new(acc), *dim)
+                    });
+                indfree_expr_map.insert(*id, filled_expr);
+
+            } else { // input
+                let info = &self.transform_info_map[id];
+                if !transform_object_map.contains_key(&info) {
+                    let name = self.name_generator.get_fresh_name(&format!("c${}", info.0));
+                    transform_object_map.insert(info.clone(), name.clone());
+
+                    let shape =
+                        circ::Dimensions::from(
+                            info.1.iter()
+                            .map(|dim| {
+                                (dim.extent.upper() - dim.extent.lower()) as usize
+                            })
+                            .collect::<im::Vector<usize>>()
+                        );
+                    ciphertext_map.insert(name, Ciphertext { shape });
+                }
+            }
+        }
+
+        // build client store
+        let client_store: HEClientStore = 
+            transform_object_map.iter().map(|(info, name)| {
+                (String::from(name), self.lower_to_client_transform(info))
+            }).collect();
+
+        let expr = indfree_expr_map.remove(&self.output_id).unwrap();
+
+        Ok(IndexFreeProgram { client_store, expr })
+    }
+
+    fn transform_program(&mut self) -> Result<IndexFreeProgram, String> {
         let output_extent =
             self.store.get(OUTPUT_EXPR_NAME)
             .ok_or(format!("No binding for output expression {}", OUTPUT_EXPR_NAME))?;
@@ -717,214 +1043,7 @@ impl IndexElimination {
         self.lower_to_index_free_prog()
     }
 
-    fn lower_to_index_free_prog(&mut self) -> Result<IndexFreeExpr, String> {
-        // generate map of client ciphertexts
-        let mut client_object_map: HashMap<ArrayTransformInfo, HEObjectName> = HashMap::new();
-        let mut indfree_expr_map: HashMap<ExprId, IndexFreeExpr> = HashMap::new();
-        let mut ciphertext_map: HashMap<HEObjectName, Ciphertext> = HashMap::new();
-
-        for id in self.transform_list.iter() {
-            if let Some(expr) = self.transform_map.get(id) { // let-binding
-                let indfree_expr = self.lower_to_index_free_expr(expr, &client_object_map, &indfree_expr_map);
-
-                // add fills
-                let info = &self.transform_info_map[id];
-                let fill_dims: Vec<usize> = 
-                    info.1.iter().enumerate()
-                    .filter(|(i, dim_info)| {
-                        match dim_info.dim {
-                            TransformedDim::Input(_) => false,
-                            TransformedDim::Fill(_) => true
-                        }
-                    })
-                    .map(|(i, _)| i)
-                    .collect();
-
-                let filled_expr =
-                    fill_dims.iter().fold(indfree_expr, |acc, dim| {
-                        IndexFreeExpr::Fill(Box::new(acc), *dim)
-                    });
-                indfree_expr_map.insert(*id, filled_expr);
-
-            } else { // input
-                let info = &self.transform_info_map[id];
-                if !client_object_map.contains_key(&info) {
-                    let name = self.name_generator.get_fresh_name(&format!("c${}", info.0));
-                    client_object_map.insert(info.clone(), name.clone());
-
-                    let shape =
-                        circ::Dimensions::from(
-                            info.1.iter()
-                            .map(|dim| {
-                                (dim.extent.upper() - dim.extent.lower()) as usize
-                            })
-                            .collect::<im::Vector<usize>>()
-                        );
-                    ciphertext_map.insert(name, Ciphertext { shape });
-                }
-            }
-        }
-
-        Ok(indfree_expr_map.remove(&self.output_id).unwrap())
-    }
-
-    /// apply extent solutions to determine padding
-    fn apply_extent_solution(&mut self) {
-        let extent_solution = self.extent_analysis.solve();
-        let expr_extent_map: HashMap<ExprId, Shape> =
-            self.shape_map.iter().map(|(id, (head, shape_id))| {
-                let mut shape = extent_solution[shape_id].clone();
-                (*id, shape.split_off(*head))
-            }).collect();
-
-        for (id, transform) in self.transform_info_map.iter_mut() {
-            let computed_shape = &expr_extent_map[id];
-            let input_shape =  self.input_map.get(&transform.0);
-
-            // update extents
-            for (i, dim_info) in transform.1.iter_mut().enumerate() {
-                let computed_extent = computed_shape[i];
-                dim_info.extent = computed_extent.clone();
-
-                // if input, compute padding as well
-                if let Some(orig_shape) = input_shape {
-                    match dim_info.dim {
-                        // for input dimensions, add padding
-                        TransformedDim::Input(orig_i) => {
-                            let orig_extent = &orig_shape[orig_i];
-                            let pad_min = (orig_extent.lower() - computed_extent.lower()) as usize;
-                            let pad_max = (computed_extent.upper() - orig_extent.upper()) as usize;
-                            dim_info.pad = (pad_min, pad_max);
-                        },
-
-                        // for fill dimensions, just overwrite the fill extent to the computed one
-                        TransformedDim::Fill(_) => {
-                            dim_info.dim = TransformedDim::Fill(computed_extent);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /// collect constraints for extent analysis
-    fn gen_extent_constraints_prog(&mut self) {
-        // temporarily move transform_list to a tmp so we can iterate through it
-        // we need to do this because the loop mutates the self data structure,
-        // so the compiler prevents us from immutably borrowing transform_list
-        // to iterate through it.
-        // by moving transform_list to a temporary owned ref, we ensure that
-        // the mutations to self in the loop don't change it
-        let tmp_transform_list = std::mem::replace(&mut self.transform_list, Vec::new());
-
-        for id in tmp_transform_list.iter() {
-            // don't process inputs; they don't have mappings in transform_map
-            if let Some(expr) = self.transform_map.get(id).map(|x| x.clone()) {
-                if let Some((head, shape_id)) = self.gen_extent_constraints_expr(&expr) {
-                    self.shape_map.insert(*id, (head, shape_id));
-
-                    let transform_info = &self.transform_info_map[&id];
-                    let required_shape: Shape =
-                        transform_info.1.iter()
-                        .map(|info| info.extent)
-                        .collect();
-
-                    self.extent_analysis.add_atleast_constraint(shape_id, head, required_shape);
-                }
-            }
-        }
-
-        // restore transform_list
-        self.transform_list = tmp_transform_list;
-    }
-
-    fn lower_to_index_free_expr(
-        &self,
-        expr: &TransformedExpr,
-        client_object_map: &HashMap<ArrayTransformInfo, HEObjectName>,
-        indfree_expr_map: &HashMap<ExprId, IndexFreeExpr>,
-    ) -> IndexFreeExpr {
-        match expr {
-            TransformedExpr::ReduceNode(dim_type, dim, op, body) => {
-                let new_body = self.lower_to_index_free_expr(body, client_object_map, indfree_expr_map);
-                match dim_type {
-                    ReducedDimType::Hidden => {
-                        IndexFreeExpr::Reduce(*dim, *op, Box::new(new_body))
-                    },
-
-                    // if a dim is reused, zero it out
-                    ReducedDimType::Reused => {
-                        IndexFreeExpr::Zero(
-                            Box::new(
-                                IndexFreeExpr::Reduce(*dim, *op, Box::new(new_body))
-                            ),
-                            *dim
-                        )
-                    }
-                }
-            },
-
-            TransformedExpr::Op(op, expr1, expr2) => {
-                let new_expr1 = self.lower_to_index_free_expr(expr1, client_object_map, indfree_expr_map);
-                let new_expr2 = self.lower_to_index_free_expr(expr2, client_object_map, indfree_expr_map);
-                IndexFreeExpr::Op(*op, Box::new(new_expr1), Box::new(new_expr2))
-            },
-
-            TransformedExpr::Literal(lit) => {
-                IndexFreeExpr::Literal(*lit)
-            },
-
-            TransformedExpr::ExprRef(id) => {
-                if self.transform_map.contains_key(id) { // let-binding
-                    indfree_expr_map[id].clone()
-
-                } else { // input
-                    let info = &self.transform_info_map[id];
-                    let name = &client_object_map[info];
-                    IndexFreeExpr::InputArray(String::from(name))
-                }
-            }
-        }
-    }
-
-    fn gen_extent_constraints_expr(&mut self, expr: &TransformedExpr) -> Option<(usize, ShapeId)> {
-        match expr {
-            TransformedExpr::ReduceNode(dim_type, _, _, body) => {
-                if let Some((head, shape)) = self.gen_extent_constraints_expr(body) {
-                    match dim_type {
-                        ReducedDimType::Hidden => Some((head+1, shape)),
-                        ReducedDimType::Reused => Some((head, shape)),
-                    }
-                } else {
-                    panic!("attempting to reduce dimension of scalar value")
-                }
-            },
-
-            TransformedExpr::Op(_, expr1, expr2) => {
-                let res_opt1 = self.gen_extent_constraints_expr(expr1);
-                let res_opt2  = self.gen_extent_constraints_expr(expr2);
-                match (res_opt1, res_opt2) {
-                    (None, None) => None,
-                    (None, Some(res2)) => Some(res2),
-                    (Some(res1), None) => Some(res1),
-                    (Some((head1, shape1)), Some((head2, shape2))) => {
-                        self.extent_analysis.add_equals_constraint(shape1, head1, shape2, head2);
-
-                        // arbitrarily return the first shape, since it should
-                        // be the same as the second shape anyway
-                        Some((head1, shape1))
-                    }
-                }
-            },
-
-            TransformedExpr::Literal(_) => None,
-
-            TransformedExpr::ExprRef(id) =>
-                self.shape_map.get(id).map(|x| *x)
-        }
-    }
-
-    pub fn run(&mut self, program: &SourceProgram) -> Result<IndexFreeExpr, String> {
+    pub fn run(&mut self, program: &SourceProgram) -> Result<IndexFreeProgram, String> {
         program.inputs.iter().for_each(|input| {
             if let Some(_) = self.input_map.insert(input.0.clone(), input.1.clone()) {
                 panic!("duplicate bindings for {}", &input.0)
@@ -963,8 +1082,11 @@ mod tests{
         
         assert!(res.is_ok());
 
-        let indfree_expr = res.unwrap();
-        println!("{:?}", indfree_expr);
+        let prog = res.unwrap();
+        for (name, transform) in prog.client_store.iter() {
+            println!("{} => {}", name, transform)
+        }
+        println!("{}", prog.expr);
     }
 
     #[test]
