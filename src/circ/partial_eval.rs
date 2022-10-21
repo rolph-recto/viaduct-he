@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use crate::{
     circ::*,
-    util::NameGenerator,
+    util::NameGenerator, lang::Shape,
 };
 
 /// partially evaluate operations on plaintexts.

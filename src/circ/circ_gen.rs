@@ -44,7 +44,7 @@ pub type HEClientStore = HashMap<HEObjectName, ClientTransform>;
 #[derive(Clone,Debug)]
 pub enum IndexFreeExpr {
     // reduction
-    ReduceNode(IndexFreeExprOperator, usize, Box<IndexFreeExpr>),
+    ReduceNode(usize, IndexFreeExprOperator, Box<IndexFreeExpr>),
 
     // element-wise operation
     OpNode(IndexFreeExprOperator, Box<IndexFreeExpr>, Box<IndexFreeExpr>),
@@ -64,8 +64,8 @@ pub enum IndexFreeExpr {
     // offset array by a given amount in each dimension
     Offset(Box<IndexFreeExpr>, im::Vector<isize>),
 
-    // zero out specific ranges in an array
-    Zero(Box<IndexFreeExpr>, im::Vector<(usize, usize)>),
+    // zero out a dimension
+    Zero(Box<IndexFreeExpr>, usize),
 }
 
 pub struct HECircuitGenerator {
@@ -89,7 +89,7 @@ impl HECircuitGenerator {
     fn _gen_circuit(&mut self, expr: &IndexFreeExpr) -> Result<(HECircuit, Option<Shape>), String> {
         match expr {
             // TODO optimize this
-            IndexFreeExpr::ReduceNode(op, dim, body) => {
+            IndexFreeExpr::ReduceNode(dim, op, body) => {
                 let (circ, shape_opt) = self._gen_circuit(body)?;
                 let shape =
                     shape_opt.ok_or(String::from("Cannot reduce dimensionless array"))?;
@@ -210,10 +210,19 @@ impl HECircuitGenerator {
                 }
             },
 
-            IndexFreeExpr::Zero(expr, zero_region) => {
+            IndexFreeExpr::Zero(expr, zero_dim) => {
                 let (circ, shape_opt) = self._gen_circuit(expr)?;
                 let shape =
                     shape_opt.ok_or(String::from("Cannot apply zero transform to dimensionless array"))?;
+
+                let zero_region: im::Vector<(usize,usize)> =
+                    shape.0.iter().enumerate().map(|(i, &dim_size)| {
+                        if i == *zero_dim {
+                            (1, dim_size-1)
+                        } else {
+                            (0, dim_size-1)
+                        }
+                    }).collect();
 
                 let iter_domain = Self::get_iteration_domain(&shape.as_vec());
                 let mut mask: Vec<isize> = Vec::new();
@@ -401,16 +410,13 @@ mod tests {
         
         let add_AB = 
             ReduceNode(
-                IndexFreeExprOperator::OpAdd,
                 1,
+                IndexFreeExprOperator::OpAdd,
                 Box::new(mul_AB)
             );
 
         let zero_expr = 
-            Zero(
-                Box::new(add_AB),
-                im::vector![(0,1),(1,1),(0,1)]
-            );
+            Zero(Box::new(add_AB), 1);
 
         // let expr = 
         //     Fill(Box::new(zero_expr), 1);

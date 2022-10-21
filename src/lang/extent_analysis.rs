@@ -140,7 +140,7 @@ impl ExtentAnalysis {
 
         // collect solutions into 
         let mut shape_solution: HashMap<ShapeId, Shape> = HashMap::new();
-        for (&id, extent_vars) in self.shape_map.iter() {
+        for (&node, extent_vars) in self.shape_map.iter() {
             let shape: Shape =
                 extent_vars.iter()
                 .map(|var| {
@@ -152,7 +152,7 @@ impl ExtentAnalysis {
                 })
                 .collect();
 
-            shape_solution.insert(id, shape);
+            shape_solution.insert(node, shape);
         }
 
         shape_solution

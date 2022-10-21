@@ -13,7 +13,7 @@ pub type Dimension = usize;
 pub type HEObjectName = String;
 
 #[derive(Clone,Debug)]
-pub struct Shape(im::Vector<usize>);
+pub struct Shape(pub im::Vector<usize>);
 
 impl Shape {
     pub fn num_dims(&self) -> usize {
