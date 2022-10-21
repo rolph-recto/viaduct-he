@@ -1,3 +1,3 @@
-# HE Vectorizer
+# TLHE Compiler
 
-Use the algebraic properties of vectorized HE operations to optimize HE kernels.
+A compiler from a tensor language to vectorized homomorphic encryption.
