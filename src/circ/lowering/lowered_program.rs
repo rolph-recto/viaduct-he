@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-use crate::circ::{*, lowering::program::*, circ_gen::HEClientStore};
+use crate::{circ::{*, lowering::program::*}, lang::HEClientStore};
  
 type HELoweredNodeId = String;
 type HELoweredOperand = String;

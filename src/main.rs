@@ -8,12 +8,16 @@ use egg::RecExpr;
 use log::*;
 use std::collections::HashMap;
 
-use he_vectorizer::circ::{
-    lowering::{
-        program::HEProgram,
-        lowered_program::HELoweredProgram, code_gen::CodeGenerator,
+use he_vectorizer::{
+    circ::{
+        lowering::{
+            program::HEProgram,
+            lowered_program::HELoweredProgram, code_gen::CodeGenerator,
+        },
+        optimizer::{HEOptCircuit, ExtractorType, Optimizer, HELatencyModel}, HECircuitStore,
     },
-    optimizer::{HEOptCircuit, ExtractorType, Optimizer, HELatencyModel}, HECircuitStore, circ_gen::ClientTransform};
+    lang::ClientTransform,
+};
 
 #[derive(Parser)]
 #[clap(author, version, about = "optimizer for for vectorized homomorphic encryption circuits", long_about = None)]

@@ -6,18 +6,12 @@ use gcollections::ops::{bounded::Bounded};
 use crate::{
     lang::{
         *,
-        source::{*, IndexExpr::*}
+        IndexExpr::*,
+        extent_analysis::{ExtentAnalysis, ShapeId},
     },
-    circ::{
-        self,
-        Ciphertext,
-        HEObjectName,
-        circ_gen::IndexFreeExpr,
-    },
+    circ::{ self, Ciphertext },
     util::NameGenerator
 };
-
-use super::extent_analysis::{ExtentAnalysis, ShapeId};
 
 type PadSize = (usize, usize);
 

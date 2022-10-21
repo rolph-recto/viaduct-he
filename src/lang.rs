@@ -9,7 +9,11 @@ lalrpop_mod!(pub parser);
 pub mod extent_analysis;
 pub mod source;
 pub mod index_elim;
+pub mod index_free;
 pub mod typechecker;
+
+pub use self::source::*;
+pub use self::index_free::*;
 
 pub type Extent = Interval<i64>;
 pub type Shape = im::Vector<Extent>;

@@ -2,14 +2,14 @@ use std::{collections::HashMap, fmt::Display, ops::Index};
 
 use egg::{RecExpr, Symbol, Id};
 
+use crate::lang::HEObjectName;
+
 use self::optimizer::HEOptCircuit;
 
 pub mod circ_gen;
 pub mod optimizer;
 pub mod lowering;
 pub mod partial_eval;
-
-pub type HEObjectName = String;
 
 #[derive(Clone,Debug)]
 pub struct Dimensions(im::Vector<usize>);
