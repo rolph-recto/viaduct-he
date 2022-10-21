@@ -100,7 +100,7 @@ ExtentList: im::Vector<Extent> = {
     <e:Extent> => im::Vector::unit(e)
 }
 
-Extent: Extent = "(" <lb:Num> "," <ub:Num> ")" => Interval::new(lb, ub);
+Extent: Extent = "(" <lb:Num> "," <ub:Num> ")" => Interval::new(lb as i64, ub as i64);
 
 Ident: String = <s:r"[[:alpha:]][[:word:]]*"> => String::from(s);
-Num: i64 = <s:r"[0-9]+"> => i64::from_str(s).unwrap();
+Num: isize = <s:r"[0-9]+"> => isize::from_str(s).unwrap();

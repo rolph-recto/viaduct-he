@@ -9,7 +9,7 @@ use super::extent_analysis::{ExtentAnalysis, ShapeId};
 
 type PadSize = (usize, usize);
 
-struct SimpleIndexingData { scale: i64, offset: i64 }
+struct SimpleIndexingData { scale: isize, offset: isize }
 
 #[derive(Clone,Debug)]
 enum PathInfo {
@@ -218,7 +218,7 @@ impl Normalizer {
             },
 
             IndexLiteral(val) => {
-                Interval::new(*val, *val)
+                Interval::new(*val as i64, *val as i64)
             }
 
             IndexOp(op, expr1, expr2) => {

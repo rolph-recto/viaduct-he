@@ -34,7 +34,7 @@ pub enum SourceExpr {
     ReduceNode(ExprOperator, Box<SourceExpr>),
     OpNode(ExprOperator, Box<SourceExpr>, Box<SourceExpr>),
     IndexingNode(ArrayName, im::Vector<IndexExpr>),
-    LiteralNode(i64)
+    LiteralNode(isize)
 }
 
 impl Display for SourceExpr {
@@ -74,7 +74,7 @@ impl Display for SourceExpr {
 #[derive(Clone,Debug)]
 pub enum IndexExpr {
     IndexVar(IndexName),
-    IndexLiteral(i64),
+    IndexLiteral(isize),
     IndexOp(ExprOperator, Box<IndexExpr>, Box<IndexExpr>)
 }
 
