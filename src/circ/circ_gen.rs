@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     circ::{Plaintext, Dimensions, HECircuit, HECircuitStore},
-    lang::{IndexFreeExpr, HEObjectName, Operator, IndexFreeProgram},
+    lang::{IndexFreeExpr, Operator, IndexFreeProgram},
     util::NameGenerator,
 };
 
@@ -19,12 +19,12 @@ impl HECircuitGenerator {
         }
     }
 
-    pub fn gen_circuit(&mut self, program: &IndexFreeProgram) -> Result<(HECircuit, HashMap<HEObjectName,Plaintext>), String> {
+    pub fn gen_circuit(mut self, program: &IndexFreeProgram) -> Result<(HECircuit, HECircuitStore), String> {
         for (name, ciphertext) in program.ciphertexts.iter() {
             self.store.ciphertexts.insert(name.clone(), ciphertext.clone());
         }
         let (circuit, _) = self._gen_circuit(&program.expr)?;
-        Ok((circuit, self.store.plaintexts.clone()))
+        Ok((circuit, self.store))
     }
 
     fn _gen_circuit(&mut self, expr: &IndexFreeExpr) -> Result<(HECircuit, Option<Dimensions>), String> {

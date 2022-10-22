@@ -33,7 +33,7 @@ impl From<HECircuit> for RecExpr<HEOptCircuit> {
 enum RewriteOp { Add, Sub, Mul }
 
 #[derive(Clone, ValueEnum)]
-pub enum ExtractorType { GREEDY, LP }
+pub enum ExtractorType { Greedy, LP }
 
 pub struct HELatencyModel {
     pub add: f64,
@@ -674,7 +674,7 @@ impl Optimizer {
 
         let opt_expr =
             match extractor_type {
-                ExtractorType::GREEDY => {
+                ExtractorType::Greedy => {
                     info!("using greedy extractor to derive optimized program...");
                     // let extractor = GreedyExtractor::new(egraph, HECostFunction { egraph, count: 0 });
                     // let extractor = Extractor::new(egraph, HECostFunction { egraph, latency: HELatencyModel::default() });

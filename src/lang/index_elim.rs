@@ -1003,7 +1003,7 @@ impl IndexElimination {
             } else { // input
                 let info = &self.transform_info_map[id];
                 if !transform_object_map.contains_key(&info) {
-                    let name = self.name_generator.get_fresh_name(&format!("c${}", info.0));
+                    let name = self.name_generator.get_fresh_name(&format!("c_{}", info.0));
                     transform_object_map.insert(info.clone(), name.clone());
                     ciphertexts.insert(name, Ciphertext { dimensions: info.to_dimensions() });
                 }
@@ -1095,7 +1095,7 @@ impl IndexElimination {
         self.lower_to_index_free_prog()
     }
 
-    pub fn run(&mut self, program: &SourceProgram) -> Result<IndexFreeProgram, String> {
+    pub fn run(mut self, program: &SourceProgram) -> Result<IndexFreeProgram, String> {
         program.inputs.iter().for_each(|input| {
             if let Some(_) = self.input_map.insert(input.0.clone(), input.1.clone()) {
                 panic!("duplicate bindings for {}", &input.0)

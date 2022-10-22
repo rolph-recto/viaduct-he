@@ -1,0 +1,14 @@
+input A1: [(0,4),(0,4)]
+input A2: [(0,4),(0,4)]
+input B: [(0,4),(0,4)]
+let res =
+    for i: (0,4) {
+        for j: (0,4) {
+            sum(for k: (0,4) { A1[i][k] * B[k][j] })
+        }
+    }
+for i: (0,4) {
+    for j: (0,4) {
+        sum(for k: (0,4) { A2[i][k] * res[k][j] })
+    }
+}

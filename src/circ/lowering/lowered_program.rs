@@ -33,15 +33,15 @@ pub enum HELoweredInstr {
 
 #[derive(Serialize)]
 pub struct HELoweredProgram {
-    vec_size: usize,
-    literals: Vec<(isize, String)>,
-    constants: Vec<(Vec<isize>, String)>,
-    instrs: Vec<HELoweredInstr>,
-    output: HELoweredNodeId,
-    client_inputs: Vec<(String, im::Vector<usize>)>,
-    server_inputs: Vec<(String, im::Vector<usize>)>,
-    ciphertexts: HashSet<String>,
-    client_preprocess: Vec<(String, String)>,
+    pub vec_size: usize,
+    pub literals: Vec<(isize, String)>,
+    pub constants: Vec<(Vec<isize>, String)>,
+    pub instrs: Vec<HELoweredInstr>,
+    pub output: HELoweredNodeId,
+    pub client_inputs: Vec<(String, im::Vector<usize>)>,
+    pub server_inputs: Vec<(String, im::Vector<usize>)>,
+    pub ciphertexts: HashSet<String>,
+    pub client_preprocess: Vec<(String, String)>,
 }
 
 impl HELoweredProgram {
