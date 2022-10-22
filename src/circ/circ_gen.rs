@@ -241,7 +241,7 @@ impl HECircuitGenerator {
 
 #[cfg(test)]
 mod tests {
-    use crate::lang::HEObjectName;
+    use crate::{lang::HEObjectName, circ::Ciphertext};
 
     use super::{ *, IndexFreeExpr::* };
 
