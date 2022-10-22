@@ -277,7 +277,6 @@ impl HELoweredProgram {
                     }
                 },
 
-
                 HEInstruction::Mul { id, op1, op2 } => {
                     let lid = format!("i{}", id);
                     let lop1 = Self::lower_operand(&inplace_map, &mut const_map, op1);
@@ -424,7 +423,7 @@ impl HELoweredProgram {
         let constants: Vec<(Vec<isize>, String)> =
             prog.get_plaintext_symbols().into_iter().map(|sym|
                 match store.plaintexts.get(&sym) {
-                    Some(Plaintext { shape: _, value }) => {
+                    Some(Plaintext { dimensions: _, value }) => {
                         (Vec::from_iter(value.clone().into_iter()), sym)
                     },
                     _ => {

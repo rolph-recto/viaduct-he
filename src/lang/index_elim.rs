@@ -1,7 +1,7 @@
 use std::hash::{*, Hasher};
 
 use interval::ops::Range;
-use gcollections::ops::{bounded::Bounded};
+use gcollections::ops::bounded::Bounded;
 
 use crate::{
     lang::{
@@ -9,7 +9,7 @@ use crate::{
         IndexExpr::*,
         extent_analysis::{ExtentAnalysis, ShapeId},
     },
-    circ::{ self, Ciphertext },
+    circ::{ Ciphertext, Dimensions },
     util::NameGenerator
 };
 
@@ -187,6 +187,14 @@ impl ArrayTransformInfo {
         self.1.iter().map(|dim_info| {
             dim_info.extent.clone()
         }).collect()
+    }
+    
+    fn to_dimensions(&self) -> Dimensions {
+        Dimensions::from(
+            self.1.iter().map(|dim_info| {
+                (dim_info.extent.upper() - dim_info.extent.lower()) as usize
+            }).collect::<im::Vector<usize>>()
+        )
     }
 }
 
@@ -981,7 +989,7 @@ impl IndexElimination {
         // generate map of client ciphertexts
         let mut transform_object_map: HashMap<ArrayTransformInfo, HEObjectName> = HashMap::new();
         let mut indfree_expr_map: HashMap<ExprId, IndexFreeExpr> = HashMap::new();
-        let mut ciphertext_map: HashMap<HEObjectName, Ciphertext> = HashMap::new();
+        let mut ciphertexts: HashMap<HEObjectName, Ciphertext> = HashMap::new();
 
         for id in self.transform_list.iter() {
             if let Some(cur_expr) = self.transform_map.get(id) { // let-binding
@@ -997,16 +1005,7 @@ impl IndexElimination {
                 if !transform_object_map.contains_key(&info) {
                     let name = self.name_generator.get_fresh_name(&format!("c${}", info.0));
                     transform_object_map.insert(info.clone(), name.clone());
-
-                    let shape =
-                        circ::Dimensions::from(
-                            info.1.iter()
-                            .map(|dim| {
-                                (dim.extent.upper() - dim.extent.lower()) as usize
-                            })
-                            .collect::<im::Vector<usize>>()
-                        );
-                    ciphertext_map.insert(name, Ciphertext { shape });
+                    ciphertexts.insert(name, Ciphertext { dimensions: info.to_dimensions() });
                 }
             }
         }
@@ -1019,7 +1018,7 @@ impl IndexElimination {
 
         let expr = indfree_expr_map.remove(&self.output_id).unwrap();
 
-        Ok(IndexFreeProgram { client_store, expr })
+        Ok(IndexFreeProgram { client_store, expr, ciphertexts })
     }
 
     fn transform_program(&mut self) -> Result<IndexFreeProgram, String> {

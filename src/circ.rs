@@ -155,10 +155,10 @@ impl Display for HECircuit {
 }
 
 #[derive(Clone,Debug)]
-pub struct Ciphertext { pub shape: Dimensions }
+pub struct Ciphertext { pub dimensions: Dimensions }
 
 #[derive(Clone,Debug)]
-pub struct Plaintext { pub shape: Dimensions, pub value: im::Vector<isize> }
+pub struct Plaintext { pub dimensions: Dimensions, pub value: im::Vector<isize> }
 
 pub struct HECircuitStore {
     pub ciphertexts: HashMap<HEObjectName, Ciphertext>,
@@ -166,8 +166,8 @@ pub struct HECircuitStore {
 }
 
 impl HECircuitStore {
-    pub fn new(inputs: &HashMap<HEObjectName,Ciphertext>) -> Self {
-        HECircuitStore { ciphertexts: inputs.clone(), plaintexts: HashMap::new() }
+    pub fn new() -> Self {
+        HECircuitStore { ciphertexts: HashMap::new(), plaintexts: HashMap::new() }
     }
 }
 

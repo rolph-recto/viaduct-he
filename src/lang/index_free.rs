@@ -1,4 +1,6 @@
 use std::{collections::HashMap, fmt::Display};
+use crate::circ::Ciphertext;
+
 use super::Operator;
 
 pub type HEObjectName = String;
@@ -106,4 +108,5 @@ impl Display for IndexFreeExpr {
 pub struct IndexFreeProgram {
     pub client_store: HEClientStore,
     pub expr: IndexFreeExpr,
+    pub ciphertexts: HashMap<HEObjectName, Ciphertext>,
 }
