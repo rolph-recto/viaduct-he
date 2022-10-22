@@ -136,8 +136,14 @@ impl HECircuitGenerator {
                 } else {
                     let block_size = shape.block_size(*dim);
 
+                    dbg!(expr);
+                    dbg!(block_size);
+                    dbg!(shape.size());
+
                     let mut res_circ = circ;
                     for i in 1..shape[*dim] {
+                        dbg!(-((i * block_size) as isize));
+                        dbg!(shape.wrap_offset(-((i * block_size) as isize)));
                         res_circ =
                             HECircuit::Add(
                                 Box::new(res_circ.clone()),

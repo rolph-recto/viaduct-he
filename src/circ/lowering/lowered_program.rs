@@ -9,7 +9,7 @@ use crate::{circ::{*, lowering::program::*}, lang::HEClientStore};
 type HELoweredNodeId = String;
 type HELoweredOperand = String;
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize, Debug)]
 #[serde(tag = "op")]
 pub enum HELoweredInstr {
     Add { id: HELoweredNodeId, op1: HELoweredOperand, op2: HELoweredOperand },
@@ -29,6 +29,127 @@ pub enum HELoweredInstr {
     Rot { id: HELoweredNodeId, op1: HELoweredOperand, op2: HELoweredOperand },
     RotInplace { op1: HELoweredOperand, op2: HELoweredOperand },
     RelinearizeInplace { op1: HELoweredNodeId },
+}
+
+impl HELoweredInstr {
+    pub fn is_inplace(&self) -> bool {
+        match self {
+            HELoweredInstr::Add { id: _, op1: _, op2: _} => false,
+            HELoweredInstr::AddInplace { op1: _, op2: _} => true,
+            HELoweredInstr::AddPlain { id: _, op1: _, op2: _ } => false,
+            HELoweredInstr::AddPlainInplace { op1: _, op2: _ } => true,
+            HELoweredInstr::Sub { id: _, op1: _, op2: _} => false,
+            HELoweredInstr::SubInplace { op1: _, op2: _} => true,
+            HELoweredInstr::SubPlain { id: _, op1: _, op2: _ } => false,
+            HELoweredInstr::SubPlainInplace { op1: _, op2: _ } => true,
+            HELoweredInstr::Negate { id: _, op1: _ } => false,
+            HELoweredInstr::NegateInplace { op1: _ } => true,
+            HELoweredInstr::Mul { id: _, op1: _, op2: _ } => false,
+            HELoweredInstr::MulInplace { op1: _, op2: _ } => true,
+            HELoweredInstr::MulPlain { id: _, op1: _, op2: _ } => false,
+            HELoweredInstr::MulPlainInplace { op1: _, op2: _ } => true,
+            HELoweredInstr::Rot { id: _, op1: _, op2: _ } => false,
+            HELoweredInstr::RotInplace { op1: _, op2: _ } => true,
+            HELoweredInstr::RelinearizeInplace { op1: _ } => true
+        }
+    }
+
+    pub fn is_binary(&self) -> bool {
+        match self {
+            HELoweredInstr::Add { id: _, op1: _, op2: _} => true,
+            HELoweredInstr::AddInplace { op1: _, op2: _} => true,
+            HELoweredInstr::AddPlain { id: _, op1: _, op2: _ } => true,
+            HELoweredInstr::AddPlainInplace { op1: _, op2: _ } => true,
+            HELoweredInstr::Sub { id: _, op1: _, op2: _} => true,
+            HELoweredInstr::SubInplace { op1: _, op2: _} => true,
+            HELoweredInstr::SubPlain { id: _, op1: _, op2: _ } => true,
+            HELoweredInstr::SubPlainInplace { op1: _, op2: _ } => true,
+            HELoweredInstr::Negate { id: _, op1: _ } => false,
+            HELoweredInstr::NegateInplace { op1: _ } => false,
+            HELoweredInstr::Mul { id: _, op1: _, op2: _ } => true,
+            HELoweredInstr::MulInplace { op1: _, op2: _ } => true,
+            HELoweredInstr::MulPlain { id: _, op1: _, op2: _ } => true,
+            HELoweredInstr::MulPlainInplace { op1: _, op2: _ } => true,
+            HELoweredInstr::Rot { id: _, op1: _, op2: _ } => true,
+            HELoweredInstr::RotInplace { op1: _, op2: _ } => true,
+            HELoweredInstr::RelinearizeInplace { op1: _ } => false
+        }
+    }
+
+    pub fn name(&self) -> String {
+        match self {
+            HELoweredInstr::Add { id: _, op1: _, op2: _} => "add",
+            HELoweredInstr::AddInplace { op1: _, op2: _} => "add_inplace",
+            HELoweredInstr::AddPlain { id: _, op1: _, op2: _ } => "add_plain",
+            HELoweredInstr::AddPlainInplace { op1: _, op2: _ } => "add_plain_inplace",
+            HELoweredInstr::Sub { id: _, op1: _, op2: _} => "sub",
+            HELoweredInstr::SubInplace { op1: _, op2: _} => "sub_inplace",
+            HELoweredInstr::SubPlain { id: _, op1: _, op2: _ } => "sub_plain",
+            HELoweredInstr::SubPlainInplace { op1: _, op2: _ } => "sub_plain_inplace",
+            HELoweredInstr::Negate { id: _, op1: _ } => "negate",
+            HELoweredInstr::NegateInplace { op1: _ } => "negate_inplace",
+            HELoweredInstr::Mul { id: _, op1: _, op2: _ } => "multiply",
+            HELoweredInstr::MulInplace { op1: _, op2: _ } => "multiply_inplace",
+            HELoweredInstr::MulPlain { id: _, op1: _, op2: _ } => "multiply_plain",
+            HELoweredInstr::MulPlainInplace { op1: _, op2: _ } => "multiply_plain_inplace",
+            HELoweredInstr::Rot { id: _, op1: _, op2: _ } => "rotate_rows",
+            HELoweredInstr::RotInplace { op1: _, op2: _ } => "rotate_rows_inplace",
+            HELoweredInstr::RelinearizeInplace { op1: _ } => "relinearize_inplace"
+        }.to_string()
+    }
+
+    pub fn operands(&self) -> Vec<HELoweredOperand> {
+        match self {
+            HELoweredInstr::Add { id: _, op1, op2 } |
+            HELoweredInstr::AddInplace { op1, op2 } |
+            HELoweredInstr::AddPlain { id: _, op1, op2 } |
+            HELoweredInstr::AddPlainInplace { op1, op2 } |
+            HELoweredInstr::Sub { id: _, op1, op2 } |
+            HELoweredInstr::SubInplace { op1, op2 } |
+            HELoweredInstr::SubPlain { id: _, op1, op2 } |
+            HELoweredInstr::SubPlainInplace { op1, op2 } |
+            HELoweredInstr::Mul { id: _, op1, op2 } |
+            HELoweredInstr::MulInplace { op1, op2 } |
+            HELoweredInstr::MulPlain { id: _, op1, op2 } |
+            HELoweredInstr::MulPlainInplace { op1, op2 } |
+            HELoweredInstr::Rot { id: _, op1, op2 } |
+            HELoweredInstr::RotInplace { op1, op2 } =>
+                vec![op1.to_string(),op2.to_string()],
+
+            HELoweredInstr::Negate { id: _, op1 } |
+            HELoweredInstr::NegateInplace { op1 } |
+            HELoweredInstr::RelinearizeInplace { op1 } =>
+                vec![op1.to_string()]
+        }
+    }
+
+    fn id(&self) -> String {
+        match self {
+            HELoweredInstr::Add { id, op1: _, op2: _ } |
+            HELoweredInstr::AddPlain { id, op1: _, op2: _ } |
+            HELoweredInstr::Sub { id, op1: _, op2: _ } |
+            HELoweredInstr::SubPlain { id, op1: _, op2: _ } |
+            HELoweredInstr::Negate { id, op1: _ } |
+            HELoweredInstr::Mul { id, op1: _, op2: _ } |
+            HELoweredInstr::MulPlain { id, op1: _, op2: _ } |
+            HELoweredInstr::Rot { id, op1: _, op2: _ } =>
+                id.to_string(),
+
+            _ => "".to_string(),
+        }
+    }
+}
+
+impl Display for HELoweredInstr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let operands_str = self.operands().join(", ");
+        if self.is_inplace() {
+            write!(f, "{}({})", self.name(), operands_str)
+
+        } else {
+            write!(f, "{} = {}({})", self.id(), self.name(), operands_str)
+        }
+    }
 }
 
 #[derive(Serialize)]

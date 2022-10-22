@@ -59,6 +59,8 @@ fn test_compile(src: &str, size: usize, opt_duration: usize, extractor: Extracto
             HashMap::new(),
             HashMap::new()
         );
+
+    println!("{:#?}", lowered_prog.instrs)
 }
 
 #[test]

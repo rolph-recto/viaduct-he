@@ -38,7 +38,7 @@ impl Dimensions {
 
     pub fn wrap_offset(&self, offset: isize) -> usize {
         if offset < 0 {
-            ((self.size() as isize) - offset) as usize
+            ((self.size() as isize) + offset) as usize
 
         } else {
             offset as usize
