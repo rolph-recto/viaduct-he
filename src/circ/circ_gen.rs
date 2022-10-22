@@ -48,6 +48,9 @@ impl HECircuitGenerator {
 
                 let block_size: usize = shape.block_size(*dim);
 
+                dbg!(block_size);
+                dbg!(&shape);
+
                 for i in 1..shape[*dim] {
                     let rot_circ = 
                         HECircuit::Rotate(

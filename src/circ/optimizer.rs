@@ -63,7 +63,7 @@ impl Default for HELatencyModel {
     }
 }
 
-pub(crate) type HEGraph = egg::EGraph<HEOptCircuit, HEData>;
+pub type HEGraph = egg::EGraph<HEOptCircuit, HEData>;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct HEData {

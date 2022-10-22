@@ -192,7 +192,7 @@ impl ArrayTransformInfo {
     fn to_dimensions(&self) -> Dimensions {
         Dimensions::from(
             self.1.iter().map(|dim_info| {
-                (dim_info.extent.upper() - dim_info.extent.lower()) as usize
+                ((dim_info.extent.upper() - dim_info.extent.lower()) + 1) as usize
             }).collect::<im::Vector<usize>>()
         )
     }
@@ -1090,6 +1090,8 @@ impl IndexElimination {
 
         // apply extent solutions to determine padding
         self.apply_extent_solution();
+
+        dbg!(&self.transform_info_map);
 
         // lower to index-free expression and return client-side transforms
         self.lower_to_index_free_prog()

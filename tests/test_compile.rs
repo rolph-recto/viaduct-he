@@ -80,12 +80,11 @@ fn test_imgblur() {
 fn test_matmul() {
     let src =
         "
-        input A: [(0,4),(0,4)]
-        input B: [(0,4),(0,4)]
-        let x = A + B
-        for i: (0,4) {
-            for j: (0,4) {
-                sum(for k: (0,4) { A[i][k] * B[k][j] })
+        input A: [(0,1),(0,1)]
+        input B: [(0,1),(0,1)]
+        for i: (0,1) {
+            for j: (0,1) {
+                sum(for k: (0,1) { A[i][k] * B[k][j] })
             }
         }
         ";
@@ -97,18 +96,18 @@ fn test_matmul() {
 fn test_matmul2() {
     let src =
         "
-        input A1: [(0,4),(0,4)]
-        input A2: [(0,4),(0,4)]
-        input B: [(0,4),(0,4)]
+        input A1: [(0,1),(0,1)]
+        input A2: [(0,1),(0,1)]
+        input B: [(0,1),(0,1)]
         let res =
-            for i: (0,4) {
-                for j: (0,4) {
-                    sum(for k: (0,4) { A1[i][k] * B[k][j] })
+            for i: (0,1) {
+                for j: (0,1) {
+                    sum(for k: (0,1) { A1[i][k] * B[k][j] })
                 }
             }
-        for i: (0,4) {
-            for j: (0,4) {
-                sum(for k: (0,4) { A2[i][k] * res[k][j] })
+        for i: (0,1) {
+            for j: (0,1) {
+                sum(for k: (0,1) { A2[i][k] * res[k][j] })
             }
         }
         ";

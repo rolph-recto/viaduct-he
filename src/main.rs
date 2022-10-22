@@ -14,7 +14,7 @@ use he_vectorizer::{
             program::HEProgram,
             lowered_program::HELoweredProgram, code_gen::CodeGenerator,
         },
-        optimizer::{HEOptCircuit, ExtractorType, Optimizer, HELatencyModel}, HECircuitStore, circ_gen::HECircuitGenerator, self,
+        optimizer::{HEOptCircuit, ExtractorType, Optimizer, HELatencyModel, HEGraph}, HECircuitStore, circ_gen::HECircuitGenerator, self,
     },
     lang::{ClientTransform, parser::ProgramParser, index_elim::IndexElimination},
 };

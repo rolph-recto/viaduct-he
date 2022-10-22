@@ -1,11 +1,11 @@
 use std::{collections::HashMap, fmt::Display, ops::Index};
 
-use egg::{RecExpr, Symbol, Id};
+use egg::{RecExpr, Symbol, Id, Language};
 use gcollections::ops::Bounded;
 
 use crate::lang::{HEObjectName, Shape};
 
-use self::optimizer::HEOptCircuit;
+use self::optimizer::{HEOptCircuit, HEGraph};
 
 pub mod circ_gen;
 pub mod optimizer;
@@ -123,7 +123,14 @@ impl HECircuit {
     pub fn to_opt_circuit(&self) -> RecExpr<HEOptCircuit> {
         let mut expr = RecExpr::default();
         self.to_optimizer_circuit_recur(&mut expr);
-        expr
+
+        // add to egraph to hashcons the circuit
+        let mut egraph = HEGraph::default();
+        let root_id = egraph.add_expr(&expr);
+        let get_first_enode = |id| egraph[id].nodes[0].clone(); 
+        let hashconsed_expr = get_first_enode(root_id).build_recexpr(get_first_enode);
+
+        hashconsed_expr
     }
 }
 
