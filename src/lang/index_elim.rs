@@ -167,7 +167,8 @@ impl Display for TransformedDimInfo {
 
 impl PartialEq for TransformedDimInfo {
     fn eq(&self, other: &Self) -> bool {
-        self.dim == other.dim && self.pad == other.pad && self.extent == other.extent
+        // self.dim == other.dim && self.pad == other.pad && self.extent == other.extent
+        self.dim == other.dim && self.pad == other.pad
     }
 }
 
@@ -652,7 +653,7 @@ impl IndexElimination {
                     computed_shape.0.into_iter().map(|dim| {
                         let extent = 
                             match dim {
-                                // for indexed dims, perform interval analysis to determine padding
+                                // for indexed dims, perform interval analysis
                                 TransformedDim::Input(i) => {
                                     let index_expr = &index_list[i];
                                     let index_interval = self.index_expr_to_interval(index_expr, &index_store);
@@ -665,7 +666,6 @@ impl IndexElimination {
 
                         let offset: isize =
                             match dim {
-                                // for indexed dims, perform interval analysis to determine padding
                                 TransformedDim::Input(i) => {
                                     let index_expr = &index_list[i];
                                     let index_var = index_expr.get_single_var().unwrap();
@@ -677,7 +677,6 @@ impl IndexElimination {
                                     }
                                 },
 
-                                // fill dims never have padding
                                 TransformedDim::Fill(_) => 0
                             };
 
@@ -746,6 +745,7 @@ impl IndexElimination {
         // by moving transform_list to a temporary owned ref, we ensure that
         // the mutations to self in the loop don't change it
         let tmp_transform_list = std::mem::replace(&mut self.transform_list, Vec::new());
+        let mut eq_inputs_map: HashMap<ArrayTransformInfo, Vec<ExprId>> = HashMap::new();
 
         for id in tmp_transform_list.iter() {
             // don't process inputs; they don't have mappings in transform_map
@@ -760,6 +760,31 @@ impl IndexElimination {
                         .collect();
 
                     self.extent_analysis.add_atleast_constraint(shape_id, head, required_shape);
+                }
+            } else {
+                let info = &self.transform_info_map[id];
+                match eq_inputs_map.get_mut(info) {
+                    Some(id_list) => {
+                        id_list.push(*id);
+                    },
+                    None => {
+                        eq_inputs_map.insert(info.clone(), vec![*id]);
+                    }
+                }
+            }
+        }
+
+        // ensure that transformed inputs considered to be equal
+        // (i.e. same array, same transposition) have the same padding
+        for (_, id_list) in eq_inputs_map.into_iter() {
+            // set the rest of the shapes equal to the first shape
+            if id_list.len() > 1 {
+                let (first_list, rest) = id_list.split_at(1);
+                let first = first_list[0];
+                let (first_head, first_shape) = self.shape_map[&first];
+                for cur_id in rest.iter() {
+                    let (cur_head, cur_shape) = self.shape_map[cur_id];
+                    self.extent_analysis.add_equals_constraint(first_shape, first_head, cur_shape, cur_head);
                 }
             }
         }
@@ -1090,8 +1115,6 @@ impl IndexElimination {
 
         // apply extent solutions to determine padding
         self.apply_extent_solution();
-
-        dbg!(&self.transform_info_map);
 
         // lower to index-free expression and return client-side transforms
         self.lower_to_index_free_prog()

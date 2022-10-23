@@ -51,6 +51,11 @@ class SEALWrapper:
     def invariant_noise_budget(self, x):
         return self.seal["decryptor"].invariant_noise_budget(x)
 
+def client():
+{{#each client_preprocess as |data|}}
+    {{data.0}} = {{data.1}}
+{{/each}}
+
 def main():
     init_start_time = time()
     
@@ -78,9 +83,9 @@ def main():
 
     wrapper = SEALWrapper(seal)
 
-{{#each ciphertexts as |ciphertexts|}}
-    {{ciphertexts}} = wrapper.encode([randint(1, 100) for _ in range(slot_count)])
-    {{ciphertexts}} = wrapper.encrypt({{ciphertexts}})
+{{#each ciphertexts as |ciphertext|}}
+    {{ciphertext}} = wrapper.encode([randint(1, 100) for _ in range(slot_count)])
+    {{ciphertext}} = wrapper.encrypt({{ciphertext}})
 
 {{/each}}
 {{#each constants as |const|}}

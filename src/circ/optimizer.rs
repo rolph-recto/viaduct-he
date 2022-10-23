@@ -171,6 +171,18 @@ fn is_zero(var: &'static str) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
     move |egraph, _, subst| egraph[subst[var]].nodes.contains(&zero)
 }
 
+// This returns a function that implements Condition
+fn is_const_nonzero(var: &'static str) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
+    let var = var.parse().unwrap();
+    let zero = HEOptCircuit::Num(0);
+    move |egraph, _, subst| {
+        match egraph[subst[var]].data.constval {
+            Some(x) => x != 0,
+            None => false,
+        }
+    }
+}
+
 fn is_constant(str: &'static str) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
     let var = str.parse().unwrap();
     move |egraph, _, subst|
@@ -501,6 +513,14 @@ impl Applier<HEOptCircuit, HEData> for RotateSplit {
                         HEOptCircuit::Add([rot_in1, rot_in2]),
                 };
 
+            // dbg!(&op, i, cur_l1, cur_l2, max_outer);
+            // let x1_children: Vec<&HEOptCircuit> =
+            //     egraph[x1_class].nodes.first().unwrap().children().iter().map(|c|
+            //         egraph[*c].nodes.first().unwrap()
+            //     ).collect();
+
+            // dbg!(&egraph[x1_class].nodes.first());
+            // dbg!(x1_children);
             let op_class = egraph.add(op);
             let outer_rot_class = egraph.add(HEOptCircuit::Num(i as isize));
             let rot_outer = egraph.add(HEOptCircuit::Rot([op_class, outer_rot_class]));
@@ -536,6 +556,7 @@ impl Optimizer {
             // bidirectional rotation rules
             rewrite!("rot-distribute-mul"; "(rot (* ?a ?b) ?l)" <=> "(* (rot ?a ?l) (rot ?b ?l))"),
             rewrite!("rot-distribute-add"; "(rot (+ ?a ?b) ?l)" <=> "(+ (rot ?a ?l) (rot ?b ?l))"),
+            rewrite!("rot-distribute-sub"; "(rot (- ?a ?b) ?l)" <=> "(- (rot ?a ?l) (rot ?b ?l))"),
         ]
         .concat();
 
@@ -550,6 +571,21 @@ impl Optimizer {
                     b: "?b".parse().unwrap(),
                 }
             }),
+
+            // rewrite!("rot-distribute1-mul";
+            //     "(* (rot ?a ?l) (rot ?b ?l))" => "(rot (* (rot ?a (- ?l 1)) (rot ?b (- ?l 1))) 1)"
+            //     if is_const_nonzero("?l")
+            // ),
+
+            // rewrite!("rot-distribute1-add";
+            //     "(+ (rot ?a ?l) (rot ?b ?l))" => "(rot (+ (rot ?a (- ?l 1)) (rot ?b (- ?l 1))) 1)"
+            //     if is_const_nonzero("?l")
+            // ),
+
+            // rewrite!("rot-distribute1-sub";
+            //     "(- (rot ?a ?l) (rot ?b ?l))" => "(rot (- (rot ?a (- ?l 1)) (rot ?b (- ?l 1))) 1)"
+            //     if is_const_nonzero("?l")
+            // ),
 
             // x + (x * c) = x * (c + 1), where c is a constant
             rewrite!("add-to-mul"; "(+ ?a (* ?a ?b))" => {
@@ -662,10 +698,11 @@ impl Optimizer {
         let mut runner = Runner::default()
             .with_explanations_enabled()
             .with_expr(expr)
+            .with_node_limit(30000)
             .with_time_limit(Duration::from_secs(timeout as u64))
             .run(&self.rules);
 
-        info!("Optimization time: {}ms", optimization_time.elapsed().as_millis());
+        info!("{}", runner.report().to_string());
 
         let egraph = &mut runner.egraph;
         let root = egraph.add_expr(expr);

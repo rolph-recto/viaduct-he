@@ -51,6 +51,10 @@ struct Arguments {
     noinplace: bool,
 }
 
+fn dumpinfo() {
+
+}
+
 fn main() {
     env_logger::init();
 
