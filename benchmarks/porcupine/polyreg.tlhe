@@ -1,0 +1,8 @@
+input a: [(0,15)]
+input b: [(0,15)]
+input c: [(0,15)]
+input x: [(0,15)]
+input y: [(0,15)]
+for i: (0,15) {
+    (a[i]*x[i]*x[i]) + (b[i]*x[i]) + c[i] - y[i]
+}

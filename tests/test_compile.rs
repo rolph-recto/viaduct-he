@@ -116,3 +116,15 @@ fn test_matmul2() {
 
     test_compile(src, 4096, 0, ExtractorType::Greedy, true);
 }
+
+#[test]
+fn test_dotprod() {
+    let src =
+        "
+        input C: [(0,7)]
+        input P: [(0,7)]
+        sum(for i: (0,7) { C[i] * P[i] })
+        ";
+
+    test_compile(src, 4096, 60, ExtractorType::Greedy, true);
+}

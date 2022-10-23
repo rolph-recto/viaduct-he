@@ -572,20 +572,20 @@ impl Optimizer {
                 }
             }),
 
-            // rewrite!("rot-distribute1-mul";
-            //     "(* (rot ?a ?l) (rot ?b ?l))" => "(rot (* (rot ?a (- ?l 1)) (rot ?b (- ?l 1))) 1)"
-            //     if is_const_nonzero("?l")
-            // ),
+            rewrite!("rot-distribute1-mul";
+                "(* (rot ?a ?l) (rot ?b ?l))" => "(rot (* (rot ?a (- ?l 1)) (rot ?b (- ?l 1))) 1)"
+                if is_const_nonzero("?l")
+            ),
 
-            // rewrite!("rot-distribute1-add";
-            //     "(+ (rot ?a ?l) (rot ?b ?l))" => "(rot (+ (rot ?a (- ?l 1)) (rot ?b (- ?l 1))) 1)"
-            //     if is_const_nonzero("?l")
-            // ),
+            rewrite!("rot-distribute1-add";
+                "(+ (rot ?a ?l) (rot ?b ?l))" => "(rot (+ (rot ?a (- ?l 1)) (rot ?b (- ?l 1))) 1)"
+                if is_const_nonzero("?l")
+            ),
 
-            // rewrite!("rot-distribute1-sub";
-            //     "(- (rot ?a ?l) (rot ?b ?l))" => "(rot (- (rot ?a (- ?l 1)) (rot ?b (- ?l 1))) 1)"
-            //     if is_const_nonzero("?l")
-            // ),
+            rewrite!("rot-distribute1-sub";
+                "(- (rot ?a ?l) (rot ?b ?l))" => "(rot (- (rot ?a (- ?l 1)) (rot ?b (- ?l 1))) 1)"
+                if is_const_nonzero("?l")
+            ),
 
             // x + (x * c) = x * (c + 1), where c is a constant
             rewrite!("add-to-mul"; "(+ ?a (* ?a ?b))" => {
@@ -650,35 +650,35 @@ impl Optimizer {
 
             // given an operation on rotated vectors,
             // split rotation before and after the operation
-            rewrite!("rot-add-split"; "(+ (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
-                RotateSplit {
-                    op: RewriteOp::Add,
-                    x1: "?x1".parse().unwrap(),
-                    l1: "?l1".parse().unwrap(),
-                    x2: "?x2".parse().unwrap(),
-                    l2: "?l2".parse().unwrap(),
-                }
-            } if can_split_rot("?l1", "?l2")),
+            // rewrite!("rot-add-split"; "(+ (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
+            //     RotateSplit {
+            //         op: RewriteOp::Add,
+            //         x1: "?x1".parse().unwrap(),
+            //         l1: "?l1".parse().unwrap(),
+            //         x2: "?x2".parse().unwrap(),
+            //         l2: "?l2".parse().unwrap(),
+            //     }
+            // } if can_split_rot("?l1", "?l2")),
 
-            rewrite!("rot-sub-split"; "(- (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
-                RotateSplit {
-                    op: RewriteOp::Sub,
-                    x1: "?x1".parse().unwrap(),
-                    l1: "?l1".parse().unwrap(),
-                    x2: "?x2".parse().unwrap(),
-                    l2: "?l2".parse().unwrap(),
-                }
-            } if can_split_rot("?l1", "?l2")),
+            // rewrite!("rot-sub-split"; "(- (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
+            //     RotateSplit {
+            //         op: RewriteOp::Sub,
+            //         x1: "?x1".parse().unwrap(),
+            //         l1: "?l1".parse().unwrap(),
+            //         x2: "?x2".parse().unwrap(),
+            //         l2: "?l2".parse().unwrap(),
+            //     }
+            // } if can_split_rot("?l1", "?l2")),
 
-            rewrite!("rot-mul-split"; "(* (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
-                RotateSplit {
-                    op: RewriteOp::Mul,
-                    x1: "?x1".parse().unwrap(),
-                    l1: "?l1".parse().unwrap(),
-                    x2: "?x2".parse().unwrap(),
-                    l2: "?l2".parse().unwrap(),
-                }
-            } if can_split_rot("?l1", "?l2")),
+            // rewrite!("rot-mul-split"; "(* (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
+            //     RotateSplit {
+            //         op: RewriteOp::Mul,
+            //         x1: "?x1".parse().unwrap(),
+            //         l1: "?l1".parse().unwrap(),
+            //         x2: "?x2".parse().unwrap(),
+            //         l2: "?l2".parse().unwrap(),
+            //     }
+            // } if can_split_rot("?l1", "?l2")),
         ]);
 
         Optimizer { rules }
