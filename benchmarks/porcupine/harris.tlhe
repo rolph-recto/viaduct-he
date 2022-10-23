@@ -1,0 +1,89 @@
+input c0: [(0,15),(0,15)]
+let Ix =
+    for x: (0,15) {
+        for y: (0,15) {
+            c0[x-1][y-1] - c0[x+1][y-1] +
+            2*c0[x-1][y] - (2*c0[x+1][y]) +
+            c0[x-1][y+1] - c0[x+1][y+1]
+        }
+    }
+in
+let Iy =
+    for x: (0,15) {
+        for y: (0,15) {
+            c0[x-1][y-1] + (2*c0[x][y-1]) + c0[x+1][y-1] -
+            c0[x-1][y+1] - (2*c0[x][y-1]) - c0[x+1][y+1]
+        }
+    }
+in
+let Ix_2 =
+    for x: (0,15) {
+        for y: (0,15) {
+            Ix[x][y]*Ix[x][y]
+        }
+    }
+in
+let Ix_Iy =
+    for x: (0,15) {
+        for y: (0,15) {
+            Ix[x][y]*Iy[x][y]
+        }
+    }
+in
+let Iy_2 =
+    for x: (0,15) {
+        for y: (0,15) {
+            Iy[x][y]*Iy[x][y]
+        }
+    }
+in
+let Ixx =
+    for x: (0,15) {
+        for y: (0,15) {
+            Ix_2[x][y]   +
+            Ix_2[x+1][y] +
+            Ix_2[x][y+1] +
+            Ix_2[x+1][y+1]
+        }
+    }
+in
+let Ixy =
+    for x: (0,15) {
+        for y: (0,15) {
+            Ix_Iy[x][y]   +
+            Ix_Iy[x+1][y] +
+            Ix_Iy[x][y+1] +
+            Ix_Iy[x+1][y+1]
+        }
+    }
+in
+let Iyy =
+    for x: (0,15) {
+        for y: (0,15) {
+            Iy_2[x][y]   +
+            Iy_2[x+1][y] +
+            Iy_2[x][y+1] +
+            Iy_2[x+1][y+1]
+        }
+    }
+in
+let det = 
+    for x: (0,15) {
+        for y: (0,15) {
+            Ixx[x][y] * Iyy[x][y] -
+            Ixy[x][y] * Ixy[x][y]
+        }
+    }
+in
+let trace = 
+    for x: (0,15) {
+        for y: (0,15) {
+            Ixx[x][y] + Iyy[x][y]
+        }
+    }
+in
+for x: (0,15) {
+    for y: (0,15) {
+        20 * det[x][y] - trace[x][y]*trace[x][y]
+    }
+}

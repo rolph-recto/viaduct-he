@@ -27,7 +27,7 @@ LetBindingList: im::Vector<LetBinding> = {
 }   
 
 LetBinding: LetBinding = {
-    "let" <var:Ident> "=" <rhs:Expr> => {
+    "let" <var:Ident> "=" <rhs:Expr> "in" => {
         LetBinding(var, Box::new(rhs))
     },
 }

@@ -102,8 +102,7 @@ impl HECircuit {
             HECircuit::Sub(op1, op2) => {
                 let id1 = op1.to_optimizer_circuit_recur(expr);
                 let id2 = op2.to_optimizer_circuit_recur(expr);
-                expr.add(HEOptCircuit::Sub([id1,id2]));
-                todo!()
+                expr.add(HEOptCircuit::Sub([id1,id2]))
             },
 
             HECircuit::Mul(op1, op2) => {
