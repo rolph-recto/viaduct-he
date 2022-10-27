@@ -1358,4 +1358,15 @@ mod tests{
             "
         );
     }
+
+    #[test]
+    fn test_matvecmul() {
+        test_lowering(
+        "
+            input M: [(0,1),(0,1)]
+            input v: [(0,1)]
+            for i: (0,1) { sum(M[i] * v) }
+            "
+        );
+    }
 }
