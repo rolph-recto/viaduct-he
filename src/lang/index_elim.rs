@@ -93,9 +93,17 @@ impl Display for TransformedDim {
 }
 
 #[derive(Clone, Debug)]
+pub enum IndexDim {
+    Index(IndexName),
+    Anonymous(usize),
+}
+
+#[derive(Clone, Debug)]
 pub enum TransformedIndexDim {
     Index(IndexName),
+    Anonymous(usize),
     ReducedIndex(IndexName),
+    ReducedAnonymous(usize),
     Fill(Extent),
 }
 
@@ -105,7 +113,9 @@ impl Display for TransformedIndexDim {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             TransformedIndexDim::Index(index) => write!(f, "{}", index),
+            TransformedIndexDim::Anonymous(i) => write!(f, "{}", i),
             TransformedIndexDim::ReducedIndex(index) => write!(f, "{}", index),
+            TransformedIndexDim::ReducedAnonymous(i) => write!(f, "{}", i),
             TransformedIndexDim::Fill(extent) => write!(f, "fill({})", extent),
         }
     }
@@ -492,25 +502,38 @@ impl IndexElimination {
                 // first, determine the computed shape of the array
                 // based on path info and the output shape
 
+                let array_extent = self.store[array].clone();
+                let array_dims = array_extent.len();
+
+                // this is the part of the array that *wasn't* indexed
+                let array_tail: Vec<(Extent, usize)> =
+                    array_extent.into_iter().skip(index_list.len())
+                    .zip(index_list.len()..array_dims)
+                    .collect();
+
                 // dimensions that are reduced
-                let mut reduced_dims: Vec<(&IndexName, &Extent)> = Vec::new();
+                let mut reduced_dims: Vec<(IndexDim, Extent)> = Vec::new();
                 let mut reduced_dim_position: Vec<(ReducedDimType, usize)> = Vec::new();
 
                 // dimensions that are part of the output
-                let mut output_dims: Vec<(&IndexName, &Extent)> = Vec::new();
+                let mut output_dims: Vec<(IndexDim, Extent)> = Vec::new();
 
                 // in-scope indices and their extents
                 let mut index_store: IndexEnvironment = HashMap::new();
 
                 let mut num_reductions = 0;
+
+                // output_dims are the dims that will be part of the output shape
+                // reduced_dims are the dims that will be reduced
                 for info in path.iter() {
                     match info {
                         PathInfo::Index { index, extent } => {
                             if num_reductions > 0 {
-                                reduced_dims.push((index, extent));
+                                reduced_dims.push((IndexDim::Index(index.clone()), extent.clone()));
                                 num_reductions -= 1;
+
                             } else {
-                                output_dims.push((index, extent))
+                                output_dims.push((IndexDim::Index(index.clone()), extent.clone()))
                             }
                             index_store.insert(index.clone(), *extent);
                         },
@@ -520,13 +543,19 @@ impl IndexElimination {
                     }
                 }
 
-                // TODO: support reducing dims not named by an index
-                if num_reductions > 0 {
-                    return Err(String::from("All reduced dimensions must be indexed"))
+                let mut array_tail_cur_dim = 0;
+                while num_reductions > 0 {
+                    let (extent, i) = array_tail.get(array_tail_cur_dim).unwrap().clone();
+                    reduced_dims.push((IndexDim::Anonymous(i), extent));
+                    num_reductions -= 1;
+                    array_tail_cur_dim += 1;
                 }
 
-                // TODO: what to do when output shape has less dimensions than computed shape?
-                // (e.g. a reduced dim is not used in the output shape)
+                while array_tail_cur_dim < array_tail.len() {
+                    let (extent, i) = array_tail.get(array_tail_cur_dim).unwrap().clone();
+                    output_dims.push((IndexDim::Anonymous(i), extent));
+                    array_tail_cur_dim += 1;
+                }
 
                 // output index shape is like output shape,
                 // but the dimensions are now named by index
@@ -538,32 +567,53 @@ impl IndexElimination {
                     match out_dim {
                         TransformedDim::Input(dim_index) => {
                             out_index_shape.0.push(
-                                TransformedIndexDim::Index(output_dims[*dim_index].0.to_string())
+                                match &output_dims[*dim_index].0 {
+                                    IndexDim::Index(index) => {
+                                        TransformedIndexDim::Index(index.to_string())
+                                    },
+                                    IndexDim::Anonymous(i) => {
+                                        TransformedIndexDim::Anonymous(*i)
+                                    },
+                                }
                             );
                         },
 
                         TransformedDim::Fill(extent) => {
+                            // reused a reduced dim as a fill
                             if reduced_dims.len() > 0 {
                                 // TODO: have a better heuristic for picking which reduced dim to use
-                                let index = reduced_dims[used_rdim].0;
+                                let index_dim =
+                                    match &reduced_dims[used_rdim].0 {
+                                        IndexDim::Index(index) => {
+                                            TransformedIndexDim::Index(index.to_string())
+                                        },
+                                        IndexDim::Anonymous(i) => {
+                                            TransformedIndexDim::Anonymous(*i)
+                                        }
+                                    };
+
                                 used_rdim += 1;
-                                out_index_shape.0.push(TransformedIndexDim::Index(index.to_string()));
+                                out_index_shape.0.push(index_dim)
 
                             } else {
                                 out_index_shape.0.push(TransformedIndexDim::Fill(*extent))
                             }
                         },
-
-                        _ => {
-                            return Err(String::from("output shape should not have hidden dims"))
-                        }
                     }
                 }
 
                 // if some reduced dims are not used, they are added to the front
                 if used_rdim < reduced_dims.len() {
                     for rdim in reduced_dims[used_rdim..].iter() {
-                        let dim = TransformedIndexDim::ReducedIndex(rdim.0.to_string());
+                        let dim =
+                            match &rdim.0 {
+                                IndexDim::Index(index) => {
+                                    TransformedIndexDim::ReducedIndex(index.to_string())
+                                },
+                                IndexDim::Anonymous(i) => {
+                                    TransformedIndexDim::ReducedAnonymous(*i)
+                                }
+                            };
                         out_index_shape.0.insert(0, dim);
                     }
                 }
@@ -572,10 +622,26 @@ impl IndexElimination {
                 for dim in reduced_dims.iter() {
                     let index_opt =
                         out_index_shape.0.iter().position(|x|
-                            match x {
-                                TransformedIndexDim::Index(index) => index == dim.0,
-                                TransformedIndexDim::ReducedIndex(index) => index == dim.0,
-                                TransformedIndexDim::Fill(_) => false,
+                            match &dim.0 {
+                                IndexDim::Index(index) => {
+                                    match x {
+                                        TransformedIndexDim::Index(x_index) |
+                                        TransformedIndexDim::ReducedIndex(x_index) =>
+                                            index == x_index,
+
+                                        _ => false,
+                                    }
+                                },
+
+                                IndexDim::Anonymous(i) =>  {
+                                    match x {
+                                        TransformedIndexDim::Anonymous(x_i) |
+                                        TransformedIndexDim::ReducedAnonymous(x_i) =>
+                                            i == x_i,
+
+                                        _ => false,
+                                    }
+                                }
                             }
                         );
 
@@ -583,33 +649,40 @@ impl IndexElimination {
                         let reduced_dim_type =
                             match out_index_shape.0[index] {
                                 TransformedIndexDim::Index(_) => ReducedDimType::Reused,
+                                TransformedIndexDim::Anonymous(_) => ReducedDimType::Reused,
                                 TransformedIndexDim::ReducedIndex(_) => ReducedDimType::Hidden,
+                                TransformedIndexDim::ReducedAnonymous(_) => ReducedDimType::Hidden,
                                 TransformedIndexDim::Fill(_) => panic!("reduced dim cannot be a fill")
                             };
                         reduced_dim_position.push((reduced_dim_type, index));
 
                     } else {
-                        return Err(format!("reduced indexed dimension {} not in output shape", dim.0))
+                        let dim_id = 
+                            match &dim.0 {
+                                IndexDim::Index(index) => index.clone(),
+                                IndexDim::Anonymous(i) => i.to_string(),
+                            };
+
+                        return Err(format!("reduced indexed dimension {} not in output index shape", dim_id))
                     }
                 }
 
                 // compute the original shape
                 let mut index_position: HashMap<IndexName, usize> = HashMap::new();
-                let mut orig_shape: Vec<IndexName> = Vec::new();
                 for (i, index_expr) in index_list.iter().enumerate() {
                     match index_expr.get_single_var() {
                         Some(var) => {
-                            orig_shape.push(var.clone());
                             index_position.insert(var, i);
                         },
 
                         None => {
-                            return Err(String::from("only one index var required per indexed dimension"))
+                            return Err(String::from("only one index var allowed per indexed dimension"))
                         }
                     }
                 }
 
                 // computed_shape is the final shape computed from the output index shape
+                // this should be different for complex indexing
                 let mut computed_shape: TransformShape<TransformedDim> = TransformShape::default();
                 for dim in out_index_shape.0 {
                     match dim {
@@ -642,6 +715,12 @@ impl IndexElimination {
                             }
                         },
 
+                        // anonymous dims are always in the original shape
+                        TransformedIndexDim::Anonymous(i) |
+                        TransformedIndexDim::ReducedAnonymous(i) => {
+                            computed_shape.0.push(TransformedDim::Input(i))
+                        },
+
                         // fill dimension from output shape
                         TransformedIndexDim::Fill(extent) => {
                             computed_shape.0.push(TransformedDim::Fill(extent));
@@ -655,9 +734,18 @@ impl IndexElimination {
                             match dim {
                                 // for indexed dims, perform interval analysis
                                 TransformedDim::Input(i) => {
-                                    let index_expr = &index_list[i];
-                                    let index_interval = self.index_expr_to_interval(index_expr, &index_store);
-                                    Interval::new(index_interval.lower(), index_interval.upper())
+                                    // input dim is indexed
+                                    // must calculate index expr interval
+                                    // to get extent
+                                    if i < index_list.len() {
+                                        let index_expr = &index_list[i];
+                                        let index_interval = self.index_expr_to_interval(index_expr, &index_store);
+                                        Interval::new(index_interval.lower(), index_interval.upper())
+                                    }
+                                    // input dim is anonymous, extent matches input dim's
+                                    else { 
+                                        array_tail[i - index_list.len()].0
+                                    }
                                 },
 
                                 // fill dims never have padding
@@ -667,13 +755,20 @@ impl IndexElimination {
                         let offset: isize =
                             match dim {
                                 TransformedDim::Input(i) => {
-                                    let index_expr = &index_list[i];
-                                    let index_var = index_expr.get_single_var().unwrap();
-                                    if let Some(data) = self.get_simple_indexing_data(index_expr, &index_var) {
-                                        data.offset
+                                    // only indexed dims can have offsets;
+                                    // anonymous dims always have offset 0
+                                    if i < index_list.len() {
+                                        let index_expr = &index_list[i];
+                                        let index_var = index_expr.get_single_var().unwrap();
+                                        if let Some(data) = self.get_simple_indexing_data(index_expr, &index_var) {
+                                            data.offset
+
+                                        } else {
+                                            panic!("index expr is not simple")
+                                        }
 
                                     } else {
-                                        panic!("index expr is not simple")
+                                        0
                                     }
                                 },
 
@@ -1154,7 +1249,7 @@ mod tests{
         let parser = ProgramParser::new();
         let program: SourceProgram = parser.parse(src).unwrap();
 
-        let mut index_elim = IndexElimination::new();
+        let index_elim = IndexElimination::new();
         let res = index_elim.run(&program);
         
         assert!(res.is_ok());
@@ -1188,6 +1283,7 @@ mod tests{
                         img[x-1][y-1] + img[x+1][y+1]
                     }
                 }
+            in
             for x: (0, 16) {
                 for y: (0, 16) {
                     res[x-2][y-2] + res[x+2][y+2]
@@ -1207,7 +1303,7 @@ mod tests{
                         img[x][y] + img[x+1][y+1]
                     }
                 }
-
+            in
             for x: (0, 14) {
                 for y: (0, 14) {
                     conv1[x][y] + conv1[x+1][y+1]
@@ -1222,7 +1318,6 @@ mod tests{
         test_lowering(
             "input A: [(0,4),(0,4)]
             input B: [(0,4),(0,4)]
-            let x = A + B
             for i: (0,4) {
                 for j: (0,4) {
                     sum(for k: (0,4) { A[i][k] * B[k][j] })
@@ -1243,11 +1338,23 @@ mod tests{
                         sum(for k: (0,4) { A1[i][k] * B[k][j] })
                     }
                 }
+            in
             for i: (0,4) {
                 for j: (0,4) {
                     sum(for k: (0,4) { A2[i][k] * res[k][j] })
                 }
             }
+            "
+        );
+    }
+
+    #[test]
+    fn test_dotprod_pointless() {
+        test_lowering(
+        "
+            input A: [(0,3)]
+            input B: [(0,3)]
+            sum(A * B)
             "
         );
     }

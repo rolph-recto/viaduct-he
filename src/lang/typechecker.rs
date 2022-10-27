@@ -120,7 +120,7 @@ mod tests {
         ").unwrap();
         let prog3 = parser.parse("
             input img: [(0,16),(0,16)]
-            let next = img + img
+            let next = img + img in
             for x: (0,16) {
                 for y: (0, 16) {
                     img[x][y] + next

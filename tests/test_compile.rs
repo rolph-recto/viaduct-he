@@ -107,6 +107,7 @@ fn test_matmul2() {
                     sum(for k: (0,1) { A1[i][k] * B[k][j] })
                 }
             }
+        in
         for i: (0,1) {
             for j: (0,1) {
                 sum(for k: (0,1) { A2[i][k] * res[k][j] })
@@ -126,5 +127,5 @@ fn test_dotprod() {
         sum(for i: (0,7) { C[i] * P[i] })
         ";
 
-    test_compile(src, 4096, 60, ExtractorType::Greedy, true);
+    test_compile(src, 4096, 0, ExtractorType::Greedy, true);
 }
