@@ -9,6 +9,7 @@ lalrpop_mod!(pub parser);
 pub mod extent_analysis;
 pub mod source;
 pub mod index_elim;
+pub mod index_elim2;
 pub mod index_free;
 pub mod typechecker;
 
@@ -24,7 +25,7 @@ pub type ArrayName = String;
 pub type ArrayEnvironment = HashMap<ArrayName, Shape>;
 pub type IndexEnvironment = HashMap<IndexName, Extent>;
 
-pub type ExprId = usize;
+pub type ExprRefId = usize;
 
 #[derive(Copy,Clone,Debug)]
 pub enum Operator { Add, Sub, Mul }

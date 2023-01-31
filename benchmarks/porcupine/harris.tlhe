@@ -16,27 +16,9 @@ let Iy =
         }
     }
 in
-let Ix_2 =
-    for x: (0,15) {
-        for y: (0,15) {
-            Ix[x][y]*Ix[x][y]
-        }
-    }
-in
-let Ix_Iy =
-    for x: (0,15) {
-        for y: (0,15) {
-            Ix[x][y]*Iy[x][y]
-        }
-    }
-in
-let Iy_2 =
-    for x: (0,15) {
-        for y: (0,15) {
-            Iy[x][y]*Iy[x][y]
-        }
-    }
-in
+let Ix_2 = Ix * Ix in
+let Ix_Iy = Ix * Iy in
+let Iy_2 = Iy * Iy in
 let Ixx =
     for x: (0,15) {
         for y: (0,15) {
@@ -67,23 +49,7 @@ let Iyy =
         }
     }
 in
-let det = 
-    for x: (0,15) {
-        for y: (0,15) {
-            Ixx[x][y] * Iyy[x][y] -
-            Ixy[x][y] * Ixy[x][y]
-        }
-    }
-in
-let trace = 
-    for x: (0,15) {
-        for y: (0,15) {
-            Ixx[x][y] + Iyy[x][y]
-        }
-    }
-in
-for x: (0,15) {
-    for y: (0,15) {
-        20 * det[x][y] - trace[x][y]*trace[x][y]
-    }
-}
+let det =  (Ixx * Iyy) - (Ixy * Ixy) in
+let trace =  Ixx + Iyy in
+let scaled_det = for x: (0,15) { for y: (0,15) { 20 * det[x][y] }} in
+scaled_det - (trace * trace)

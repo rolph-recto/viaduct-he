@@ -5,10 +5,10 @@ use std::str::FromStr;
 grammar;
 
 pub Program: SourceProgram = {
-    <inputs:InputList> <let_bindings:LetBindingList> <expr:Expr> => SourceProgram { inputs, let_bindings, expr },
-    <let_bindings:LetBindingList> <expr:Expr> => SourceProgram { inputs: im::Vector::new(), let_bindings, expr },
-    <inputs:InputList> <expr:Expr> => SourceProgram { inputs, let_bindings: im::Vector::new(), expr },
-    <expr:Expr> => SourceProgram { inputs: im::Vector::new(), let_bindings: im::Vector::new(), expr }
+    <inputs:InputList> <let_bindings:LetBindingList> <expr:Expr> => SourceProgram::new(inputs, let_bindings, expr),
+    <let_bindings:LetBindingList> <expr:Expr> => SourceProgram::new(im::Vector::new(), let_bindings, expr),
+    <inputs:InputList> <expr:Expr> => SourceProgram::new(inputs, im::Vector::new(), expr),
+    <expr:Expr> => SourceProgram::new(im::Vector::new(), im::Vector::new(), expr)
 }
 
 InputList: im::Vector<Input> = {

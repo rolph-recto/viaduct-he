@@ -32,7 +32,7 @@ pub enum TransformedExpr {
     ReduceNode(ReducedDimType, usize, Operator, Box<TransformedExpr>),
     Op(Operator, Box<TransformedExpr>, Box<TransformedExpr>),
     Literal(isize),
-    ExprRef(ExprId),
+    ExprRef(ExprRefId),
 }
 
 impl Display for TransformedExpr {
@@ -234,12 +234,12 @@ impl Display for ArrayTransformInfo {
 struct TransformResult {
     expr: TransformedExpr,
     reduced_dim_position: Option<Vec<(ReducedDimType, usize)>>,
-    transformed_inputs: im::HashSet<ExprId>,
+    transformed_inputs: im::HashSet<ExprRefId>,
 }
 
 pub struct IndexElimination {
     // ID of the output expression
-    output_id: ExprId,
+    output_id: ExprRefId,
 
     // counter for creating fresh expressions IDs
     cur_expr_id: usize,
@@ -254,16 +254,16 @@ pub struct IndexElimination {
     expr_binding_map: HashMap<ArrayName, SourceExpr>,
 
     // map from expressions to their computed shapes
-    transform_info_map: HashMap<ExprId, ArrayTransformInfo>,
+    transform_info_map: HashMap<ExprRefId, ArrayTransformInfo>,
 
     // map from expressions to transformed representation
-    transform_map: HashMap<ExprId, TransformedExpr>,
+    transform_map: HashMap<ExprRefId, TransformedExpr>,
 
     // topological sort of expressions
-    transform_list: Vec<ExprId>,
+    transform_list: Vec<ExprRefId>,
 
     // map from expressions to shape IDs from extent analysis
-    shape_map: HashMap<ExprId, (usize, ShapeId)>,
+    shape_map: HashMap<ExprRefId, (usize, ShapeId)>,
 
     // module to compute required padding
     extent_analysis: ExtentAnalysis,
@@ -420,7 +420,7 @@ impl IndexElimination {
         }
     }
 
-    fn register_transformed_expr(&mut self, transform: ArrayTransformInfo) -> ExprId {
+    fn register_transformed_expr(&mut self, transform: ArrayTransformInfo) -> ExprRefId {
         let id = self.fresh_expr_id();
         self.transform_info_map.insert(id, transform);
         id
@@ -667,7 +667,7 @@ impl IndexElimination {
                     }
                 }
 
-                // compute the original shape
+                // compute which index is in what dimension of the original shape
                 let mut index_position: HashMap<IndexName, usize> = HashMap::new();
                 for (i, index_expr) in index_list.iter().enumerate() {
                     match index_expr.get_single_var() {
@@ -840,7 +840,7 @@ impl IndexElimination {
         // by moving transform_list to a temporary owned ref, we ensure that
         // the mutations to self in the loop don't change it
         let tmp_transform_list = std::mem::replace(&mut self.transform_list, Vec::new());
-        let mut eq_inputs_map: HashMap<ArrayTransformInfo, Vec<ExprId>> = HashMap::new();
+        let mut eq_inputs_map: HashMap<ArrayTransformInfo, Vec<ExprRefId>> = HashMap::new();
 
         for id in tmp_transform_list.iter() {
             // don't process inputs; they don't have mappings in transform_map
@@ -891,7 +891,7 @@ impl IndexElimination {
     /// apply extent solutions to determine padding
     fn apply_extent_solution(&mut self) {
         let extent_solution = self.extent_analysis.solve();
-        let expr_extent_map: HashMap<ExprId, Shape> =
+        let expr_extent_map: HashMap<ExprRefId, Shape> =
             self.shape_map.iter().map(|(id, (head, shape_id))| {
                 let mut shape = extent_solution[shape_id].clone();
                 (*id, shape.split_off(*head))
@@ -1059,7 +1059,7 @@ impl IndexElimination {
         &self,
         expr: &TransformedExpr,
         client_object_map: &HashMap<ArrayTransformInfo, HEObjectName>,
-        indfree_expr_map: &mut HashMap<ExprId, IndexFreeExpr>,
+        indfree_expr_map: &mut HashMap<ExprRefId, IndexFreeExpr>,
     ) -> IndexFreeExpr {
         match expr {
             TransformedExpr::ReduceNode(dim_type, dim, op, body) => {
@@ -1108,7 +1108,7 @@ impl IndexElimination {
     fn lower_to_index_free_prog(&mut self) -> Result<IndexFreeProgram, String> {
         // generate map of client ciphertexts
         let mut transform_object_map: HashMap<ArrayTransformInfo, HEObjectName> = HashMap::new();
-        let mut indfree_expr_map: HashMap<ExprId, IndexFreeExpr> = HashMap::new();
+        let mut indfree_expr_map: HashMap<ExprRefId, IndexFreeExpr> = HashMap::new();
         let mut ciphertexts: HashMap<HEObjectName, Ciphertext> = HashMap::new();
 
         for id in self.transform_list.iter() {
@@ -1163,7 +1163,7 @@ impl IndexElimination {
         // backwards analysis to determine the transformations
         // needed for indexed arrays
         self.transform_list.push(self.output_id);
-        let mut worklist: Vec<ExprId> = vec![self.output_id];
+        let mut worklist: Vec<ExprRefId> = vec![self.output_id];
         while !worklist.is_empty() {
             let cur_id = worklist.pop().unwrap();
             let transform = &self.transform_info_map[&cur_id];
@@ -1365,7 +1365,9 @@ mod tests{
         "
             input M: [(0,1),(0,1)]
             input v: [(0,1)]
-            for i: (0,1) { sum(M[i] * v) }
+            for i: (0,1) {
+                sum(M[i] * v)
+            }
             "
         );
     }

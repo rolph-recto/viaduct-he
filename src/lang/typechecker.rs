@@ -20,25 +20,25 @@ impl TypeChecker {
         )?;
         
         program.let_bindings.iter().try_for_each(|let_node| {
-            let rhs_dims = self.runWithStores(&let_node.1, &store)?;
+            let rhs_dims = self.run_with_stores(&let_node.1, &store)?;
             match store.insert(let_node.0.as_ref(), rhs_dims) {
                 Some(_) => Err(format!("duplicate bindings for {}", &let_node.0)),
                 None => Ok(())
             }
         })?;
 
-        self.runWithStores(&program.expr, &store)
+        self.run_with_stores(&program.expr, &store)
     }
 
-    fn runWithStores(&self, expr: &SourceExpr, store: &im::HashMap<&str, usize>) -> Result<usize, String> {
+    fn run_with_stores(&self, expr: &SourceExpr, store: &im::HashMap<&str, usize>) -> Result<usize, String> {
         match expr {
             For(index, extent, body) => {
-                let dim = self.runWithStores(body, store)?;
+                let dim = self.run_with_stores(body, store)?;
                 Ok(dim+1)
             }
 
             Reduce(_, body) => {
-                let body_dim = self.runWithStores(body, store)?;
+                let body_dim = self.run_with_stores(body, store)?;
                 if body_dim > 0 {
                     Ok(body_dim-1)
 
@@ -48,8 +48,8 @@ impl TypeChecker {
             },
 
             ExprOp(_, expr1, expr2) => {
-                let dim1 = self.runWithStores(expr1, store)?;
-                let dim2 = self.runWithStores(expr2, store)?;
+                let dim1 = self.run_with_stores(expr1, store)?;
+                let dim2 = self.run_with_stores(expr2, store)?;
 
                 if dim1 == dim2 {
                     Ok(dim1)

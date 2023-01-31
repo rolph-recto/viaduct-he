@@ -1,10 +1,46 @@
 use crate::lang::*;
 
+pub static OUTPUT_EXPR_NAME: &'static str = "$root";
+
 #[derive(Clone,Debug)]
 pub struct SourceProgram {
+    input_map: HashMap<ArrayName, Shape>,
+    expr_map: HashMap<ArrayName, SourceExpr>,
     pub inputs: im::Vector<Input>,
     pub let_bindings: im::Vector<LetBinding>,
     pub expr: SourceExpr
+}
+
+impl SourceProgram {
+    pub fn new(inputs: im::Vector<Input>, let_bindings: im::Vector<LetBinding>, expr: SourceExpr) -> Self {
+        // compute input map and expr binding map
+        let mut input_map: HashMap<ArrayName, Shape> = HashMap::new();
+        inputs.iter().for_each(|input| {
+            if let Some(_) = input_map.insert(input.0.clone(), input.1.clone()) {
+                panic!("duplicate bindings for {}", &input.0)
+            }
+        });
+
+        let mut expr_binding_map: HashMap<ArrayName, SourceExpr> = HashMap::new();
+        let_bindings.iter().for_each(|let_binding| {
+            if let Some(_) = expr_binding_map.insert(let_binding.0.clone(), *let_binding.1.clone()) {
+                panic!("duplicate bindings for {}", &let_binding.0)
+            }
+        });
+        expr_binding_map.insert(String::from(OUTPUT_EXPR_NAME), expr.clone());
+
+        SourceProgram {
+            input_map, expr_map: expr_binding_map, inputs, let_bindings, expr
+        }
+    }
+
+    pub fn get_input_shape(&self, array: &ArrayName) -> Option<&Shape> {
+        self.input_map.get(array)
+    }
+
+    pub fn get_expr_binding(&self, array: &ArrayName) -> Option<&SourceExpr> {
+        self.expr_map.get(array)
+    }
 }
 
 impl Display for SourceProgram {
