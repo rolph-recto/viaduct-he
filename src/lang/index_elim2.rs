@@ -16,12 +16,6 @@ pub struct DimRef {
 }
 
 #[derive(Clone, Debug)]
-pub enum DimContent {
-    Index(IndexName),
-    Retained(usize),
-}
-
-#[derive(Clone, Debug)]
 struct IndexingVarData {
     index_var: IndexName,
     stride: isize, 
@@ -35,7 +29,7 @@ struct IndexingData {
 
 // an dimension of an abstract (read: not materialized) array
 #[derive(Clone,Debug,PartialEq,Eq,Hash)]
-pub enum ArrayDimInfo {
+pub enum DimContent {
     // a dimension where array elements change along one specific dimension
     // of the array being indexed
     FilledDim { dim: DimIndex, extent: usize, stride: isize },
@@ -44,14 +38,14 @@ pub enum ArrayDimInfo {
     EmptyDim { extent: usize }
 }
 
-impl Display for ArrayDimInfo {
+impl Display for DimContent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ArrayDimInfo::FilledDim { dim, extent, stride } => {
+            DimContent::FilledDim { dim, extent, stride } => {
                 write!(f, "{{{}:{}::{}}}", dim, extent, stride)
             },
 
-            ArrayDimInfo::EmptyDim { extent } => {
+            DimContent::EmptyDim { extent } => {
                 write!(f, "{{{}}}", extent)
             },
         }
@@ -90,15 +84,15 @@ impl Display for OffsetMap {
     }
 }
 
-pub struct ArrayShape {
+pub struct ArrayTransform {
     array: ArrayName,
     offset_map: OffsetMap,
-    dims: Vec<ArrayDimInfo>,
+    dims: Vec<DimContent>,
 }
 
-impl Display for ArrayShape {
+impl Display for ArrayTransform {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}{{{}}}<{}>",
+        write!(f, "{}[{}]<{}>",
             self.array,
             self.offset_map,
             self.dims.iter()
@@ -190,7 +184,7 @@ impl Display for TransformedExpr {
 
 pub struct TransformedProgram {
     pub expr: TransformedExpr,
-    pub inputs: HashMap<ExprRefId, ArrayShape>,
+    pub inputs: HashMap<ExprRefId, ArrayTransform>,
 }
 
 // index elimination pass
@@ -199,7 +193,7 @@ pub struct IndexElimination2 {
     store: ArrayEnvironment,
 
     // map from expr ref ids to array shapes
-    transform_shape_map: HashMap<ExprRefId, ArrayShape>,
+    transform_shape_map: HashMap<ExprRefId, ArrayTransform>,
 
     // map from expr ref ids to transformed exprs
     transform_map: HashMap<ExprRefId, TransformedExpr>,
@@ -224,7 +218,7 @@ impl IndexElimination2 {
         id
     }
 
-    fn register_transformed_expr(&mut self, array_shape: ArrayShape) -> ExprRefId {
+    fn register_transformed_expr(&mut self, array_shape: ArrayTransform) -> ExprRefId {
         let id = self.fresh_expr_id();
         self.transform_shape_map.insert(id, array_shape);
         id
@@ -361,7 +355,7 @@ impl IndexElimination2 {
     fn transform_expr(
         &mut self,
         expr: &SourceExpr,
-        output_shape: &ArrayShape,
+        output_shape: &ArrayTransform,
         path_ctx: &PathContext,
     ) -> Result<TransformedExpr,String> {
         match expr {
@@ -405,57 +399,10 @@ impl IndexElimination2 {
                 let array_extent = self.store[array].clone();
                 let array_dims = array_extent.len();
 
-                // this is the part of the array that *wasn't* indexed
-                let retained_dim_index_offset = index_list.len();
-                let num_retained_dims: usize =
-                    (retained_dim_index_offset..array_dims).len();
-
-                // dimensions that are part of the output that were created by `for` nodes
-                let mut output_dim_refs: Vec<DimContent> = Vec::new();
-
-                // dimensions that are reduced
-                let mut reduced_dims: Vec<DimContent> = Vec::new();
-
-                // number of reductions left to process
-                let mut num_reductions = 0;
-                for info in path_ctx.path.iter() {
-                    match info {
-                        PathInfo::Index { index, extent: _ } => {
-                            if num_reductions > 0 {
-                                reduced_dims.push(DimContent::Index(index.clone()));
-                                num_reductions -= 1;
-
-                            } else {
-                                output_dim_refs.push(DimContent::Index(index.clone()))
-                            }
-                        },
-
-                        PathInfo::Reduce { op: _ } => {
-                            num_reductions += 1;
-                        },
-                    }
-                }
-
-                // process reduced dims that are not introduced by a for node
-                // but rather is in array tail that is not indexed
-                let mut cur_retained_dim = 0;
-                while num_reductions > 0 {
-                    reduced_dims.push(DimContent::Retained(cur_retained_dim));
-                    num_reductions -= 1;
-                    cur_retained_dim += 1;
-                }
-
-                // dims in array tail that are not reduced are added to the output
-                while cur_retained_dim < num_retained_dims {
-                    output_dim_refs.push(DimContent::Retained(cur_retained_dim + retained_dim_index_offset));
-                    cur_retained_dim += 1;
-                }
-
                 // process indexing sites
-                let mut index_dim: usize = 0;
                 let mut index_to_output_dim_map: HashMap<IndexName, (DimIndex, isize)> = HashMap::new();
                 let mut array_offset_map = OffsetMap::new(array_extent.len());
-                for index_expr in index_list.iter() {
+                for (index_dim, index_expr) in index_list.iter().enumerate() {
                     let indexing_data = self.process_index_expr(index_expr)?;
                     array_offset_map.set_offset(index_dim, indexing_data.offset);
                     for var_data in indexing_data.var_data.into_iter() {
@@ -470,25 +417,24 @@ impl IndexElimination2 {
                             return Err(format!("Index variable {} used in multiple indexing sites", &var_data.index_var))
                         }
                     }
-
-                    index_dim += 1;
                 }
 
                 // build output dims in the order of their original shape and stride
                 // (i.e. without recourse to output_shape)
                 // the created output dimensions come first,
                 // and then the "retained" output dimensions that were not indexed
-                let mut output_dims: Vec<ArrayDimInfo> = Vec::new();
-                for dim in output_dim_refs.iter() {
-                    let output_dim =
-                        match dim {
-                            DimContent::Index(index_var) => {
-                                let index_var_extent = path_ctx.get_index_extent(index_var).unwrap();
+                let mut num_reductions = 0;
+                let mut output_dims: Vec<DimContent> = Vec::new();
+                let mut reduced_dims: Vec<DimContent> = Vec::new();
+                for info in path_ctx.path.iter() {
+                    match info {
+                        PathInfo::Index { index: index_var, extent } => {
+                            let dim = 
                                 match index_to_output_dim_map.get(index_var) {
-                                    Some((dim, stride)) => {
-                                        ArrayDimInfo::FilledDim {
-                                            dim: *dim,
-                                            extent: index_var_extent,
+                                    Some((dim_index, stride)) => {
+                                        DimContent::FilledDim {
+                                            dim: *dim_index,
+                                            extent: *extent,
                                             stride: *stride
                                         }
                                     },
@@ -496,68 +442,74 @@ impl IndexElimination2 {
                                     // index var wasn't used;
                                     // then this output dim is empty
                                     None => {
-                                        ArrayDimInfo::EmptyDim {
-                                            extent: index_var_extent
+                                        DimContent::EmptyDim {
+                                            extent: *extent
                                         }
                                     }
-                                }
-                            },
+                                };
 
-                            // a retained dim; the output dim then has the extent
-                            // of the original array and stride 1
-                            DimContent::Retained(dim) => {
-                                ArrayDimInfo::FilledDim {
-                                    dim: *dim,
-                                    extent: array_extent[*dim].upper() as usize,
-                                    stride: 1,
-                                }
+                            if num_reductions > 0 { // dim is reduced
+                                reduced_dims.push(dim);
+                                num_reductions -= 1;
+
+                            } else { // dim is in output
+                                output_dims.push(dim);
                             }
-                    };
+                        },
 
-                    output_dims.push(output_dim);
+                        PathInfo::Reduce { op: _ } => {
+                            num_reductions += 1;
+                        },
+                    }
+                }
+
+                // process reduced dims that are not introduced by a for node
+                // but rather is in array tail that is not indexed
+                let mut cur_retained_dim = index_list.len();
+                while num_reductions > 0 {
+                    reduced_dims.push(
+                        DimContent::FilledDim {
+                            dim: cur_retained_dim,
+                            extent: array_extent[cur_retained_dim].upper() as usize,
+                            stride: 1,
+                        }
+                    );
+                    num_reductions -= 1;
+                    cur_retained_dim += 1;
+                }
+
+                // dims in array tail that are not reduced are added to the output
+                while cur_retained_dim < array_dims {
+                    output_dims.push(
+                        DimContent::FilledDim {
+                            dim: cur_retained_dim,
+                            extent: array_extent[cur_retained_dim].upper() as usize,
+                            stride: 1,
+                        }
+                    );
+                    cur_retained_dim += 1;
                 }
 
                 // build a shape for the indexed array given the required output shape
                 let mut indexed_output_shape =
-                    ArrayShape {
+                    ArrayTransform {
                         array: array.to_string(),
                         offset_map: array_offset_map,
                         dims: Vec::new()
                     };
 
                 // first, add reduced dims in LIFO order
-                reduced_dims.reverse();
-                for dim in reduced_dims.into_iter() {
-                    let new_dim =
-                        match dim {
-                            DimContent::Index(index_var) => {
-                                let &(dim, stride) = index_to_output_dim_map.get(&index_var).unwrap();
-                                ArrayDimInfo::FilledDim {
-                                    dim,
-                                    stride,
-                                    extent: path_ctx.get_index_extent(&index_var).unwrap(),
-                                }
-                            },
-
-                            DimContent::Retained(dim) => {
-                                ArrayDimInfo::FilledDim {
-                                    dim,
-                                    stride: 1,
-                                    extent: array_extent[dim].clone().upper() as usize
-                                }
-                            }
-                        };
-
-                    indexed_output_shape.dims.push(new_dim);
+                while let Some(dim) = reduced_dims.pop() {
+                    indexed_output_shape.dims.push(dim);
                 }
 
                 // next, add the output dimensions
                 for dim in output_shape.dims.iter() {
                     let indexed_output_dim =
                         match *dim {
-                            ArrayDimInfo::FilledDim { dim, extent: output_extent, stride: output_stride } => {
+                            DimContent::FilledDim { dim, extent: output_extent, stride: output_stride } => {
                                 match output_dims[dim] {
-                                    ArrayDimInfo::FilledDim {
+                                    DimContent::FilledDim {
                                         dim: indexed_dim,
                                         extent: indexed_extent,
                                         stride: indexed_stride
@@ -566,7 +518,7 @@ impl IndexElimination2 {
                                             output_shape.offset_map.get_offset(dim) * indexed_stride;
                                         indexed_output_shape.offset_map.add_offset(indexed_dim, added_offset);
 
-                                        ArrayDimInfo::FilledDim {
+                                        DimContent::FilledDim {
                                             dim: indexed_dim,
                                             extent: output_extent,
                                             stride: output_stride*indexed_stride
@@ -574,13 +526,13 @@ impl IndexElimination2 {
                                     },
 
                                     // TODO: does this make sense??
-                                    ArrayDimInfo::EmptyDim { extent: _ } => {
-                                        ArrayDimInfo::EmptyDim { extent: output_extent }
+                                    DimContent::EmptyDim { extent: _ } => {
+                                        DimContent::EmptyDim { extent: output_extent }
                                     },
                                 }
                             },
 
-                            ArrayDimInfo::EmptyDim { extent: _ } => {
+                            DimContent::EmptyDim { extent: _ } => {
                                 dim.clone()
                             },
                         };
@@ -627,11 +579,11 @@ impl IndexElimination2 {
 
         let output_extent = &self.store[OUTPUT_EXPR_NAME];
         let output_shape = 
-            ArrayShape {
+            ArrayTransform {
                 array: String::from(OUTPUT_EXPR_NAME),
                 offset_map: OffsetMap::new(output_extent.len()),
                 dims: output_extent.iter().enumerate().map(|(i, dim_extent)| {
-                    ArrayDimInfo::FilledDim {
+                    DimContent::FilledDim {
                         dim: i,
                         extent: dim_extent.upper() as usize,
                         stride: 1
@@ -644,7 +596,7 @@ impl IndexElimination2 {
 
         // backwards analysis goes from output expression and computes
         // required shapes for indexed arrays
-        let mut transformed_inputs: HashMap<ExprRefId, ArrayShape> = HashMap::new();
+        let mut transformed_inputs: HashMap<ExprRefId, ArrayTransform> = HashMap::new();
         let mut worklist = vec![output_id];
         while worklist.len() > 0 {
             let cur_id = worklist.pop().unwrap();
