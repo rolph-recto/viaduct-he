@@ -60,13 +60,6 @@ impl Display for OffsetExpr {
     }
 }
 
-type ParameterizedOffsetMap = OffsetMap<OffsetExpr>;
-
-pub struct ParameterizedArrayTransform {
-    exploded_dims: im::Vector<ScheduleDim>,
-    transform: ArrayTransform<OffsetExpr>,
-}
-
 #[derive(Clone,Debug,PartialEq,Eq,Hash)]
 pub struct ScheduleDim {
     pub index: DimIndex,
@@ -103,6 +96,13 @@ impl Display for ArraySchedule {
 
         write!(f, "{{{}}}[{}]", exploded_str, vectorized_str)
     }
+}
+
+type ParameterizedOffsetMap = OffsetMap<OffsetExpr>;
+
+pub struct ParameterizedArrayTransform {
+    exploded_dims: im::Vector<ScheduleDim>,
+    transform: ArrayTransform<OffsetExpr>,
 }
 
 #[derive(Clone,Debug,PartialEq,Eq)]
@@ -252,7 +252,7 @@ mod tests{
     use super::*;
 
     // generate an initial schedule for a program
-    fn test_gen_init_schedule(src: &str) {
+    fn test_schedule(src: &str) {
         let parser = ProgramParser::new();
         let program: SourceProgram = parser.parse(src).unwrap();
 
@@ -262,22 +262,123 @@ mod tests{
         assert!(res.is_ok());
 
         let program = res.unwrap();
+        println!("{}", program.expr);
+
         let init_schedule = Schedule::gen_initial_schedule(&program);
         println!("{}", &init_schedule);
 
         // the initial schedule should always be valid!
-        assert!(init_schedule.is_schedule_valid(&program.expr));
+        assert!(init_schedule.compute_output_schedule(&program.expr) != OutputScheduleStatus::Invalid);
     }
 
     #[test]
     fn test_imgblur() {
-        test_gen_init_schedule(
+        test_schedule(
         "input img: [(0,16),(0,16)]
             for x: (0, 16) {
                 for y: (0, 16) {
                     img[x-1][y-1] + img[x+1][y+1]
                 }
             }"
+        );
+    }
+
+    #[test]
+    fn test_imgblur2() {
+        test_schedule(
+        "input img: [(0,16),(0,16)]
+            let res = 
+                for x: (0, 16) {
+                    for y: (0, 16) {
+                        img[x-1][y-1] + img[x+1][y+1]
+                    }
+                }
+            in
+            for x: (0, 16) {
+                for y: (0, 16) {
+                    res[x-2][y-2] + res[x+2][y+2]
+                }
+            }
+            "
+        );
+    }
+
+    #[test]
+    fn test_convolve() {
+        test_schedule(
+        "input img: [(0,16),(0,16)]
+            let conv1 = 
+                for x: (0, 15) {
+                    for y: (0, 15) {
+                        img[x][y] + img[x+1][y+1]
+                    }
+                }
+            in
+            for x: (0, 14) {
+                for y: (0, 14) {
+                    conv1[x][y] + conv1[x+1][y+1]
+                }
+            }
+            "
+        );
+    }
+
+    #[test]
+    fn test_matmatmul() {
+        test_schedule(
+            "input A: [(0,4),(0,4)]
+            input B: [(0,4),(0,4)]
+            for i: (0,4) {
+                for j: (0,4) {
+                    sum(for k: (0,4) { A[i][k] * B[k][j] })
+                }
+            }"
+        );
+    }
+
+    #[test]
+    fn test_matmatmul2() {
+        test_schedule(
+            "input A1: [(0,4),(0,4)]
+            input A2: [(0,4),(0,4)]
+            input B: [(0,4),(0,4)]
+            let res =
+                for i: (0,4) {
+                    for j: (0,4) {
+                        sum(for k: (0,4) { A1[i][k] * B[k][j] })
+                    }
+                }
+            in
+            for i: (0,4) {
+                for j: (0,4) {
+                    sum(for k: (0,4) { A2[i][k] * res[k][j] })
+                }
+            }
+            "
+        );
+    }
+
+    #[test]
+    fn test_dotprod_pointless() {
+        test_schedule(
+        "
+            input A: [(0,3)]
+            input B: [(0,3)]
+            sum(A * B)
+            "
+        );
+    }
+
+    #[test]
+    fn test_matvecmul() {
+        test_schedule(
+        "
+            input M: [(0,1),(0,1)]
+            input v: [(0,1)]
+            for i: (0,1) {
+                sum(M[i] * v)
+            }
+            "
         );
     }
 }

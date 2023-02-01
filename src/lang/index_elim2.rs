@@ -149,9 +149,10 @@ impl TransformedProgram {
 
                 } else {
                     assert!(len1 == len2);
+                    let result_dims = dims1.clone();
                     let new_eqs: im::Vector<(InputArrayDim, InputArrayDim)> =
                         dims1.into_iter().zip(dims2.into_iter()).collect();
-                    (eqs1 + eqs2 + new_eqs, im::vector![])
+                    (eqs1 + eqs2 + new_eqs, result_dims)
                 }
             },
 
