@@ -1,5 +1,6 @@
 use std::{hash::{*, Hasher}, collections::{HashSet, hash_set}};
 
+use disjoint_sets::UnionFind;
 use gcollections::ops::Bounded;
 
 use crate::{
@@ -66,41 +67,21 @@ pub struct TransformedProgram {
 }
 
 impl TransformedProgram {
-    // TODO refactor this using a proper disjoint-union data structure
     pub fn compute_dim_equiv_classes(&self) -> HashMap<InputArrayDim, usize> {
         let (dim_eqs, _) = self.compute_dim_equalities(&self.expr);
-        let dim_set = self.get_dim_set();
-        let mut parent_map: HashMap<InputArrayDim, InputArrayDim> = HashMap::new();
+        let id_map: HashMap<InputArrayDim, usize> =
+            self.get_dim_set().into_iter().enumerate()
+            .map(|(i, dim)| (dim, i))
+            .collect();
 
-        for dim in dim_set.iter() {
-            parent_map.insert(*dim, *dim);
-        }
-
+        let mut uf: UnionFind<usize> = UnionFind::new(id_map.keys().len());
         for (dim1, dim2) in dim_eqs {
-            if dim1.0 < dim2.0 {
-                parent_map.insert(dim2, dim1);
-            }
+            uf.union(id_map[&dim1], id_map[&dim2]);
         }
 
         let mut class_map: HashMap<InputArrayDim, usize> = HashMap::new();
-        let mut cur_class_id = 1;
-
-        // process all top-level dims first (i.e. they have no parents)
-        for dim in dim_set.iter() {
-            let parent = self.find_parent(dim, &parent_map);
-            if parent == *dim {
-                class_map.insert(*dim, cur_class_id);
-                cur_class_id += 1;
-            }
-        }
-
-        // finally, process the rest of the dims
-        for dim in dim_set.iter() {
-            if !class_map.contains_key(&dim) {
-                let parent = self.find_parent(&dim, &parent_map);
-                let parent_id = class_map[&parent];
-                class_map.insert(*dim, parent_id);
-            }
+        for dim in id_map.keys() {
+            class_map.insert(*dim, uf.find(id_map[&dim]));
         }
 
         class_map

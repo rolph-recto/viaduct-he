@@ -100,7 +100,7 @@ impl ArraySchedule {
         for sched_dim in self.exploded_dims.iter() {
             let dim_content = transform.dims.get(sched_dim.index).unwrap();
             match dim_content {
-                DimContent::FilledDim { dim, extent, stride } => {
+                DimContent::FilledDim { dim, extent: _, stride } => {
                     let cur_offset = param_offset_map.get_offset(*dim).clone();
                     let new_offset =
                         OffsetExpr::Add(
