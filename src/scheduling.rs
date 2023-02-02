@@ -5,15 +5,15 @@ use crate::lang::{*, index_elim2::{TransformedExpr, TransformedProgram}};
 
 pub mod materializer;
 
-type ExplodedIndexName = String;
-type ExplodedIndexStore = HashMap<ExplodedIndexName, isize>;
+type DimName = String;
+type ExplodedIndexStore = HashMap<DimName, isize>;
 
 #[derive(Clone,Debug)]
 pub enum OffsetExpr {
     Add(Box<OffsetExpr>, Box<OffsetExpr>),
     Mul(Box<OffsetExpr>, Box<OffsetExpr>),
     Literal(isize),
-    ExplodedIndexVar(ExplodedIndexName),
+    ExplodedIndexVar(DimName),
 }
 
 impl OffsetExpr {
@@ -60,6 +60,12 @@ impl Display for OffsetExpr {
     }
 }
 
+impl Default for OffsetExpr {
+    fn default() -> Self {
+        OffsetExpr::Literal(0)
+    }
+}
+
 #[derive(Clone,Debug,PartialEq,Eq,Hash)]
 pub struct ScheduleDim {
     pub index: DimIndex,
@@ -80,6 +86,75 @@ pub struct ArraySchedule {
     pub vectorized_dims: im::Vector<ScheduleDim>,
 }
 
+impl ArraySchedule {
+    // apply schedule to an array transform
+    pub fn apply_schedule(&self, transform: &BaseArrayTransform) -> ParamArrayTransform {
+        let num_dims = transform.offset_map.num_dims();
+        let mut param_offset_map: OffsetMap<OffsetExpr> = OffsetMap::new(num_dims);
+        for i in 0..num_dims {
+            let cur_offset = *transform.offset_map.get_offset(i);
+            param_offset_map.set_offset(i, OffsetExpr::Literal(cur_offset));
+        }
+
+        // process exploded dims
+        for sched_dim in self.exploded_dims.iter() {
+            let dim_content = transform.dims.get(sched_dim.index).unwrap();
+            match dim_content {
+                DimContent::FilledDim { dim, extent, stride } => {
+                    let cur_offset = param_offset_map.get_offset(*dim).clone();
+                    let new_offset =
+                        OffsetExpr::Add(
+                            Box::new(cur_offset),
+                            Box::new(
+                                OffsetExpr::Mul(
+                                    Box::new(OffsetExpr::Literal(*stride)),
+                                    Box::new(OffsetExpr::ExplodedIndexVar(sched_dim.name.clone()))
+                                )
+                            )
+                        );
+
+                    param_offset_map.set_offset(*dim, new_offset);
+                },
+
+                // if the dim is empty, no offset needs to be updated
+                DimContent::EmptyDim { extent: _ } => {}
+            }
+        }
+
+        // process vectorized dims
+        let mut new_vectorized_dims: Vec<DimContent> = Vec::new();
+        for sched_dim in self.vectorized_dims.iter() {
+            let dim_content = transform.dims.get(sched_dim.index).unwrap();
+            let new_dim =
+                match dim_content {
+                    // increase stride according to schedule dim, trunate extent
+                    DimContent::FilledDim { dim: dim_index, extent: _, stride: content_stride } => {
+                        DimContent::FilledDim {
+                            dim: *dim_index,
+                            extent: sched_dim.extent,
+                            stride: content_stride * sched_dim.stride
+                        }
+                    }
+
+                    // truncate to schedule dim's extent
+                    DimContent::EmptyDim { extent: _ } => {
+                        DimContent::EmptyDim{ extent: sched_dim.extent }
+                    }
+                };
+            new_vectorized_dims.push(new_dim);
+        }
+
+        ParamArrayTransform {
+            exploded_dims: self.exploded_dims.clone(),
+            transform: ArrayTransform {
+                array: transform.array.clone(),
+                offset_map: param_offset_map,
+                dims: new_vectorized_dims,
+            }
+        }
+    }
+}
+
 impl Display for ArraySchedule {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let exploded_str =
@@ -98,23 +173,30 @@ impl Display for ArraySchedule {
     }
 }
 
-type ParameterizedOffsetMap = OffsetMap<OffsetExpr>;
-
-pub struct ParameterizedArrayTransform {
+pub struct ParamArrayTransform {
     exploded_dims: im::Vector<ScheduleDim>,
     transform: ArrayTransform<OffsetExpr>,
 }
 
+impl Display for ParamArrayTransform {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?} {}", self.exploded_dims, self.transform)
+    }
+}
+
 #[derive(Clone,Debug,PartialEq,Eq)]
-pub enum OutputScheduleStatus {
-    // input schedule is invalid for the program
-    Invalid, 
+pub enum ExprSchedule {
+    Any, // the schedule is arbitrary (i.e. like for literals)
+    Specific(ArraySchedule)
+}
 
-    // the output schedule is arbitrary (i.e. like for literals)
-    Any,     
-
-    // the input schedule is valid, with the following output schedule
-    Valid(ArraySchedule)
+impl Display for ExprSchedule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ExprSchedule::Any => write!(f, "*"),
+            ExprSchedule::Specific(sched) => write!(f, "{}", sched)
+        }
+    }
 }
 
 #[derive(Clone,Debug,PartialEq,Eq,Hash)]
@@ -163,15 +245,14 @@ impl Schedule {
     }
 
     // apply the schedule to an index-free expression and compute the output schedule
-    pub fn compute_output_schedule(&self, expr: &TransformedExpr) -> OutputScheduleStatus {
+    pub fn compute_output_schedule(&self, expr: &TransformedExpr) -> Option<ExprSchedule> {
         match expr {
             TransformedExpr::ReduceNode(reduced_index, _, body) => {
-                match self.compute_output_schedule(body) {
-                    OutputScheduleStatus::Invalid => OutputScheduleStatus::Invalid,
+                let sched_type = self.compute_output_schedule(body)?;
+                match sched_type {
+                    ExprSchedule::Any => None,
 
-                    OutputScheduleStatus::Any => OutputScheduleStatus::Invalid,
-
-                    OutputScheduleStatus::Valid(body_sched) => {
+                    ExprSchedule::Specific(body_sched) => {
                         // TODO: implement reduction for vectorized dims
                         let mut new_exploded_dims: im::Vector<ScheduleDim> = im::Vector::new();
                         for mut dim in body_sched.exploded_dims {
@@ -186,11 +267,13 @@ impl Schedule {
                             }
                         }
 
-                        OutputScheduleStatus::Valid(
-                            ArraySchedule {
-                                exploded_dims: new_exploded_dims,
-                                vectorized_dims: body_sched.vectorized_dims,
-                            }
+                        Some(
+                            ExprSchedule::Specific(
+                                ArraySchedule {
+                                    exploded_dims: new_exploded_dims,
+                                    vectorized_dims: body_sched.vectorized_dims,
+                                }
+                            )
                         )
                     }
                 }
@@ -200,50 +283,39 @@ impl Schedule {
             // where valid schedules are incomparable,
             // any is bottom and invalid is top
             TransformedExpr::Op(_, expr1, expr2) => {
-                let res1 = self.compute_output_schedule(expr1);
-                let res2 = self.compute_output_schedule(expr2);
+                let res1 = self.compute_output_schedule(expr1)?;
+                let res2 = self.compute_output_schedule(expr2)?;
                 match (res1, res2) {
-                    (OutputScheduleStatus::Invalid, _) | 
-                    (_, OutputScheduleStatus::Invalid) =>
-                        OutputScheduleStatus::Invalid,
+                    (ExprSchedule::Any, ExprSchedule::Any) => 
+                        Some(ExprSchedule::Any),
 
-                    (OutputScheduleStatus::Any, OutputScheduleStatus::Any) => 
-                        OutputScheduleStatus::Any,
+                    (ExprSchedule::Any, ExprSchedule::Specific(sched)) |
+                    (ExprSchedule::Specific(sched), ExprSchedule::Any) =>
+                        Some(ExprSchedule::Specific(sched)),
 
-                    (OutputScheduleStatus::Any, OutputScheduleStatus::Valid(sched)) |
-                    (OutputScheduleStatus::Valid(sched), OutputScheduleStatus::Any) =>
-                        OutputScheduleStatus::Valid(sched),
-
-                    (OutputScheduleStatus::Valid(sched1), OutputScheduleStatus::Valid(sched2)) => {
+                    (ExprSchedule::Specific(sched1), ExprSchedule::Specific(sched2)) => {
                         if sched1 == sched2 {
-                            OutputScheduleStatus::Valid(sched1)
+                            Some(ExprSchedule::Specific(sched1))
 
                         } else {
-                            OutputScheduleStatus::Invalid
+                            None
                         }
                     }
                 }
             },
 
-            TransformedExpr::Literal(_) => OutputScheduleStatus::Any,
+            TransformedExpr::Literal(_) => Some(ExprSchedule::Any),
 
             TransformedExpr::ExprRef(ref_id) => {
-                match self.schedule_map.get(ref_id) {
-                    Some(array_sched) =>
-                        OutputScheduleStatus::Valid(array_sched.clone()),
-
-                    None =>
-                        OutputScheduleStatus::Invalid,
-                }
+                let array_sched = self.schedule_map.get(ref_id)?;
+                Some(ExprSchedule::Specific(array_sched.clone()))
             },
         }
     }
 
     pub fn is_schedule_valid(&self, expr: &TransformedExpr) -> bool {
-        OutputScheduleStatus::Invalid != self.compute_output_schedule(expr)
+        self.compute_output_schedule(expr).is_some()
     }
-
-    // pub fn apply_schedule(&self, )
 }
 
 #[cfg(test)]
@@ -268,7 +340,7 @@ mod tests{
         println!("{}", &init_schedule);
 
         // the initial schedule should always be valid!
-        assert!(init_schedule.compute_output_schedule(&program.expr) != OutputScheduleStatus::Invalid);
+        assert!(init_schedule.is_schedule_valid(&program.expr))
     }
 
     #[test]

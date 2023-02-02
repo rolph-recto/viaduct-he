@@ -82,17 +82,21 @@ pub struct OffsetMap<T> { map: Vec<T> }
 type BaseOffsetMap = OffsetMap<isize>;
 
 impl<T: Default+Display+Clone> OffsetMap<T> {
-    fn new(num_dims: DimIndex) -> Self {
+    pub fn new(num_dims: usize) -> Self {
         let map = vec![T::default(); num_dims];
         OffsetMap { map }
     }
 
-    fn set_offset(&mut self, dim: DimIndex, offset: T) {
+    pub fn set_offset(&mut self, dim: DimIndex, offset: T) {
         self.map[dim] = offset
     }
 
-    fn get_offset(&self, dim: usize) -> &T {
+    pub fn get_offset(&self, dim: usize) -> &T {
         &self.map[dim]
+    }
+
+    pub fn num_dims(&self) -> usize {
+        self.map.len()
     }
 }
 
@@ -113,7 +117,7 @@ pub struct ArrayTransform<T: Display> {
     pub dims: Vec<DimContent>,
 }
 
-type BaseArrayTransform = ArrayTransform<isize>;
+pub type BaseArrayTransform = ArrayTransform<isize>;
 
 impl<T: Display> Display for ArrayTransform<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
