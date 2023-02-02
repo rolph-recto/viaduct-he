@@ -3,10 +3,8 @@ use std::{collections::HashMap, fmt::Display};
 
 use crate::lang::{*, index_elim2::{TransformedExpr, TransformedProgram}};
 
-pub mod materializer;
-
-type DimName = String;
-type ExplodedIndexStore = HashMap<DimName, isize>;
+pub type DimName = String;
+pub type ExplodedIndexStore = HashMap<DimName, isize>;
 
 #[derive(Clone,Debug)]
 pub enum OffsetExpr {
@@ -174,8 +172,8 @@ impl Display for ArraySchedule {
 }
 
 pub struct ParamArrayTransform {
-    exploded_dims: im::Vector<ScheduleDim>,
-    transform: ArrayTransform<OffsetExpr>,
+    pub exploded_dims: im::Vector<ScheduleDim>,
+    pub transform: ArrayTransform<OffsetExpr>,
 }
 
 impl Display for ParamArrayTransform {
