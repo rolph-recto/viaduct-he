@@ -97,10 +97,10 @@ impl Materializer {
 
                     ExprSchedule::Specific(body_sched_spec) => {
                         let mut new_exploded_dims: im::Vector<ScheduleDim> = im::Vector::new();
-                        let mut reduced_index_vars: HashSet<DimName> = HashSet::new();
+                        let mut reduced_index_vars: HashSet<(DimName,usize)> = HashSet::new();
                         for mut dim in body_sched_spec.exploded_dims {
                             if dim.index == *reduced_index { // dim is reduced, remove it
-                                reduced_index_vars.insert(dim.name);
+                                reduced_index_vars.insert((dim.name, dim.extent));
 
                             } else if dim.index > *reduced_index { // decrease dim index
                                 dim.index -= 1;
@@ -120,7 +120,7 @@ impl Materializer {
                             );
 
                         let expr = 
-                            ParamCircuitExpr::Reduce(
+                            ParamCircuitExpr::ReduceVectors(
                                 reduced_index_vars,
                                 op.clone(),
                                 Box::new(mat_body)

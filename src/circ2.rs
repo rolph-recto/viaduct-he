@@ -1,15 +1,18 @@
+use itertools::{MultiProduct, Itertools};
 use std::{collections::{HashSet, HashMap}, fmt::Display, ops::Range};
 
-use itertools::{MultiProduct, Itertools};
-
 use crate::{
-    lang::{Operator, BaseArrayTransform},
+    lang::{Operator, BaseArrayTransform, DimSize},
     scheduling::{OffsetExpr, ScheduleDim, ExprSchedule, DimName}
 };
 
 pub mod materializer;
+pub mod cost;
 
 type VarName = String;
+
+#[derive(Copy,Clone,Debug,PartialEq,Eq)]
+pub enum VectorType { Ciphertext, Plaintext }
 
 /// parameterized circuit expr that represents an *array* of circuit exprs
 /// these exprs are parameterized by exploded dim coordinate variables
@@ -20,7 +23,7 @@ pub enum ParamCircuitExpr {
     Literal(isize),
     Op(Operator, Box<ParamCircuitExpr>, Box<ParamCircuitExpr>),
     Rotate(Box<OffsetExpr>, Box<ParamCircuitExpr>),
-    Reduce(HashSet<DimName>, Operator, Box<ParamCircuitExpr>),
+    ReduceVectors(HashSet<(DimName,DimSize)>, Operator, Box<ParamCircuitExpr>),
 }
 
 impl Display for ParamCircuitExpr {
@@ -46,22 +49,10 @@ impl Display for ParamCircuitExpr {
                 write!(f, "rot({}, {})", offset, expr)
             },
 
-            ParamCircuitExpr::Reduce(indices, op, expr) => {
+            ParamCircuitExpr::ReduceVectors(indices, op, expr) => {
                 write!(f, "reduce({:?}, {}, {})", indices, op, expr)
             },
         }
-    }
-}
-
-pub struct ParamCircuitProgram {
-    schedule: ExprSchedule,
-    expr: ParamCircuitExpr,
-    registry: VectorRegistry,
-}
-
-impl Display for ParamCircuitProgram {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} {}", self.schedule, self.expr)
     }
 }
 
@@ -95,6 +86,11 @@ impl IndexCoordinateSystem {
             false
         }
     }
+
+    /// count how many items this coordinate system represents
+    pub fn multiplicity(&self) -> usize {
+        self.0.iter().fold(1, |acc, (_, extent)| acc * (*extent))
+    }
 }
 
 // map from index variable coordinates to values
@@ -126,6 +122,10 @@ impl<T: Default> IndexCoordinateMap<T> {
 
     pub fn get(&self, coord: IndexCoord) -> &T {
         &self.coord_map[&coord]
+    }
+
+    pub fn multiplicity(&self) -> usize {
+        self.coord_system.multiplicity()
     }
 }
 
@@ -189,4 +189,30 @@ impl VectorRegistry {
     pub fn get_plaintext_coord_map(&mut self, pt_var: VarName) -> &IndexCoordinateMap<PlaintextObject> {
         self.pt_var_values.get(&pt_var).unwrap()
     }
+
+    // TODO implement
+    pub fn get_ciphertext_objects(&self) -> Vec<CiphertextObject> {
+        vec![]
+    }
+
+    // TODO implement
+    pub fn get_plaintext_objects(&self) -> Vec<PlaintextObject> {
+        vec![]
+    }
 }
+
+/// parameterized circuit packaged with information about input ciphertexts/plaintexts used
+/// the schedule defining exploded dims
+pub struct ParamCircuitProgram {
+    pub schedule: ExprSchedule,
+    pub expr: ParamCircuitExpr,
+    pub registry: VectorRegistry,
+}
+
+impl Display for ParamCircuitProgram {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} {}", self.schedule, self.expr)
+    }
+}
+
+

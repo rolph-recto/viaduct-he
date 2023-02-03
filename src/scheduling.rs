@@ -197,6 +197,20 @@ impl Display for ExprSchedule {
     }
 }
 
+impl ExprSchedule {
+    /// counts how many exprs are represented by the schedule
+    /// the multiplicity is the 
+    pub fn multiplicity(&self) -> usize {
+        match self {
+            ExprSchedule::Any => 1,
+            ExprSchedule::Specific(spec_sched) => 
+                spec_sched.exploded_dims.iter()
+                .map(|dim| dim.extent)
+                .fold(1, |acc, x| acc*x)
+        }
+    }
+}
+
 #[derive(Clone,Debug,PartialEq,Eq,Hash)]
 pub struct Schedule {
     pub schedule_map: im::HashMap<ExprRefId,ArraySchedule>

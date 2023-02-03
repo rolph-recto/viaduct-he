@@ -17,6 +17,7 @@ pub mod typechecker;
 pub use self::source::*;
 pub use self::index_free::*;
 
+pub type DimSize = usize;
 pub type Extent = Interval<i64>;
 pub type Shape = im::Vector<Extent>;
 
