@@ -17,7 +17,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Install libcbc
-      run: sudo apt install coinor-libcbc3
+      run: sudo apt install coinor-libcbc-dev
     - name: Build
       run: cargo build --verbose
     - name: Run tests
