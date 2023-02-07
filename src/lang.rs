@@ -1,6 +1,6 @@
 use core::fmt::Display;
 use std::collections::HashMap;
-use std::default;
+use std::ops::Index;
 
 use interval::Interval;
 use lalrpop_util::lalrpop_mod;
@@ -78,30 +78,35 @@ impl Display for DimContent {
     }
 }
 
+#[derive(Clone,Debug,PartialEq,Eq,Hash)]
 pub struct OffsetMap<T> { map: Vec<T> }
 
 type BaseOffsetMap = OffsetMap<isize>;
 
-impl<T: Default+Display+Clone> OffsetMap<T> {
+impl<T: Clone+Default+Display+Eq> OffsetMap<T> {
     pub fn new(num_dims: usize) -> Self {
         let map = vec![T::default(); num_dims];
         OffsetMap { map }
     }
 
-    pub fn set_offset(&mut self, dim: DimIndex, offset: T) {
+    pub fn set(&mut self, dim: DimIndex, offset: T) {
         self.map[dim] = offset
     }
 
-    pub fn get_offset(&self, dim: usize) -> &T {
+    pub fn get(&self, dim: usize) -> &T {
         &self.map[dim]
     }
 
     pub fn num_dims(&self) -> usize {
         self.map.len()
     }
+
+    pub fn map<F: FnMut(&T) -> S, S: Default+Display+Clone+Eq>(&self, f: F) -> OffsetMap<S> {
+        OffsetMap { map: self.map.iter().map(f).collect() }
+    }
 }
 
-impl<T: Display> Display for OffsetMap<T> {
+impl<T: Clone+Display> Display for OffsetMap<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}",
             self.map.iter()
@@ -112,15 +117,24 @@ impl<T: Display> Display for OffsetMap<T> {
     }
 }
 
-pub struct ArrayTransform<T: Display> {
-    pub array: ArrayName,
-    pub offset_map: OffsetMap<T>,
-    pub dims: Vec<DimContent>,
+impl<T: Clone+Display> Index<usize> for OffsetMap<T> {
+    type Output = T;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        self.map.get(index).unwrap()
+    }
 }
 
-pub type BaseArrayTransform = ArrayTransform<isize>;
+#[derive(Clone,Debug)]
+pub struct ArrayTransform<T: Clone+Display, S: Clone+Display> {
+    pub array: ArrayName,
+    pub offset_map: OffsetMap<T>,
+    pub dims: im::Vector<S>,
+}
 
-impl<T: Display> Display for ArrayTransform<T> {
+pub type BaseArrayTransform = ArrayTransform<isize, DimContent>;
+
+impl<T: Clone+Display, S: Clone+Display> Display for ArrayTransform<T, S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}[{}]<{}>",
             self.array,

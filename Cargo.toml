@@ -19,6 +19,7 @@ path = "src/main.rs"
 lalrpop = "0.19.8"
 
 [dependencies]
+bimap = "0.6.2"
 clap = { version = "3.2.16", features = ["derive"] }
 coin_cbc = "0.1.7"
 disjoint-sets = "0.4.2"

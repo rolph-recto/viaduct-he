@@ -6,6 +6,8 @@ use crate::{
     scheduling::{OffsetExpr, ScheduleDim, ExprSchedule, DimName}
 };
 
+use self::materializer::VectorInfo;
+
 pub mod materializer;
 pub mod cost;
 
@@ -69,10 +71,18 @@ impl IndexCoordinateSystem {
         )
     }
 
-    pub fn coord_iter(&self) -> MultiProduct<Range<usize>> {
+    pub fn coord_iter(&self) -> impl Iterator<Item=im::Vector<usize>> {
         self.0.iter()
         .map(|(_, extent)| (0..*extent))
         .multi_cartesian_product()
+        .into_iter()
+        .map(|coord| im::Vector::from(coord))
+    }
+
+    pub fn index_vars(&self) -> Vec<String> {
+        self.0.iter()
+        .map(|(var, _)| var.clone())
+        .collect()
     }
 
     pub fn in_range(&self, coord: IndexCoord) -> bool {
@@ -111,8 +121,12 @@ impl<T: Default> IndexCoordinateMap<T> {
         IndexCoordinateMap { coord_system, coord_map }
     }
 
-    pub fn coord_iter(&self) -> MultiProduct<Range<usize>> {
+    pub fn coord_iter(&self) -> impl Iterator<Item=im::Vector<usize>> {
         self.coord_system.coord_iter()
+    }
+
+    pub fn index_vars(&self) -> Vec<String> {
+        self.coord_system.index_vars()
     }
 
     pub fn set(&mut self, coord: IndexCoord, value: T) {
@@ -131,7 +145,7 @@ impl<T: Default> IndexCoordinateMap<T> {
 
 pub enum CiphertextObject {
     Null,
-    ArrayVector(BaseArrayTransform)
+    Vector(VectorInfo),
 }
 
 impl Default for CiphertextObject {

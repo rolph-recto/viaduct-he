@@ -64,6 +64,7 @@ pub type InputArrayDim = (ExprRefId, DimIndex);
 pub struct TransformedProgram {
     pub expr: TransformedExpr,
     pub inputs: HashMap<ExprRefId, BaseArrayTransform>,
+    pub array_shapes: HashMap<ArrayName, Shape>,
 }
 
 impl TransformedProgram {
@@ -360,7 +361,7 @@ impl IndexElimination2 {
     fn transform_expr(
         &mut self,
         expr: &SourceExpr,
-        output_shape: &BaseArrayTransform,
+        output_transform: &BaseArrayTransform,
         path_ctx: &PathContext,
     ) -> Result<TransformedExpr,String> {
         match expr {
@@ -374,12 +375,12 @@ impl IndexElimination2 {
                         })
                     );
 
-                self.transform_expr(body, output_shape, &new_path_ctx)
+                self.transform_expr(body, output_transform, &new_path_ctx)
             },
 
             SourceExpr::ExprOp(op, expr1, expr2) => {
-                let res1 = self.transform_expr(expr1, output_shape, path_ctx)?;
-                let res2 = self.transform_expr(expr2, output_shape, path_ctx)?;
+                let res1 = self.transform_expr(expr1, output_transform, path_ctx)?;
+                let res2 = self.transform_expr(expr2, output_transform, path_ctx)?;
                 Ok(TransformedExpr::Op(*op, Box::new(res1), Box::new(res2)))
             },
 
@@ -392,7 +393,7 @@ impl IndexElimination2 {
                     PathContext::new(
                         &path_ctx.path + &im::Vector::unit(PathInfo::Reduce { op: *op })
                     );
-                let body_res = self.transform_expr(body, output_shape, &new_path_ctx)?;
+                let body_res = self.transform_expr(body, output_transform, &new_path_ctx)?;
 
                 // index of reduced dim should always 0
                 // this invariant is enforced by the Indexing case
@@ -409,7 +410,7 @@ impl IndexElimination2 {
                 let mut array_offset_map = BaseOffsetMap::new(array_extent.len());
                 for (index_dim, index_expr) in index_list.iter().enumerate() {
                     let indexing_data = self.process_index_expr(index_expr)?;
-                    array_offset_map.set_offset(index_dim, indexing_data.offset);
+                    array_offset_map.set(index_dim, indexing_data.offset);
                     for var_data in indexing_data.var_data.into_iter() {
                         if !index_to_output_dim_map.contains_key(&var_data.index_var) {
                             let stride = var_data.stride;
@@ -500,16 +501,16 @@ impl IndexElimination2 {
                     ArrayTransform {
                         array: array.to_string(),
                         offset_map: array_offset_map,
-                        dims: Vec::new()
+                        dims: im::Vector::new()
                     };
 
                 // first, add reduced dims in LIFO order
                 while let Some(dim) = reduced_dims.pop() {
-                    indexed_output_shape.dims.push(dim);
+                    indexed_output_shape.dims.push_back(dim);
                 }
 
                 // next, add the output dimensions
-                for dim in output_shape.dims.iter() {
+                for dim in output_transform.dims.iter() {
                     let indexed_output_dim =
                         match *dim {
                             DimContent::FilledDim { dim, extent: output_extent, stride: output_stride } => {
@@ -520,10 +521,10 @@ impl IndexElimination2 {
                                         stride: indexed_stride
                                     } => {
                                         let new_offset =
-                                            indexed_output_shape.offset_map.get_offset(dim) + 
-                                            (output_shape.offset_map.get_offset(dim) * indexed_stride);
+                                            indexed_output_shape.offset_map.get(dim) + 
+                                            (output_transform.offset_map.get(dim) * indexed_stride);
 
-                                        indexed_output_shape.offset_map.set_offset(indexed_dim, new_offset);
+                                        indexed_output_shape.offset_map.set(indexed_dim, new_offset);
 
                                         DimContent::FilledDim {
                                             dim: indexed_dim,
@@ -544,7 +545,7 @@ impl IndexElimination2 {
                             },
                         };
 
-                    indexed_output_shape.dims.push(indexed_output_dim);
+                    indexed_output_shape.dims.push_back(indexed_output_dim);
                 }
 
                 let expr_id = self.register_transformed_expr(indexed_output_shape);
@@ -607,13 +608,13 @@ impl IndexElimination2 {
         let mut worklist = vec![output_id];
         while worklist.len() > 0 {
             let cur_id = worklist.pop().unwrap();
-            let array_shape = self.transform_shape_map.remove(&cur_id).unwrap();
+            let array_transform = self.transform_shape_map.remove(&cur_id).unwrap();
             
-            if let Some(source_expr) = program.get_expr_binding(&array_shape.array) {
+            if let Some(source_expr) = program.get_expr_binding(&array_transform.array) {
                 let transformed_expr = 
                     self.transform_expr(
                         source_expr, 
-                        &array_shape, 
+                        &array_transform, 
                         &PathContext::new(im::Vector::new())
                     )?;
 
@@ -622,14 +623,19 @@ impl IndexElimination2 {
                 worklist.extend(child_ids.iter());
 
             } else { // array is an input
-                transformed_inputs.insert(cur_id, array_shape);
+                transformed_inputs.insert(cur_id, array_transform);
             }
         }
 
         let unresolved_output_expr = self.transform_map.remove(&output_id).unwrap();
         let output_expr = self.resolve_expr_refs(unresolved_output_expr);
 
-        Ok(TransformedProgram { expr: output_expr, inputs: transformed_inputs })
+        let array_shapes: HashMap<ArrayName, Shape>  =
+            transformed_inputs.iter().map(|(_, transform)| { 
+                (transform.array.clone(), program.get_input_shape(&transform.array).unwrap().clone())
+            }).collect();
+
+        Ok(TransformedProgram { expr: output_expr, inputs: transformed_inputs, array_shapes })
     }
 }
 

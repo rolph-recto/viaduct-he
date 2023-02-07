@@ -4,9 +4,9 @@ use std::{collections::HashMap, fmt::Display};
 use crate::lang::{*, index_elim2::{TransformedExpr, TransformedProgram}};
 
 pub type DimName = String;
-pub type ExplodedIndexStore = HashMap<DimName, isize>;
+pub type ExplodedIndexStore = HashMap<DimName, usize>;
 
-#[derive(Clone,Debug)]
+#[derive(Clone,Debug,PartialEq,Eq,Hash)]
 pub enum OffsetExpr {
     Add(Box<OffsetExpr>, Box<OffsetExpr>),
     Mul(Box<OffsetExpr>, Box<OffsetExpr>),
@@ -31,7 +31,7 @@ impl OffsetExpr {
 
             OffsetExpr::Literal(lit) => *lit,
 
-            OffsetExpr::ExplodedIndexVar(var) => store[var]
+            OffsetExpr::ExplodedIndexVar(var) => store[var] as isize
         }
     }
 }
@@ -90,8 +90,8 @@ impl ArraySchedule {
         let num_dims = transform.offset_map.num_dims();
         let mut param_offset_map: OffsetMap<OffsetExpr> = OffsetMap::new(num_dims);
         for i in 0..num_dims {
-            let cur_offset = *transform.offset_map.get_offset(i);
-            param_offset_map.set_offset(i, OffsetExpr::Literal(cur_offset));
+            let cur_offset = *transform.offset_map.get(i);
+            param_offset_map.set(i, OffsetExpr::Literal(cur_offset));
         }
 
         // process exploded dims
@@ -99,7 +99,7 @@ impl ArraySchedule {
             let dim_content = transform.dims.get(sched_dim.index).unwrap();
             match dim_content {
                 DimContent::FilledDim { dim, extent: _, stride } => {
-                    let cur_offset = param_offset_map.get_offset(*dim).clone();
+                    let cur_offset = param_offset_map.get(*dim).clone();
                     let new_offset =
                         OffsetExpr::Add(
                             Box::new(cur_offset),
@@ -111,7 +111,7 @@ impl ArraySchedule {
                             )
                         );
 
-                    param_offset_map.set_offset(*dim, new_offset);
+                    param_offset_map.set(*dim, new_offset);
                 },
 
                 // if the dim is empty, no offset needs to be updated
@@ -120,7 +120,7 @@ impl ArraySchedule {
         }
 
         // process vectorized dims
-        let mut new_vectorized_dims: Vec<DimContent> = Vec::new();
+        let mut new_vectorized_dims: im::Vector<DimContent> = im::Vector::new();
         for sched_dim in self.vectorized_dims.iter() {
             let dim_content = transform.dims.get(sched_dim.index).unwrap();
             let new_dim =
@@ -130,7 +130,7 @@ impl ArraySchedule {
                         DimContent::FilledDim {
                             dim: *dim_index,
                             extent: sched_dim.extent,
-                            stride: content_stride * sched_dim.stride
+                            stride: content_stride * sched_dim.stride,
                         }
                     }
 
@@ -139,7 +139,7 @@ impl ArraySchedule {
                         DimContent::EmptyDim{ extent: sched_dim.extent }
                     }
                 };
-            new_vectorized_dims.push(new_dim);
+            new_vectorized_dims.push_back(new_dim);
         }
 
         ParamArrayTransform {
@@ -173,7 +173,7 @@ impl Display for ArraySchedule {
 
 pub struct ParamArrayTransform {
     pub exploded_dims: im::Vector<ScheduleDim>,
-    pub transform: ArrayTransform<OffsetExpr>,
+    pub transform: ArrayTransform<OffsetExpr, DimContent>,
 }
 
 impl Display for ParamArrayTransform {
