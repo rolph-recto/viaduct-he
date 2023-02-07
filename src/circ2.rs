@@ -134,8 +134,8 @@ impl<T: Default> IndexCoordinateMap<T> {
         self.coord_map.insert(coord, value);
     }
 
-    pub fn get(&self, coord: IndexCoord) -> &T {
-        &self.coord_map[&coord]
+    pub fn get(&self, coord: &IndexCoord) -> &T {
+        &self.coord_map[coord]
     }
 
     pub fn multiplicity(&self) -> usize {
@@ -143,6 +143,7 @@ impl<T: Default> IndexCoordinateMap<T> {
     }
 }
 
+#[derive(Clone,Debug)]
 pub enum CiphertextObject {
     Null,
     Vector(VectorInfo),
@@ -152,6 +153,17 @@ impl Default for CiphertextObject {
     fn default() -> Self { CiphertextObject::Null }
 }
 
+impl Display for CiphertextObject {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CiphertextObject::Null => write!(f, "null"),
+
+            CiphertextObject::Vector(v) => write!(f, "{}", v)
+        }
+    }
+}
+
+#[derive(Clone,Debug)]
 pub enum PlaintextObject { Null }
 
 impl Default for PlaintextObject {

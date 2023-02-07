@@ -85,10 +85,19 @@ impl VectorInfo {
                         let iextent = extent as isize;
 
                         // indexing less than 0; clip
-                        let pad_left = min(0 - dim_offset, 0);
+                        let pad_left =
+                            if dim_offset < 0 {
+                                -dim_offset
+                            } else {
+                                0
+                            };
                         
                         // indexing beyond array_extent; clip
-                        let pad_right = max((array_extent - pad_left) - iextent, 0);
+                        let mut pad_right = 0;
+                        while dim_offset + (stride*(iextent-1-pad_right)) >= array_extent {
+                            pad_right += 1;
+                        }
+                        
                         let new_extent = (iextent - pad_left - pad_right) as usize;
 
                         VectorDimContent::FilledDim {
@@ -109,7 +118,7 @@ impl VectorInfo {
         }
 
         let clipped_offset_map =
-            transform.offset_map.map(|o| min(*o, 0) as usize);
+            transform.offset_map.map(|o| max(*o, 0) as usize);
 
         VectorInfo {
             array: transform.array.clone(),
@@ -120,67 +129,83 @@ impl VectorInfo {
 
     // derive other from self
     pub fn derive(&self, other: &VectorInfo) -> Option<isize> {
-        let mut seen_dims: HashSet<DimIndex> = HashSet::new();
+        if self.dims.len() != other.dims.len() {
+            return None
+        }
 
-        // check derivability conditions
-        let dims_derivable = 
-            self.dims.iter()
-            .zip(other.dims.iter())
-            .all(|(dim1, dim2)| {
-                match (*dim1, *dim2) {
-                    (VectorDimContent::FilledDim {
-                        dim: dim1, extent: extent1, stride: stride1,
-                        pad_left: pad_left1, pad_right: pad_right1
-                    },
-                    VectorDimContent::FilledDim {
-                        dim: dim2, extent: extent2, stride: stride2,
-                        pad_left: pad_left2, pad_right: pad_right2
-                    }) => {
-                        // dimensions point to the same indexed dimension (duh)
-                        let same_dim = dim1 == dim2;
+        if self == other {
+            Some(0)
 
-                        // multiple dims cannot stride the same indexed dim
-                        let dim_unseen = !seen_dims.contains(&dim1);
+        } else if self.dims.len() != 0 {
+            let mut seen_dims: HashSet<DimIndex> = HashSet::new();
 
-                        // dimensions have the same stride
-                        let same_stride = stride1 == stride2;
-
-                        // the offsets of self and other ensure that they
-                        // have the same elements
-                        let offset1 = self.offset_map[dim1];
-                        let offset2 = other.offset_map[dim2];
-                        let offset_equiv =
-                            offset1 % (stride1 as usize) == offset2 % (stride1 as usize);
-
-                        // the dimensions have the same size
-                        let same_size =
-                            pad_left1 + extent1 + pad_right1 == pad_left2 + extent2 + pad_right2;
-
-                        // all of the elements of other's dim is in self's dim
-                        let in_extent =
-                            offset1 >= offset2 && offset1 + extent1 >= offset2 + extent2;
-
-                        same_dim && dim_unseen && same_stride && offset_equiv && same_size && in_extent
-                    },
-                    
-                    (VectorDimContent::EmptyDim { extent: extent1 },
-                    VectorDimContent::EmptyDim { extent: extent2 }) => {
-                        extent1 == extent2
-                    }
-
-                    (VectorDimContent::FilledDim { dim, extent, stride, pad_left, pad_right },
-                        VectorDimContent::EmptyDim { extent: _ }) |
-                    (VectorDimContent::EmptyDim { extent },
-                        VectorDimContent::FilledDim { dim, extent: _, stride, pad_left, pad_right })
-                    => false,
-                }
-            });
-
-        if dims_derivable && self.array == other.array {
-            let mut block_size: usize = 1;
-            let rotate_steps = 0;
+            // check derivability conditions
+            let dims_derivable = 
                 self.dims.iter()
-                .zip(other.dims.iter()).rev().map(|(dim1, dim2)| {
+                .zip(other.dims.iter())
+                .all(|(dim1, dim2)| {
+                    match (*dim1, *dim2) {
+                        (VectorDimContent::FilledDim {
+                            dim: dim1, extent: extent1, stride: stride1,
+                            pad_left: pad_left1, pad_right: pad_right1
+                        },
+                        VectorDimContent::FilledDim {
+                            dim: dim2, extent: extent2, stride: stride2,
+                            pad_left: pad_left2, pad_right: pad_right2
+                        }) => {
+                            // dimensions point to the same indexed dimension (duh)
+                            let same_dim = dim1 == dim2;
+
+                            // multiple dims cannot stride the same indexed dim
+                            let dim_unseen = !seen_dims.contains(&dim1);
+
+                            // dimensions have the same stride
+                            let same_stride = stride1 == stride2;
+
+                            // the offsets of self and other ensure that they
+                            // have the same elements
+                            let offset1 = self.offset_map[dim1];
+                            let offset2 = other.offset_map[dim2];
+                            let offset_equiv =
+                                offset1 % (stride1 as usize) == offset2 % (stride2 as usize);
+
+                            // the dimensions have the same size
+                            let same_size =
+                                pad_left1 + extent1 + pad_right1 == pad_left2 + extent2 + pad_right2;
+
+                            let iextent1: isize = extent1 as isize;
+                            let iextent2: isize = extent2 as isize;
+
+                            // all of the elements of other's dim is in self's dim
+                            let in_extent =
+                                offset2 >= offset1 &&
+                                (offset1 as isize) + (stride1*iextent1) >=
+                                (offset2 as isize) + (stride2*iextent2);
+
+                            seen_dims.insert(dim1);
+                            same_dim && dim_unseen && same_stride && offset_equiv && same_size && in_extent
+                        },
+                        
+                        (VectorDimContent::EmptyDim { extent: extent1 },
+                        VectorDimContent::EmptyDim { extent: extent2 }) => {
+                            extent1 == extent2
+                        }
+
+                        (VectorDimContent::FilledDim { dim, extent, stride, pad_left, pad_right },
+                            VectorDimContent::EmptyDim { extent: _ }) |
+                        (VectorDimContent::EmptyDim { extent },
+                            VectorDimContent::FilledDim { dim, extent: _, stride, pad_left, pad_right })
+                        => false,
+                    }
+                });
+
+            if dims_derivable && self.array == other.array {
+                let mut block_size: usize = 1;
+                let mut rotate_steps = 0;
+
+                self.dims.iter()
+                .zip(other.dims.iter()).rev()
+                .for_each(|(dim1, dim2)| {
                     match (*dim1, *dim2) {
                         (VectorDimContent::FilledDim {
                             dim: dim1, extent: extent1, stride: stride1,
@@ -205,19 +230,20 @@ impl VectorInfo {
                                 } else if pad_left1 < pad_left2 {
                                     (pad_left2 - pad_left1) as isize
 
+                                } else if offset1 == offset2 && pad_left1 == pad_left2 {
+                                    0
+
                                 } else {
-                                    panic!("should be unreachable")
+                                    panic!("this path should be unreachable")
                                 };
 
-                            let total_steps = steps * (block_size as isize);
+                            rotate_steps += steps * (block_size as isize);
                             block_size *= pad_left1 + extent1 + pad_right1;
-                            total_steps
                         },
                         
                         (VectorDimContent::EmptyDim { extent: extent1 },
                         VectorDimContent::EmptyDim { extent: extent2 }) => {
                             block_size += extent1;
-                            0
                         }
 
                         (VectorDimContent::FilledDim { dim, extent, stride, pad_left, pad_right },
@@ -226,13 +252,22 @@ impl VectorInfo {
                             VectorDimContent::FilledDim { dim, extent: _, stride, pad_left, pad_right })
                         => panic!("this should be unreachable"),
                     }
-                }).fold(0, |acc, x| acc + x);
+                });
 
-            // TODO add mask
-            Some(rotate_steps)
+                // TODO add mask
+                Some(rotate_steps)
+
+            } else {
+                None
+            }
 
         } else {
-            None
+            if self.array == other.array && self.offset_map == other.offset_map {
+                Some(0)
+
+            } else {
+                None
+            }
         }
     }
 }
@@ -299,7 +334,6 @@ impl Materializer {
                             ExprSchedule::Specific(sched1),
 
                         (ExprSchedule::Specific(sched1), ExprSchedule::Specific(sched2)) => {
-                            println!("sched1: {}; sched2: {}", sched1, sched2);
                             assert!(sched1 == sched2);
                             ExprSchedule::Specific(sched1)
                         }
@@ -402,6 +436,14 @@ pub struct DefaultArrayMaterializer {
 }
 
 impl DefaultArrayMaterializer {
+    pub fn new() -> Self {
+        DefaultArrayMaterializer {
+            cur_vector_id: 1,
+            vector_map: BiHashMap::new(),
+            parent_map: HashMap::new(),
+        }
+    }
+
     fn register_vector(&mut self, vector: VectorInfo) -> VectorId {
         if let Some(id) = self.vector_map.get_by_right(&vector) {
             *id
@@ -417,8 +459,10 @@ impl DefaultArrayMaterializer {
     fn find_immediate_parent(&self, id: VectorId) -> VectorId {
         let vector = self.vector_map.get_by_left(&id).unwrap();
         for (id2, vector2) in self.vector_map.iter() {
-            if vector2.derive(vector).is_some() {
-                return *id2
+            if id != *id2 {
+                if vector2.derive(vector).is_some() {
+                    return *id2
+                }
             }
         }
 
@@ -448,7 +492,7 @@ impl DefaultArrayMaterializer {
 
         // probe at (0,..,1,..,0) to get the coefficient for the ith index var
         let mut coefficients: Vec<isize> = Vec::new();
-        for (i, index_var) in index_vars.iter().enumerate() {
+        for i in 0..index_vars.len() {
             let mut index_coord = base_coord.clone();
             index_coord[i] = 1;
             coefficients.push(step_map[&index_coord] - base_offset);
@@ -503,6 +547,8 @@ impl ArrayMaterializer for DefaultArrayMaterializer {
         let mut vector_id_map: HashMap<IndexCoord, VectorId> = HashMap::new();
         let index_vars = coord_map.index_vars();
 
+        println!("offset expr: {:?}", param_transform.transform.offset_map);
+
         // register vectors
         for coord in coord_map.coord_iter() {
             let index_map: HashMap<DimName, usize> =
@@ -520,6 +566,7 @@ impl ArrayMaterializer for DefaultArrayMaterializer {
                 };
 
             let vector = VectorInfo::clip(&base_transform, array_shape);
+            println!("coord: {:?} base transform: {} clipped vector: {}", coord, base_transform, vector);
             let vector_id = self.register_vector(vector);
             vector_id_map.insert(coord, vector_id);
         }
@@ -534,19 +581,31 @@ impl ArrayMaterializer for DefaultArrayMaterializer {
         let mut step_map: HashMap<IndexCoord, isize> = HashMap::new();
         for coord in coord_map.coord_iter() {
             let vector_id = vector_id_map.get(&coord).unwrap();
-            let vector = self.vector_map.get_by_left(vector_id).unwrap();
-
             let parent_id = self.find_transitive_parent(*vector_id);
-            let parent = self.vector_map.get_by_left(&parent_id).unwrap();
 
-            let steps = parent.derive(vector).unwrap();
-            step_map.insert(coord.clone(), steps);
-            coord_map.set(coord, CiphertextObject::Vector(parent.clone()));
+            if *vector_id != parent_id {
+                let vector = self.vector_map.get_by_left(vector_id).unwrap();
+                let parent = self.vector_map.get_by_left(&parent_id).unwrap();
+
+                let steps = parent.derive(vector).unwrap();
+                println!("coord: {:?} vector: {} parent: {} steps: {}", coord, vector, parent, steps);
+                step_map.insert(coord.clone(), steps);
+                coord_map.set(coord, CiphertextObject::Vector(parent.clone()));
+
+            } else {
+                let vector = self.vector_map.get_by_left(vector_id).unwrap();
+                println!("coord: {:?} vector: {} self parent", coord, vector);
+                step_map.insert(coord.clone(), 0);
+                coord_map.set(coord, CiphertextObject::Vector(vector.clone()));
+            }
         }
 
         if let Some(offset_expr) = self.compute_linear_offset(&step_map, &index_vars) {
-            registry.set_ciphertext_coord_map(ct_var.clone(), coord_map);
+            for coord in coord_map.coord_iter() {
+                println!("coord {:?} {}", coord, coord_map.get(&coord));
+            }
 
+            registry.set_ciphertext_coord_map(ct_var.clone(), coord_map);
             ParamCircuitExpr::Rotate(
                 Box::new(offset_expr),
                 Box::new(ParamCircuitExpr::CiphertextVar(ct_var))
@@ -561,6 +620,8 @@ impl ArrayMaterializer for DefaultArrayMaterializer {
 
 #[cfg(test)]
 mod tests {
+    use interval::{Interval, ops::Range};
+
     use crate::lang::{parser::ProgramParser, index_elim2::IndexElimination2, source::SourceProgram};
     use super::*;
 
@@ -578,7 +639,9 @@ mod tests {
         let init_schedule = Schedule::gen_initial_schedule(&program);
 
         let materializer =
-            Materializer::new(vec![Box::new(DummyArrayMaterializer {})]);
+            Materializer::new(vec![
+                Box::new(DefaultArrayMaterializer::new())
+            ]);
 
         let res_mat = materializer.materialize(&program, &init_schedule);
         assert!(res_mat.is_ok());
@@ -586,6 +649,13 @@ mod tests {
         let param_circ = res_mat.unwrap();
         println!("{}", param_circ.schedule);
         println!("{}", param_circ.expr);
+    }
+
+    fn test_array_materializer(transform: ParamArrayTransform, shape: Shape) {
+        let mut amat = DefaultArrayMaterializer::new();
+        let mut registry = VectorRegistry::new();
+        let circ = amat.materialize(&transform, &shape, &mut registry);
+        println!("{}", circ);
     }
 
     #[test]
@@ -697,5 +767,32 @@ mod tests {
             }
             "
         );
+    }
+
+    #[test]
+    fn test_materialize_img_array() {
+        let mut offset_map = OffsetMap::new(2);
+        offset_map.set(0, OffsetExpr::ExplodedIndexVar("i".to_string()));
+        offset_map.set(1, OffsetExpr::ExplodedIndexVar("j".to_string()));
+
+        let transform =
+            ParamArrayTransform {
+                exploded_dims: im::vector![
+                    ScheduleDim { index: 0, stride: 1, extent: 3, name: "i".to_string() },
+                    ScheduleDim { index: 1, stride: 1, extent: 3, name: "j".to_string() },
+                ],
+
+                transform: ArrayTransform {
+                    array: "img".to_string(),
+                    offset_map,
+                    dims: im::vector![
+                        DimContent::FilledDim { dim: 0, extent: 16, stride: 1 },
+                        DimContent::FilledDim { dim: 1, extent: 16, stride: 1 },
+                    ]
+                }
+            };
+
+        let shape: Shape = im::vector![Interval::new(0, 16), Interval::new(0, 16)];
+        test_array_materializer(transform, shape);
     }
 }
