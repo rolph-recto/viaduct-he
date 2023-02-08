@@ -490,12 +490,20 @@ impl DefaultArrayMaterializer {
         let base_coord: im::Vector<usize> = im::Vector::from(vec![0; index_vars.len()]);
         let base_offset: isize = step_map[&base_coord];
 
+        println!("{:?}", step_map);
+
         // probe at (0,..,1,..,0) to get the coefficient for the ith index var
         let mut coefficients: Vec<isize> = Vec::new();
         for i in 0..index_vars.len() {
             let mut index_coord = base_coord.clone();
             index_coord[i] = 1;
-            coefficients.push(step_map[&index_coord] - base_offset);
+
+            if let Some(step_offset) = step_map.get(&index_coord) {
+                coefficients.push(step_offset - base_offset);
+
+            } else {
+                coefficients.push(0);
+            }
         }
 
         // build offset expr from base offset and coefficients
@@ -547,7 +555,7 @@ impl ArrayMaterializer for DefaultArrayMaterializer {
         let mut vector_id_map: HashMap<IndexCoord, VectorId> = HashMap::new();
         let index_vars = coord_map.index_vars();
 
-        println!("offset expr: {:?}", param_transform.transform.offset_map);
+        println!("param transform: {}", param_transform);
 
         // register vectors
         for coord in coord_map.coord_iter() {
@@ -580,6 +588,7 @@ impl ArrayMaterializer for DefaultArrayMaterializer {
         // find transitive parents
         let mut step_map: HashMap<IndexCoord, isize> = HashMap::new();
         for coord in coord_map.coord_iter() {
+            println!("coord {:?}", coord);
             let vector_id = vector_id_map.get(&coord).unwrap();
             let parent_id = self.find_transitive_parent(*vector_id);
 
@@ -760,9 +769,9 @@ mod tests {
     fn test_matvecmul() {
         test_materializer(
         "
-            input M: [(0,1),(0,1)]
-            input v: [(0,1)]
-            for i: (0,1) {
+            input M: [(0,2),(0,2)]
+            input v: [(0,2)]
+            for i: (0,2) {
                 sum(M[i] * v)
             }
             "
