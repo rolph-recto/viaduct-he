@@ -490,8 +490,6 @@ impl DefaultArrayMaterializer {
         let base_coord: im::Vector<usize> = im::Vector::from(vec![0; index_vars.len()]);
         let base_offset: isize = step_map[&base_coord];
 
-        println!("{:?}", step_map);
-
         // probe at (0,..,1,..,0) to get the coefficient for the ith index var
         let mut coefficients: Vec<isize> = Vec::new();
         for i in 0..index_vars.len() {
@@ -555,8 +553,6 @@ impl ArrayMaterializer for DefaultArrayMaterializer {
         let mut vector_id_map: HashMap<IndexCoord, VectorId> = HashMap::new();
         let index_vars = coord_map.index_vars();
 
-        println!("param transform: {}", param_transform);
-
         // register vectors
         for coord in coord_map.coord_iter() {
             let index_map: HashMap<DimName, usize> =
@@ -574,7 +570,6 @@ impl ArrayMaterializer for DefaultArrayMaterializer {
                 };
 
             let vector = VectorInfo::clip(&base_transform, array_shape);
-            println!("coord: {:?} base transform: {} clipped vector: {}", coord, base_transform, vector);
             let vector_id = self.register_vector(vector);
             vector_id_map.insert(coord, vector_id);
         }
@@ -588,32 +583,26 @@ impl ArrayMaterializer for DefaultArrayMaterializer {
         // find transitive parents
         let mut step_map: HashMap<IndexCoord, isize> = HashMap::new();
         for coord in coord_map.coord_iter() {
-            println!("coord {:?}", coord);
             let vector_id = vector_id_map.get(&coord).unwrap();
             let parent_id = self.find_transitive_parent(*vector_id);
 
             if *vector_id != parent_id {
                 let vector = self.vector_map.get_by_left(vector_id).unwrap();
                 let parent = self.vector_map.get_by_left(&parent_id).unwrap();
-
                 let steps = parent.derive(vector).unwrap();
-                println!("coord: {:?} vector: {} parent: {} steps: {}", coord, vector, parent, steps);
+
                 step_map.insert(coord.clone(), steps);
                 coord_map.set(coord, CiphertextObject::Vector(parent.clone()));
 
             } else {
                 let vector = self.vector_map.get_by_left(vector_id).unwrap();
-                println!("coord: {:?} vector: {} self parent", coord, vector);
+
                 step_map.insert(coord.clone(), 0);
                 coord_map.set(coord, CiphertextObject::Vector(vector.clone()));
             }
         }
 
         if let Some(offset_expr) = self.compute_linear_offset(&step_map, &index_vars) {
-            for coord in coord_map.coord_iter() {
-                println!("coord {:?} {}", coord, coord_map.get(&coord));
-            }
-
             registry.set_ciphertext_coord_map(ct_var.clone(), coord_map);
             ParamCircuitExpr::Rotate(
                 Box::new(offset_expr),
