@@ -212,14 +212,18 @@ pub enum CircuitVarValue<T: Default> {
 
 type CiphertextVarValue = CircuitVarValue<CiphertextObject>;
 type PlaintextVarValue = CircuitVarValue<PlaintextObject>;
-type OffsetVarValue = CircuitVarValue<usize>;
+type OffsetVarValue = CircuitVarValue<isize>;
 
+/// data structure that maintains values for variables in parameterized circuits
 pub struct CircuitRegistry {
     ct_var_values: HashMap<VarName, CiphertextVarValue>,
     ct_var_id: usize,
 
     pt_var_values: HashMap<VarName, PlaintextVarValue>,
-    pt_var_id: usize
+    pt_var_id: usize,
+
+    offset_var_values: HashMap<DimName, OffsetVarValue>,
+    offset_var_id: usize,
 }
 
 impl CircuitRegistry {
@@ -228,20 +232,28 @@ impl CircuitRegistry {
             ct_var_values: HashMap::new(),
             ct_var_id: 1,
             pt_var_values: HashMap::new(),
-            pt_var_id: 1
+            pt_var_id: 1,
+            offset_var_values: HashMap::new(),
+            offset_var_id: 1,
         }
     }
 
-    pub fn fresh_ciphertext_var(&mut self) -> VarName {
+    pub fn fresh_ct_var(&mut self) -> VarName {
         let id = self.ct_var_id;
         self.ct_var_id += 1;
         format!("ct{}", id)
     }
 
-    pub fn fresh_plaintext_var(&mut self) -> VarName {
+    pub fn fresh_pt_var(&mut self) -> VarName {
         let id = self.pt_var_id;
         self.pt_var_id += 1;
         format!("pt{}", id)
+    }
+
+    pub fn fresh_offset_var(&mut self) -> VarName {
+        let id = self.offset_var_id;
+        self.offset_var_id += 1;
+        format!("offset{}", id)
     }
 
     pub fn set_ct_var_value(&mut self, ct_var: VarName, value: CiphertextVarValue) {
@@ -252,21 +264,29 @@ impl CircuitRegistry {
         self.pt_var_values.insert(pt_var, value);
     }
 
-    pub fn get_ct_var_value(&mut self, ct_var: VarName) -> &CiphertextVarValue {
-        self.ct_var_values.get(&ct_var).unwrap()
+    pub fn set_offset_var_value(&mut self, offset_var: DimName, value: OffsetVarValue) {
+        self.offset_var_values.insert(offset_var, value);
     }
 
-    pub fn get_pt_var_value(&mut self, pt_var: VarName) -> &PlaintextVarValue {
-        self.pt_var_values.get(&pt_var).unwrap()
+    pub fn get_ct_var_value(&mut self, ct_var: &VarName) -> &CiphertextVarValue {
+        self.ct_var_values.get(ct_var).unwrap()
+    }
+
+    pub fn get_pt_var_value(&mut self, pt_var: &VarName) -> &PlaintextVarValue {
+        self.pt_var_values.get(pt_var).unwrap()
+    }
+
+    pub fn get_offset_var_value(&mut self, offset_var: &DimName) -> &OffsetVarValue {
+        self.offset_var_values.get(offset_var).unwrap()
     }
 
     // TODO implement
-    pub fn get_ciphertext_objects(&self) -> Vec<CiphertextObject> {
+    pub fn get_ct_objects(&self) -> Vec<CiphertextObject> {
         vec![]
     }
 
     // TODO implement
-    pub fn get_plaintext_objects(&self) -> Vec<PlaintextObject> {
+    pub fn get_pt_objects(&self) -> Vec<PlaintextObject> {
         vec![]
     }
 }

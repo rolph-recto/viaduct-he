@@ -118,8 +118,8 @@ impl CostEstimator {
             let (vec_type, mult, mut cost) = self.estimate_cost_expr(&program.expr, &coord_system);
 
             if let VectorType::Ciphertext = vec_type {
-                cost.input_ciphertexts = program.registry.get_ciphertext_objects().len();
-                cost.input_plaintexts = program.registry.get_plaintext_objects().len();
+                cost.input_ciphertexts = program.registry.get_ct_objects().len();
+                cost.input_plaintexts = program.registry.get_pt_objects().len();
                 cost.output_ciphertexts = mult;
                 Ok(cost)
 

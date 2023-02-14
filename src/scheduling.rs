@@ -11,7 +11,7 @@ pub enum OffsetExpr {
     Add(Box<OffsetExpr>, Box<OffsetExpr>),
     Mul(Box<OffsetExpr>, Box<OffsetExpr>),
     Literal(isize),
-    ExplodedIndexVar(DimName),
+    Var(DimName),
 }
 
 impl OffsetExpr {
@@ -31,7 +31,7 @@ impl OffsetExpr {
 
             OffsetExpr::Literal(lit) => *lit,
 
-            OffsetExpr::ExplodedIndexVar(var) => store[var] as isize
+            OffsetExpr::Var(var) => store[var] as isize
         }
     }
 }
@@ -51,7 +51,7 @@ impl Display for OffsetExpr {
                 write!(f, "{}", lit)
             },
 
-            OffsetExpr::ExplodedIndexVar(var) => {
+            OffsetExpr::Var(var) => {
                 write!(f, "{}", var)
             }
         }
@@ -155,7 +155,7 @@ impl ArraySchedule {
                             Box::new(
                                 OffsetExpr::Mul(
                                     Box::new(OffsetExpr::Literal(*stride)),
-                                    Box::new(OffsetExpr::ExplodedIndexVar(sched_dim.name.clone()))
+                                    Box::new(OffsetExpr::Var(sched_dim.name.clone()))
                                 )
                             )
                         );
@@ -192,7 +192,6 @@ impl ArraySchedule {
         }
 
         ScheduledArrayTransform {
-            preprocessing: self.preprocessing,
             exploded_dims: self.exploded_dims.clone(),
             transform: ArrayTransform {
                 array: transform.array.clone(),
@@ -222,7 +221,6 @@ impl Display for ArraySchedule {
 }
 
 pub struct ScheduledArrayTransform {
-    pub preprocessing: Option<ClientPreprocessing>,
     pub exploded_dims: im::Vector<ScheduleDim>,
     pub transform: ArrayTransform<OffsetExpr, DimContent>,
 }
