@@ -59,6 +59,68 @@ impl Display for ParamCircuitExpr {
     }
 }
 
+impl ParamCircuitExpr {
+    // get the ciphertext vars in the expression
+    pub fn ciphertext_vars(&self) -> HashSet<VarName> {
+        match self {
+            ParamCircuitExpr::CiphertextVar(name) => {
+                let mut res = HashSet::new();
+                res.insert(name.clone());
+                res
+            },
+
+            ParamCircuitExpr::PlaintextVar(_) => HashSet::new(),
+            
+            ParamCircuitExpr::Literal(_) => HashSet::new(),
+
+            ParamCircuitExpr::Op(_, expr1, expr2) => {
+                let mut res = HashSet::new();
+                res.extend(expr1.ciphertext_vars());
+                res.extend(expr2.ciphertext_vars());
+                res
+            },
+
+            ParamCircuitExpr::Rotate(_, body) => {
+                body.ciphertext_vars()
+            },
+
+            ParamCircuitExpr::ReduceVectors(_, _, body) => {
+                body.ciphertext_vars()
+            }
+        }
+    }
+
+    // get the ciphertext vars in the expression
+    pub fn plaintext_vars(&self) -> HashSet<VarName> {
+        match self {
+            ParamCircuitExpr::PlaintextVar(name) => {
+                let mut res = HashSet::new();
+                res.insert(name.clone());
+                res
+            },
+
+            ParamCircuitExpr::CiphertextVar(_) => HashSet::new(),
+            
+            ParamCircuitExpr::Literal(_) => HashSet::new(),
+
+            ParamCircuitExpr::Op(_, expr1, expr2) => {
+                let mut res = HashSet::new();
+                res.extend(expr1.plaintext_vars());
+                res.extend(expr2.plaintext_vars());
+                res
+            },
+
+            ParamCircuitExpr::Rotate(_, body) => {
+                body.plaintext_vars()
+            },
+
+            ParamCircuitExpr::ReduceVectors(_, _, body) => {
+                body.plaintext_vars()
+            }
+        }
+    }
+}
+
 type IndexCoord = im::Vector<usize>;
 
 pub struct IndexCoordinateSystem(im::Vector<(DimName,usize)>);
@@ -179,6 +241,14 @@ impl<T: Default> IndexCoordinateMap<T> {
     }
 }
 
+impl<T: Default+Display> Display for IndexCoordinateMap<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.value_iter().try_for_each(|(coord, value)| {
+            write!(f, "{:?} => {}\n", coord, value)
+        })
+    }
+}
+
 #[derive(Clone,Debug)]
 pub enum CiphertextObject {
     Null,
@@ -209,6 +279,15 @@ impl Default for PlaintextObject {
 pub enum CircuitVarValue<T: Default> {
     CoordMap(IndexCoordinateMap<T>),
     Object(T)
+}
+
+impl<T: Default+Display> Display for CircuitVarValue<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CircuitVarValue::CoordMap(map) => write!(f, "{}", map),
+            CircuitVarValue::Object(obj) => write!(f, "{}", obj),
+        }
+    }
 }
 
 type CiphertextVarValue = CircuitVarValue<CiphertextObject>;

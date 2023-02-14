@@ -1,7 +1,5 @@
-use std::{collections::{HashMap, HashSet}, fmt::Display, ops::{Range, Index}, cmp::{min, max}};
+use std::collections::{HashMap, HashSet};
 use bimap::BiHashMap;
-use gcollections::ops::Bounded;
-use itertools::{Itertools, MultiProduct};
 
 use crate::{
     circ2::{
@@ -9,8 +7,8 @@ use crate::{
         CircuitRegistry, ParamCircuitProgram
     },
     lang::{
-        Operator, BaseArrayTransform,
-        index_elim2::{TransformedProgram, TransformedExpr}, ExprRefId, Shape, DimIndex, DimContent, ArrayTransform, ArrayName, OffsetMap
+        BaseArrayTransform, Shape, DimContent,
+        index_elim2::{TransformedProgram, TransformedExpr}, 
     },
     scheduling::{
         ArraySchedule, ExprSchedule, DimName, OffsetExpr, ScheduledArrayTransform,
@@ -591,18 +589,8 @@ impl ArrayMaterializer for DiagonalArrayMaterializer {
                     let inner_i_dim_extent = inner_i_dim.extent;
                     inner_i_dim.index = dim_j;
 
-                    let inner_j_dim = &mut new_schedule.exploded_dims[0];
+                    let inner_j_dim = new_schedule.vectorized_dims.get_mut(0).unwrap();
                     inner_j_dim.index = dim_i;
-
-                    // let inner_j_dim_name = inner_j_dim.name.clone();
-                    // let inner_j_dim_extent = inner_j_dim.extent;
-
-                    // let inner_i_dim_name = inner_i_dim.name.clone();
-                    // let inner_j_dim_name = inner_j_dim.name.clone();
-
-                    // TODO should we replace names as well as indices?
-                    // inner_i_dim.name = inner_j_dim_name;
-                    // inner_j_dim.name = inner_i_dim_name;
 
                     let new_scheduled = new_schedule.apply(base);
                     let zero_inner_j_coords =
@@ -735,7 +723,11 @@ mod tests {
     ) {
         let mut registry = CircuitRegistry::new();
         let circ = amat.materialize(&shape, &schedule, &base, &scheduled, &mut registry);
+
         println!("{}", circ);
+        for ct_var in circ.ciphertext_vars() {
+            println!("{} =>\n{}", ct_var, registry.get_ct_var_value(&ct_var));
+        }
     }
 
     #[test]

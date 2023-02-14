@@ -46,14 +46,26 @@ pub struct VectorInfo {
 
 impl Display for VectorInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}[{}]<{}>",
-            self.array,
-            self.offset_map,
-            self.dims.iter()
-                .map(|dim| dim.to_string())
-                .collect::<Vec<String>>()
-                .join(", ")
-        )
+        if let Some(preprocess) = self.preprocessing {
+            write!(f, "{}({})[{}]<{}>",
+                self.array,
+                preprocess,
+                self.offset_map,
+                self.dims.iter()
+                    .map(|dim| dim.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            )
+        } else {
+            write!(f, "{}[{}]<{}>",
+                self.array,
+                self.offset_map,
+                self.dims.iter()
+                    .map(|dim| dim.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            )
+        }
     }
 }
 
