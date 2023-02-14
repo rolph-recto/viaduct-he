@@ -1,15 +1,16 @@
-use itertools::{MultiProduct, Itertools};
+use itertools::Itertools;
 use std::{collections::{HashSet, HashMap}, fmt::Display, ops::Range};
 
 use crate::{
-    lang::{Operator, BaseArrayTransform, DimSize},
+    lang::{Operator, DimSize},
     scheduling::{OffsetExpr, ScheduleDim, ExprSchedule, DimName}
 };
 
-use self::materializer::VectorInfo;
+use self::vector_info::VectorInfo;
 
-pub mod materializer;
 pub mod cost;
+pub mod materializer;
+pub mod vector_info;
 
 type VarName = String;
 
