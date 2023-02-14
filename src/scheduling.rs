@@ -1,5 +1,5 @@
 
-use std::{collections::HashMap, fmt::Display};
+use std::{collections::{HashMap, HashSet}, fmt::Display};
 
 use crate::lang::{*, index_elim2::{TransformedExpr, TransformedProgram}};
 
@@ -67,7 +67,7 @@ impl Default for OffsetExpr {
 #[derive(Clone,Debug,PartialEq,Eq,Hash)]
 pub struct ScheduleDim {
     pub index: DimIndex,
-    pub stride: isize,
+    pub stride: usize,
     pub extent: usize,
     pub name: String,
 }
@@ -78,15 +78,64 @@ impl Display for ScheduleDim {
     }
 }
 
+#[derive(Copy,Clone,Debug,PartialEq,Eq,Hash)]
+pub enum ClientPreprocessing {
+    // TODO add more complicated permutations
+    // Permute(i, j) means to permute dim i along dim j
+    Permute(DimIndex, DimIndex)
+}
+
+impl Display for ClientPreprocessing {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ClientPreprocessing::Permute(dim_i, dim_j) =>
+                write!(f, "permute({},{})", dim_i, dim_j)
+        }
+    }
+}
+
+impl ClientPreprocessing {
+    pub fn transformed_dims(&self) -> HashSet<DimIndex> {
+        match self {
+            ClientPreprocessing::Permute(dim_i, _) => {
+                let mut set: HashSet<DimIndex> = HashSet::new();
+                set.insert(*dim_i);
+                set
+            }
+        }
+    }
+}
+
 #[derive(Clone,Debug,PartialEq,Eq,Hash)]
 pub struct ArraySchedule {
+    pub preprocessing: Option<ClientPreprocessing>,
     pub exploded_dims: im::Vector<ScheduleDim>,
     pub vectorized_dims: im::Vector<ScheduleDim>,
 }
 
 impl ArraySchedule {
+    // compute the scheduled tiling for a given dimension
+    pub fn get_tiling(&self, dim: DimIndex) -> Vec<usize> {
+        let mut sdims: Vec<(usize, usize)> = Vec::new();
+        
+        sdims.extend(
+            self.exploded_dims.iter()
+            .filter(|edim| edim.index == dim)
+            .map(|edim| (edim.stride, edim.extent))
+        );
+
+        sdims.extend(
+            self.vectorized_dims.iter()
+            .filter(|vdim| vdim.index == dim)
+            .map(|vdim| (vdim.stride, vdim.extent))
+        );
+
+        sdims.sort_by(|(s1,_), (s2,_)| s1.cmp(s2));
+        sdims.into_iter().map(|(_,extent)| extent).collect()
+    }
+
     // apply schedule to an array transform
-    pub fn apply_schedule(&self, transform: &BaseArrayTransform) -> ParamArrayTransform {
+    pub fn apply(&self, transform: &BaseArrayTransform) -> ScheduledArrayTransform {
         let num_dims = transform.offset_map.num_dims();
         let mut param_offset_map: OffsetMap<OffsetExpr> = OffsetMap::new(num_dims);
         for i in 0..num_dims {
@@ -130,7 +179,7 @@ impl ArraySchedule {
                         DimContent::FilledDim {
                             dim: *dim_index,
                             extent: sched_dim.extent,
-                            stride: content_stride * sched_dim.stride,
+                            stride: content_stride * (sched_dim.stride as isize),
                         }
                     }
 
@@ -142,7 +191,8 @@ impl ArraySchedule {
             new_vectorized_dims.push_back(new_dim);
         }
 
-        ParamArrayTransform {
+        ScheduledArrayTransform {
+            preprocessing: self.preprocessing,
             exploded_dims: self.exploded_dims.clone(),
             transform: ArrayTransform {
                 array: transform.array.clone(),
@@ -171,12 +221,13 @@ impl Display for ArraySchedule {
     }
 }
 
-pub struct ParamArrayTransform {
+pub struct ScheduledArrayTransform {
+    pub preprocessing: Option<ClientPreprocessing>,
     pub exploded_dims: im::Vector<ScheduleDim>,
     pub transform: ArrayTransform<OffsetExpr, DimContent>,
 }
 
-impl Display for ParamArrayTransform {
+impl Display for ScheduledArrayTransform {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?} {}", self.exploded_dims, self.transform)
     }
@@ -246,6 +297,7 @@ impl Schedule {
             }
             let schedule =
                 ArraySchedule {
+                    preprocessing: None,
                     exploded_dims: schedule_dims,
                     vectorized_dims: im::Vector::new(),
                 };
@@ -282,6 +334,7 @@ impl Schedule {
                         Some(
                             ExprSchedule::Specific(
                                 ArraySchedule {
+                                    preprocessing: None,
                                     exploded_dims: new_exploded_dims,
                                     vectorized_dims: body_sched.vectorized_dims,
                                 }

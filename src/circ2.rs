@@ -71,10 +71,25 @@ impl IndexCoordinateSystem {
         )
     }
 
-    pub fn coord_iter(&self) -> impl Iterator<Item=im::Vector<usize>> {
+    pub fn coord_iter(&self) -> impl Iterator<Item=im::Vector<usize>> + Clone {
         self.0.iter()
         .map(|(_, extent)| (0..*extent))
         .multi_cartesian_product()
+        .into_iter()
+        .map(|coord| im::Vector::from(coord))
+    }
+
+    // iterate through coordinates while fixing an index to be a subset of its range
+    pub fn coord_iter_subset(&self, dim: &DimName, range: Range<usize>) -> impl Iterator<Item=im::Vector<usize>> + Clone {
+        self.0.iter()
+        .map(|(idim, extent)| {
+            if idim == dim {
+                range.clone()
+
+            } else {
+                0..*extent
+            }
+        }).multi_cartesian_product()
         .into_iter()
         .map(|coord| im::Vector::from(coord))
     }
@@ -121,8 +136,19 @@ impl<T: Default> IndexCoordinateMap<T> {
         IndexCoordinateMap { coord_system, coord_map }
     }
 
-    pub fn coord_iter(&self) -> impl Iterator<Item=im::Vector<usize>> {
+    pub fn coord_iter(&self) -> impl Iterator<Item=IndexCoord> + Clone {
         self.coord_system.coord_iter()
+    }
+
+    pub fn coord_iter_subset(&self, dim: &DimName, range: Range<usize>) -> impl Iterator<Item=IndexCoord> + Clone {
+        self.coord_system.coord_iter_subset(dim, range)
+    }
+
+    pub fn value_iter(&self) -> impl Iterator<Item=(IndexCoord,&T)> + Clone {
+        self.coord_iter().map(|coord| {
+            let value = &self.coord_map[&coord];
+            (coord, value)
+        })
     }
 
     pub fn index_vars(&self) -> Vec<String> {

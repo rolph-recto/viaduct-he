@@ -81,7 +81,7 @@ impl Display for DimContent {
 #[derive(Clone,Debug,PartialEq,Eq,Hash)]
 pub struct OffsetMap<T> { map: Vec<T> }
 
-type BaseOffsetMap = OffsetMap<isize>;
+pub type BaseOffsetMap = OffsetMap<isize>;
 
 impl<T: Clone+Default+Display+Eq> OffsetMap<T> {
     pub fn new(num_dims: usize) -> Self {

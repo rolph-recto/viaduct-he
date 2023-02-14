@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, fmt::Display, ops::Range, cmp::{min, max}};
+use std::{collections::{HashMap, HashSet}, fmt::Display, ops::{Range, Index}, cmp::{min, max}};
 use bimap::BiHashMap;
 use gcollections::ops::Bounded;
 use itertools::{Itertools, MultiProduct};
@@ -13,8 +13,8 @@ use crate::{
         index_elim2::{TransformedProgram, TransformedExpr}, ExprRefId, Shape, DimIndex, DimContent, ArrayTransform, ArrayName, OffsetMap
     },
     scheduling::{
-        ArraySchedule, ExprSchedule, DimName, OffsetExpr, ParamArrayTransform,
-        Schedule, ScheduleDim
+        ArraySchedule, ExprSchedule, DimName, OffsetExpr, ScheduledArrayTransform,
+        Schedule, ScheduleDim, ClientPreprocessing
     }
 };
 
@@ -55,6 +55,7 @@ impl Display for VectorDimContent {
 #[derive(Clone,Debug,PartialEq,Eq,Hash)]
 pub struct VectorInfo {
     array: ArrayName,
+    preprocessing: Option<ClientPreprocessing>,
     offset_map: OffsetMap<usize>,
     dims: im::Vector<VectorDimContent>,
 }
@@ -117,11 +118,14 @@ impl VectorInfo {
             materialized_dims.push_back(materialized_dim);
         }
 
+        // TODO only clip offsets if they have dims in the vector;
+        // otherwise, keep the offset out-of-bounds
         let clipped_offset_map =
             transform.offset_map.map(|o| max(*o, 0) as usize);
 
         VectorInfo {
             array: transform.array.clone(),
+            preprocessing: None,
             offset_map: clipped_offset_map,
             dims: materialized_dims,
         }
@@ -250,7 +254,8 @@ impl VectorInfo {
                             VectorDimContent::EmptyDim { extent: _ }) |
                         (VectorDimContent::EmptyDim { extent },
                             VectorDimContent::FilledDim { dim, extent: _, stride, pad_left, pad_right })
-                        => panic!("this should be unreachable"),
+
+                        => unreachable!()
                     }
                 });
 
@@ -273,8 +278,22 @@ impl VectorInfo {
 }
 
 pub trait ArrayMaterializer {
-    fn can_materialize(&self, param_transform: &ParamArrayTransform, array_shape: &Shape) -> bool;
-    fn materialize(&mut self, param_transform: &ParamArrayTransform, array_shape: &Shape, registry: &mut VectorRegistry) -> ParamCircuitExpr;
+    fn can_materialize(
+        &self,
+        array_shape: &Shape,
+        schedule: &ArraySchedule,
+        base: &BaseArrayTransform,
+        scheduled: &ScheduledArrayTransform,
+    ) -> bool;
+
+    fn materialize(
+        &mut self,
+        array_shape: &Shape,
+        schedule: &ArraySchedule,
+        base: &BaseArrayTransform,
+        scheduled: &ScheduledArrayTransform,
+        registry: &mut VectorRegistry
+    ) -> ParamCircuitExpr;
 }
 
 /// materializes a schedule for an index-free program.
@@ -369,6 +388,7 @@ impl Materializer {
                         let schedule = 
                             ExprSchedule::Specific(
                                 ArraySchedule {
+                                    preprocessing: None,
                                     exploded_dims: new_exploded_dims,
                                     vectorized_dims: body_sched_spec.vectorized_dims,
                                 }
@@ -388,20 +408,20 @@ impl Materializer {
 
             // this is assumed to be a transformation of an input array
             TransformedExpr::ExprRef(ref_id) => {
-                let transform = &program.inputs[ref_id];
-                let transform_schedule = &schedule.schedule_map[ref_id];
-                let param_transform = transform_schedule.apply_schedule(transform);
-                let array_shape = &program.array_shapes[&transform.array];
+                let schedule = &schedule.schedule_map[ref_id];
+                let base = &program.inputs[ref_id];
+                let scheduled = schedule.apply(base);
+                let array_shape = &program.array_shapes[&base.array];
 
                 for amat in self.array_materializers.iter_mut() {
-                    if amat.can_materialize(&param_transform, array_shape) {
-                        let expr = amat.materialize(&param_transform, array_shape, &mut self.registry);
-                        let schedule = ExprSchedule::Specific(transform_schedule.clone());
+                    if amat.can_materialize(array_shape, schedule, base, &scheduled) {
+                        let expr = amat.materialize(array_shape, schedule, base, &scheduled, &mut self.registry);
+                        let schedule = ExprSchedule::Specific(schedule.clone());
                         return Ok((schedule, expr))
                     }
                 }
 
-                Err(format!("No array materializer can process {}", param_transform))
+                Err(format!("No array materializer can process {}", scheduled))
             },
         }
     }
@@ -412,16 +432,51 @@ pub struct DummyArrayMaterializer {}
 
 impl ArrayMaterializer for DummyArrayMaterializer {
     // the dummy materializer can materialize any transform
-    fn can_materialize(&self, _param_transform: &ParamArrayTransform, _array_shape: &Shape) -> bool {
+    fn can_materialize(
+        &self,
+        _array_shape: &Shape,
+        _schedule: &ArraySchedule,
+        _base: &BaseArrayTransform,
+        _scheduled: &ScheduledArrayTransform,
+    ) -> bool {
         true
     }
 
-    fn materialize(&mut self, param_transform: &ParamArrayTransform, array_shape: &Shape, registry: &mut VectorRegistry) -> ParamCircuitExpr {
+    fn materialize(
+        &mut self,
+        array_shape: &Shape,
+        _schedule: &ArraySchedule,
+        _base: &BaseArrayTransform,
+        scheduled: &ScheduledArrayTransform,
+        registry: &mut VectorRegistry
+    ) -> ParamCircuitExpr {
         let ct_var = registry.fresh_ciphertext_var();
-        let coord_map: IndexCoordinateMap<CiphertextObject> =
-            IndexCoordinateMap::new(param_transform.exploded_dims.iter());
-        registry.set_ciphertext_coord_map(ct_var.clone(), coord_map);
+        let mut coord_map: IndexCoordinateMap<CiphertextObject> =
+            IndexCoordinateMap::new(scheduled.exploded_dims.iter());
+
+        let index_vars = coord_map.index_vars();
+
+        // register vectors
+        for coord in coord_map.coord_iter() {
+            let index_map: HashMap<DimName, usize> =
+                index_vars.clone().into_iter().zip(coord.clone()).collect();
+
+            let base_offset_map =
+                scheduled.transform.offset_map
+                .map(|offset| offset.eval(&index_map));
+
+            let base_transform =
+                BaseArrayTransform {
+                    array: scheduled.transform.array.clone(),
+                    offset_map: base_offset_map,
+                    dims: scheduled.transform.dims.clone(),
+                };
+
+            let vector = VectorInfo::clip(&base_transform, array_shape);
+            coord_map.set(coord, CiphertextObject::Vector(vector));
+        }
         
+        registry.set_ciphertext_coord_map(ct_var.clone(), coord_map);
         ParamCircuitExpr::CiphertextVar(ct_var)
     }
 }
@@ -429,22 +484,22 @@ impl ArrayMaterializer for DummyArrayMaterializer {
 // array materialize that will derive vectors through rotation and masking
 type VectorId = usize;
 
-pub struct DefaultArrayMaterializer {
+pub struct VectorDeriver {
     cur_vector_id: VectorId,
     vector_map: BiHashMap<VectorId, VectorInfo>,
     parent_map: HashMap<VectorId, VectorId>,
 }
 
-impl DefaultArrayMaterializer {
+impl VectorDeriver {
     pub fn new() -> Self {
-        DefaultArrayMaterializer {
+        VectorDeriver {
             cur_vector_id: 1,
             vector_map: BiHashMap::new(),
             parent_map: HashMap::new(),
         }
     }
 
-    fn register_vector(&mut self, vector: VectorInfo) -> VectorId {
+    pub fn register_vector(&mut self, vector: VectorInfo) -> VectorId {
         if let Some(id) = self.vector_map.get_by_right(&vector) {
             *id
 
@@ -456,7 +511,7 @@ impl DefaultArrayMaterializer {
         }
     }
 
-    fn find_immediate_parent(&self, id: VectorId) -> VectorId {
+    pub fn find_immediate_parent(&self, id: VectorId) -> VectorId {
         let vector = self.vector_map.get_by_left(&id).unwrap();
         for (id2, vector2) in self.vector_map.iter() {
             if id != *id2 {
@@ -469,7 +524,15 @@ impl DefaultArrayMaterializer {
         id
     }
 
-    fn find_transitive_parent(&self, id: VectorId) -> VectorId {
+    // find immediate parent for each vector
+    pub fn compute_immediate_parents(&mut self) {
+        for (vector_id, _) in self.vector_map.iter() {
+            let parent_id = self.find_immediate_parent(*vector_id);
+            self.parent_map.insert(*vector_id, parent_id);
+        }
+    }
+
+    pub fn find_transitive_parent(&self, id: VectorId) -> VectorId {
         let parent_id = self.parent_map[&id];
         if parent_id != id {
             self.find_transitive_parent(parent_id)
@@ -479,35 +542,95 @@ impl DefaultArrayMaterializer {
         }
     }
 
+    pub fn get_vector(&self, id: VectorId) -> &VectorInfo {
+        self.vector_map.get_by_left(&id).unwrap()
+    }
+
+    pub fn register_and_derive_vectors(
+        &mut self,
+        array_shape: &Shape,
+        coords: impl Iterator<Item=IndexCoord> + Clone,
+        scheduled: &ScheduledArrayTransform,
+        obj_map: &mut IndexCoordinateMap<CiphertextObject>,
+        step_map: &mut IndexCoordinateMap<isize>,
+    ) {
+        let mut vector_id_map: HashMap<IndexCoord, VectorId> = HashMap::new();
+        let index_vars = obj_map.index_vars();
+        for coord in coords.clone() {
+            let index_map: HashMap<DimName, usize> =
+                index_vars.clone().into_iter().zip(coord.clone()).collect();
+
+            let base_offset_map =
+                scheduled.transform.offset_map
+                .map(|offset| offset.eval(&index_map));
+
+            let base_transform =
+                BaseArrayTransform {
+                    array: scheduled.transform.array.clone(),
+                    offset_map: base_offset_map,
+                    dims: scheduled.transform.dims.clone(),
+                };
+
+            let vector = VectorInfo::clip(&base_transform, array_shape);
+            let vector_id = self.register_vector(vector);
+            vector_id_map.insert(coord, vector_id);
+        }
+
+        self.compute_immediate_parents();
+
+        // find transitive parents
+        for coord in coords {
+            let vector_id = *vector_id_map.get(&coord).unwrap();
+            let parent_id = self.find_transitive_parent(vector_id);
+
+            if vector_id != parent_id { // the vector is derived from some parent 
+                let vector = self.get_vector(vector_id);
+                let parent = self.get_vector(parent_id);
+                let steps = parent.derive(vector).unwrap();
+
+                step_map.set(coord.clone(), steps);
+                obj_map.set(coord, CiphertextObject::Vector(parent.clone()));
+
+            } else { // the vector is not derived
+                let vector = self.get_vector(vector_id);
+                step_map.set(coord.clone(), 0);
+                obj_map.set(coord, CiphertextObject::Vector(vector.clone()));
+            }
+        }
+    }
+
     // assume that the rotation steps have a linear relationship to the index vars,
     // then probe certain coordinates to compute an offset expr
-    fn compute_linear_offset(
+    // this can compute linear offsets for a *subset* of defined coords;
+    // hence this function takes in extra arguments
+    // valid_coords and processed_index_vars
+    pub fn compute_linear_offset(
         &self,
-        step_map: &HashMap<IndexCoord, isize>,
-        index_vars: &Vec<DimName>
+        step_map: &IndexCoordinateMap<isize>,
+        valid_coords: impl Iterator<Item=IndexCoord> + Clone,
+        processed_index_vars: Vec<DimName>,
     ) -> Option<OffsetExpr> {
+        let index_vars = step_map.index_vars();
+
         // probe at (0,...,0) to get the base offset
         let base_coord: im::Vector<usize> = im::Vector::from(vec![0; index_vars.len()]);
-        let base_offset: isize = step_map[&base_coord];
+        let base_offset: isize = *step_map.get(&base_coord);
 
         // probe at (0,..,1,..,0) to get the coefficient for the ith index var
+        // only do this for processed_index_vars, not *all* index vars
         let mut coefficients: Vec<isize> = Vec::new();
-        for i in 0..index_vars.len() {
+        for i in 0..processed_index_vars.len() {
             let mut index_coord = base_coord.clone();
             index_coord[i] = 1;
 
-            if let Some(step_offset) = step_map.get(&index_coord) {
-                coefficients.push(step_offset - base_offset);
-
-            } else {
-                coefficients.push(0);
-            }
+            let step_offset = *step_map.get(&index_coord);
+            coefficients.push(step_offset - base_offset);
         }
 
         // build offset expr from base offset and coefficients
         let offset_expr =
             coefficients.iter()
-            .zip(index_vars)
+            .zip(index_vars.clone())
             .fold(OffsetExpr::Literal(base_offset), |acc, (coeff, index_var)| {
                 if *coeff != 0 {
                     OffsetExpr::Add(
@@ -525,102 +648,268 @@ impl DefaultArrayMaterializer {
             });
 
         // validate computed offset expr
-        for (coord, value) in step_map.iter() {
+        for coord in valid_coords {
+            let value = *step_map.get(&coord);
             let index_map: HashMap<DimName, usize> =
                 index_vars.clone().into_iter().zip(coord.clone()).collect();
 
             let predicted_value = offset_expr.eval(&index_map);
-            if *value != predicted_value {
+            if value != predicted_value {
                 return None
             }
         }
 
+        // this expression is correct for all valid_coords; return it
         Some(offset_expr)
+    }
+}
+
+pub struct DefaultArrayMaterializer {
+    deriver: VectorDeriver,
+}
+
+impl DefaultArrayMaterializer {
+    pub fn new() -> Self {
+        DefaultArrayMaterializer {
+            deriver: VectorDeriver::new(),
+        }
     }
 }
 
 impl ArrayMaterializer for DefaultArrayMaterializer {
     // the default materializer always applies
-    fn can_materialize(&self, _param_transform: &ParamArrayTransform, _array_shape: &Shape) -> bool {
+    fn can_materialize(
+        &self,
+        _array_shape: &Shape,
+        _schedule: &ArraySchedule,
+        _base: &BaseArrayTransform,
+        _scheduled: &ScheduledArrayTransform,
+    ) -> bool {
         true
     }
 
-    fn materialize(&mut self, param_transform: &ParamArrayTransform, array_shape: &Shape, registry: &mut VectorRegistry) -> ParamCircuitExpr {
+    fn materialize(
+        &mut self,
+        array_shape: &Shape,
+        _schedule: &ArraySchedule,
+        _base: &BaseArrayTransform,
+        scheduled: &ScheduledArrayTransform,
+        registry: &mut VectorRegistry
+    ) -> ParamCircuitExpr {
+        let mut obj_map: IndexCoordinateMap<CiphertextObject> =
+            IndexCoordinateMap::new(scheduled.exploded_dims.iter());
+        let mut step_map: IndexCoordinateMap<isize> =
+            IndexCoordinateMap::new(scheduled.exploded_dims.iter());
+        let coords = obj_map.coord_iter();
+
+        self.deriver.register_and_derive_vectors(
+            array_shape,
+            coords.clone(),
+            scheduled,
+            &mut obj_map,
+            &mut step_map
+        );
+
         let ct_var = registry.fresh_ciphertext_var();
-        let mut coord_map: IndexCoordinateMap<CiphertextObject> =
-            IndexCoordinateMap::new(param_transform.exploded_dims.iter());
+        let offset_expr_opt =
+            self.deriver.compute_linear_offset(
+                &step_map,
+                coords,
+                obj_map.index_vars()
+            );
 
-        let mut vector_id_map: HashMap<IndexCoord, VectorId> = HashMap::new();
-        let index_vars = coord_map.index_vars();
-
-        // register vectors
-        for coord in coord_map.coord_iter() {
-            let index_map: HashMap<DimName, usize> =
-                index_vars.clone().into_iter().zip(coord.clone()).collect();
-
-            let base_offset_map =
-                param_transform.transform.offset_map
-                .map(|offset| offset.eval(&index_map));
-
-            let base_transform =
-                BaseArrayTransform {
-                    array: param_transform.transform.array.clone(),
-                    offset_map: base_offset_map,
-                    dims: param_transform.transform.dims.clone(),
-                };
-
-            let vector = VectorInfo::clip(&base_transform, array_shape);
-            let vector_id = self.register_vector(vector);
-            vector_id_map.insert(coord, vector_id);
-        }
-
-        // find immediate parent for each vector
-        for (vector_id, _) in self.vector_map.iter() {
-            let parent_id = self.find_immediate_parent(*vector_id);
-            self.parent_map.insert(*vector_id, parent_id);
-        }
-
-        // find transitive parents
-        let mut step_map: HashMap<IndexCoord, isize> = HashMap::new();
-        for coord in coord_map.coord_iter() {
-            let vector_id = vector_id_map.get(&coord).unwrap();
-            let parent_id = self.find_transitive_parent(*vector_id);
-
-            if *vector_id != parent_id {
-                let vector = self.vector_map.get_by_left(vector_id).unwrap();
-                let parent = self.vector_map.get_by_left(&parent_id).unwrap();
-                let steps = parent.derive(vector).unwrap();
-
-                step_map.insert(coord.clone(), steps);
-                coord_map.set(coord, CiphertextObject::Vector(parent.clone()));
-
-            } else {
-                let vector = self.vector_map.get_by_left(vector_id).unwrap();
-
-                step_map.insert(coord.clone(), 0);
-                coord_map.set(coord, CiphertextObject::Vector(vector.clone()));
-            }
-        }
-
-        if let Some(offset_expr) = self.compute_linear_offset(&step_map, &index_vars) {
-            registry.set_ciphertext_coord_map(ct_var.clone(), coord_map);
+        if let Some(offset_expr) = offset_expr_opt {
+            registry.set_ciphertext_coord_map(ct_var.clone(), obj_map);
             ParamCircuitExpr::Rotate(
                 Box::new(offset_expr),
                 Box::new(ParamCircuitExpr::CiphertextVar(ct_var))
             )
 
         } else {
+            // TODO fix this
             panic!("cannot process derivation with nonlinear offsets")
         }
     }
 }
 
+pub struct DiagonalArrayMaterializer { deriver: VectorDeriver }
+
+impl DiagonalArrayMaterializer {
+    pub fn new() -> Self {
+        DiagonalArrayMaterializer { deriver: VectorDeriver::new() }
+    }
+}
+
+impl ArrayMaterializer for DiagonalArrayMaterializer {
+    fn can_materialize(
+        &self,
+        _array_shape: &Shape,
+        schedule: &ArraySchedule,
+        _base: &BaseArrayTransform,
+        scheduled: &ScheduledArrayTransform,
+    ) -> bool {
+        if let Some(ClientPreprocessing::Permute(dim_i, dim_j)) = scheduled.preprocessing {
+            // dim i must be exploded and dim j must be the outermost vectorized dim
+            let i_exploded = 
+                schedule.exploded_dims.iter().any(|edim| edim.index == dim_i);
+
+            let j_outermost_vectorized =
+                schedule.vectorized_dims.len() > 0 &&
+                schedule.vectorized_dims.head().unwrap().index == dim_j;
+
+            // dim i and j must have both have the same tiling that corresponds
+            // to the permutation transform
+            // TODO: for now, assume i and j are NOT tiled
+            let tiling_i = schedule.get_tiling(dim_i);
+            let tiling_j = schedule.get_tiling(dim_j);
+            tiling_i == tiling_j && tiling_i.len() == 1 && i_exploded && j_outermost_vectorized
+
+        } else {
+            false
+        }
+    }
+
+    fn materialize(
+        &mut self,
+        array_shape: &Shape,
+        schedule: &ArraySchedule,
+        base: &BaseArrayTransform,
+        scheduled: &ScheduledArrayTransform,
+        registry: &mut VectorRegistry
+    ) -> ParamCircuitExpr {
+        if let Some(ClientPreprocessing::Permute(dim_i, dim_j)) = scheduled.preprocessing {
+            let mut obj_map: IndexCoordinateMap<CiphertextObject> =
+                IndexCoordinateMap::new(scheduled.exploded_dims.iter());
+            let mut step_map: IndexCoordinateMap<isize> =
+                IndexCoordinateMap::new(scheduled.exploded_dims.iter());
+
+            match (&base.dims[dim_i], &base.dims[dim_j]) {
+                // if dim j is a filled dim, then the permutation must actually
+                // be done by the client; record this fact and then materialize
+                // the schedule normally
+                (DimContent::FilledDim { dim: idim_i, extent: extent_i, stride: stride_i },
+                DimContent::FilledDim { dim: idim_j, extent: extent_j, stride: stride_j }) => {
+                    unimplemented!()
+                },
+
+                // if dim j is an empty dim, then we can apply the "diagonal"
+                // trick from Halevi and Schoup for matrix-vector multiplication
+                // to do this, follow these steps:
+                // 1. switch innermost tiles of dim i and dim j
+                //    (assuming all tiles of i is exploded and only innermost tile of j is vectorized)
+                // 2. derive vectors assuming j = 0
+                // 3. to fill in the rest of the vectors along dim j by rotating
+                //    the vectors at dim j = 0
+                (DimContent::FilledDim { dim: dim_i_dim, extent: extent_i, stride: stride_i },
+                DimContent::EmptyDim { extent: extent_j }) => {
+                    // switch innermost tiles of i and j in the schedule
+                    let mut new_schedule = schedule.clone();
+
+                    let inner_i_dim = 
+                        new_schedule.exploded_dims.iter_mut()
+                        .find(|dim| dim.index == dim_i && dim.stride == 1)
+                        .unwrap();
+                    inner_i_dim.index = dim_j;
+                    let inner_i_dim_name = inner_i_dim.name.clone();
+                    let inner_i_dim_extent = inner_i_dim.extent;
+
+                    let inner_j_dim = &mut new_schedule.exploded_dims[0];
+                    inner_j_dim.index = dim_i;
+                    let inner_j_dim_name = inner_j_dim.name.clone();
+                    let inner_j_dim_extent = inner_j_dim.extent;
+
+                    // let inner_i_dim_name = inner_i_dim.name.clone();
+                    // let inner_j_dim_name = inner_j_dim.name.clone();
+
+                    // TODO should we replace names as well as indices?
+                    // inner_i_dim.name = inner_j_dim_name;
+                    // inner_j_dim.name = inner_i_dim_name;
+
+                    let new_scheduled = new_schedule.apply(base);
+
+                    let mut obj_map: IndexCoordinateMap<CiphertextObject> =
+                        IndexCoordinateMap::new(new_scheduled.exploded_dims.iter());
+                    let mut step_map: IndexCoordinateMap<isize> =
+                        IndexCoordinateMap::new(new_scheduled.exploded_dims.iter());
+                    let zero_inner_j_coords =
+                        obj_map.coord_iter_subset(&inner_i_dim_name, 0..1);
+
+                    self.deriver.register_and_derive_vectors(
+                        array_shape,
+                        zero_inner_j_coords.clone(),
+                        &new_scheduled,
+                        &mut obj_map,
+                        &mut step_map);
+
+                    let mut processed_index_vars = obj_map.index_vars();
+
+                    // remember, inner i and inner j are swapped,
+                    // so inner j now has the name of inner i!
+                    let inner_j_name_index =
+                        processed_index_vars.iter()
+                        .position(|name| *name == inner_i_dim_name)
+                        .unwrap();
+
+                    processed_index_vars.remove(inner_j_name_index);
+
+                    let ct_var = registry.fresh_ciphertext_var();
+                    let offset_expr_opt =
+                        self.deriver.compute_linear_offset(
+                            &step_map,
+                            zero_inner_j_coords,
+                            processed_index_vars
+                        );
+
+                    if let Some(offset_expr) = offset_expr_opt {
+                        let rest_inner_j_coords =
+                            obj_map.coord_iter_subset(&inner_i_dim_name, 1..inner_i_dim_extent);
+
+                        // given expr e is at coord where inner_j=0,
+                        // expr rot(inner_j, e) is at coord where inner_j != 0
+                        for coord in rest_inner_j_coords {
+                            let mut ref_coord = coord.clone();
+                            ref_coord[inner_j_name_index] = 0;
+
+                            let ref_obj = obj_map.get(&ref_coord).clone();
+                            obj_map.set(coord.clone(), ref_obj);
+                        }
+
+                        let new_offset_expr =
+                            OffsetExpr::Add(
+                                Box::new(offset_expr),
+                                Box::new(OffsetExpr::ExplodedIndexVar(inner_i_dim_name.clone()))
+                            );
+
+                        registry.set_ciphertext_coord_map(ct_var.clone(), obj_map);
+                        ParamCircuitExpr::Rotate(
+                            Box::new(new_offset_expr),
+                            Box::new(ParamCircuitExpr::CiphertextVar(ct_var))
+                        )
+
+                    } else {
+                        // TODO fix this
+                        panic!("cannot process derivation with nonlinear offsets")
+                    }
+                },
+
+                // if dim i is empty, then the permutation is a no-op
+                // materialize the schedule normally
+                (DimContent::EmptyDim { extent }, _) => {
+                    unimplemented!()
+                }
+            }
+
+        } else {
+            unreachable!()
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use interval::{Interval, ops::Range};
 
-    use crate::lang::{parser::ProgramParser, index_elim2::IndexElimination2, source::SourceProgram};
+    use crate::lang::{parser::ProgramParser, index_elim2::IndexElimination2, source::SourceProgram, BaseOffsetMap};
     use super::*;
 
     // generate an initial schedule for a program
@@ -649,10 +938,15 @@ mod tests {
         println!("{}", param_circ.expr);
     }
 
-    fn test_array_materializer(transform: ParamArrayTransform, shape: Shape) {
+    fn test_array_materializer(
+        shape: Shape,
+        schedule: ArraySchedule,
+        base: BaseArrayTransform, 
+        scheduled: ScheduledArrayTransform
+    ) {
         let mut amat = DefaultArrayMaterializer::new();
         let mut registry = VectorRegistry::new();
-        let circ = amat.materialize(&transform, &shape, &mut registry);
+        let circ = amat.materialize(&shape, &schedule, &base, &scheduled, &mut registry);
         println!("{}", circ);
     }
 
@@ -769,28 +1063,36 @@ mod tests {
 
     #[test]
     fn test_materialize_img_array() {
-        let mut offset_map = OffsetMap::new(2);
-        offset_map.set(0, OffsetExpr::ExplodedIndexVar("i".to_string()));
-        offset_map.set(1, OffsetExpr::ExplodedIndexVar("j".to_string()));
+        let shape: Shape = im::vector![Interval::new(0, 16), Interval::new(0, 16)];
 
-        let transform =
-            ParamArrayTransform {
-                exploded_dims: im::vector![
-                    ScheduleDim { index: 0, stride: 1, extent: 3, name: "i".to_string() },
-                    ScheduleDim { index: 1, stride: 1, extent: 3, name: "j".to_string() },
-                ],
-
-                transform: ArrayTransform {
-                    array: "img".to_string(),
-                    offset_map,
-                    dims: im::vector![
-                        DimContent::FilledDim { dim: 0, extent: 16, stride: 1 },
-                        DimContent::FilledDim { dim: 1, extent: 16, stride: 1 },
-                    ]
-                }
+        let base =
+            BaseArrayTransform {
+                array: String::from("img"),
+                offset_map: BaseOffsetMap::new(4),
+                dims: im::vector![
+                    DimContent::FilledDim { dim: 0, extent: 3, stride: 1 },
+                    DimContent::FilledDim { dim: 1, extent: 3, stride: 1 },
+                    DimContent::FilledDim { dim: 0, extent: 16, stride: 1 },
+                    DimContent::FilledDim { dim: 1, extent: 16, stride: 1 },
+                ]
             };
 
-        let shape: Shape = im::vector![Interval::new(0, 16), Interval::new(0, 16)];
-        test_array_materializer(transform, shape);
+        let schedule = 
+            ArraySchedule {
+                preprocessing: None,
+                exploded_dims: im::vector![
+                    ScheduleDim { index: 0, stride: 1, extent: 3, name: String::from("i") },
+                    ScheduleDim { index: 1, stride: 1, extent: 3, name: String::from("j") }
+                ],
+                vectorized_dims: im::vector![
+                    ScheduleDim { index: 2, stride: 1, extent: 16, name: String::from("x") },
+                    ScheduleDim { index: 3, stride: 1, extent: 16, name: String::from("y") }
+                ]
+            };
+
+        let scheduled =
+            schedule.apply(&base);
+
+        test_array_materializer(shape, schedule, base, scheduled);
     }
 }
