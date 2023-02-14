@@ -34,6 +34,26 @@ impl OffsetExpr {
             OffsetExpr::Var(var) => store[var] as isize
         }
     }
+
+    pub fn const_value(&self) -> Option<isize> {
+        match self {
+            OffsetExpr::Add(expr1, expr2) => {
+                let const1 = expr1.const_value()?;
+                let const2 = expr2.const_value()?;
+                Some(const1 + const2)
+            },
+
+            OffsetExpr::Mul(expr1, expr2) => {
+                let const1 = expr1.const_value()?;
+                let const2 = expr2.const_value()?;
+                Some(const1 + const2)
+            },
+            
+            OffsetExpr::Literal(lit) => Some(*lit),
+
+            OffsetExpr::Var(_) => None,
+        }
+    }
 }
 
 impl Display for OffsetExpr {

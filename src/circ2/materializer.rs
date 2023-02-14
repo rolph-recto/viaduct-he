@@ -220,7 +220,26 @@ impl VectorInfo {
                     }
                 });
 
-            if dims_derivable && self.array == other.array {
+            let mut nonvectorized_dims =
+                (0..self.offset_map.num_dims())
+                .filter(|dim| {
+                    !self.dims.iter().any(|dim2_content| {
+                        match dim2_content {
+                            VectorDimContent::FilledDim {
+                                dim: dim2, extent: _, stride: _, pad_left: _, pad_right: _
+                            } => dim == dim2,
+
+                            VectorDimContent::EmptyDim { extent: _ } => false,
+                        }
+                    })
+                });
+
+            let nonvectorized_dims_equal_offsets = 
+                nonvectorized_dims.all(|dim| {
+                    self.offset_map.get(dim) == other.offset_map.get(dim)
+                });
+
+            if self.array == other.array && dims_derivable && nonvectorized_dims_equal_offsets {
                 let mut block_size: usize = 1;
                 let mut rotate_steps = 0;
 
@@ -542,13 +561,15 @@ impl VectorDeriver {
     }
 
     pub fn find_transitive_parent(&self, id: VectorId) -> VectorId {
-        let parent_id = self.parent_map[&id];
-        if parent_id != id {
-            self.find_transitive_parent(parent_id)
+        let mut cur_id = id;
+        let mut parent_id = self.parent_map[&cur_id];
 
-        } else {
-            parent_id
+        while parent_id != cur_id {
+            cur_id = parent_id;
+            parent_id = self.parent_map[&cur_id];
         }
+
+        parent_id
     }
 
     pub fn get_vector(&self, id: VectorId) -> &VectorInfo {
@@ -566,6 +587,7 @@ impl VectorDeriver {
     ) {
         let mut vector_id_map: HashMap<IndexCoord, VectorId> = HashMap::new();
         let index_vars = obj_map.index_vars();
+
         for coord in coords.clone() {
             let index_map: HashMap<DimName, usize> =
                 index_vars.clone().into_iter().zip(coord.clone()).collect();
@@ -687,26 +709,26 @@ impl VectorDeriver {
             &mut obj_map,
             &mut step_map);
 
-        // attempt to compute offset expr
-        let offset_expr_opt =
-            self.compute_linear_offset(
-                &step_map,
-                coords,
-                index_vars
-            );
-
         let ct_var = registry.fresh_ct_var();
 
         if !obj_map.is_empty() {
+            // attempt to compute offset expr
+            let offset_expr_opt =
+                self.compute_linear_offset(
+                    &step_map,
+                    coords,
+                    index_vars
+                );
+
             registry.set_ct_var_value(ct_var.clone(), CircuitVarValue::CoordMap(obj_map));
 
-            if let Some(offset_expr) = offset_expr_opt {
+            if let Some(linear_offset_expr) = offset_expr_opt {
                 ParamCircuitExpr::Rotate(
-                    Box::new(offset_expr),
+                    Box::new(linear_offset_expr),
                     Box::new(ParamCircuitExpr::CiphertextVar(ct_var))
                 )
 
-            } else {
+            } else { // introduce new offset variable, since we can't create an offset expr
                 let offset_var = registry.fresh_offset_var();
                 registry.set_offset_var_value(offset_var.clone(), CircuitVarValue::CoordMap(step_map));
 
@@ -715,6 +737,7 @@ impl VectorDeriver {
                     Box::new(ParamCircuitExpr::CiphertextVar(ct_var))
                 )
             }
+
         } else {
             let index_map: HashMap<DimName, usize> = HashMap::new();
             let vector =
@@ -1171,6 +1194,43 @@ mod tests {
                 dims: im::vector![
                     DimContent::FilledDim { dim: 0, extent: 4, stride: 1 },
                     DimContent::EmptyDim { extent: 4 },
+                ]
+            };
+
+        let schedule = 
+            ArraySchedule {
+                preprocessing: Some(ClientPreprocessing::Permute(0, 1)),
+                exploded_dims: im::vector![
+                    ScheduleDim { index: 0, stride: 1, extent: 4, name: String::from("x") },
+                ],
+                vectorized_dims: im::vector![
+                    ScheduleDim { index: 1, stride: 1, extent: 4, name: String::from("y") },
+                ]
+            };
+
+        let scheduled =
+            schedule.apply(&base);
+
+        test_array_materializer(
+            Box::new(DiagonalArrayMaterializer::new()),
+            shape, 
+            schedule, 
+            base, 
+            scheduled
+        );
+    }
+
+    #[test]
+    fn test_materialize_diagonal2() {
+        let shape: Shape = im::vector![Interval::new(0, 4), Interval::new(0, 4)];
+
+        let base =
+            BaseArrayTransform {
+                array: String::from("img"),
+                offset_map: BaseOffsetMap::new(2),
+                dims: im::vector![
+                    DimContent::FilledDim { dim: 0, extent: 4, stride: 1 },
+                    DimContent::FilledDim { dim: 1, extent: 4, stride: 1 },
                 ]
             };
 
