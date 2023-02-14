@@ -6,7 +6,7 @@ use itertools::{Itertools, MultiProduct};
 use crate::{
     circ2::{
         IndexCoordinateMap, CiphertextObject, ParamCircuitExpr,
-        VectorRegistry, ParamCircuitProgram
+        CircuitRegistry, ParamCircuitProgram
     },
     lang::{
         Operator, BaseArrayTransform,
@@ -18,7 +18,7 @@ use crate::{
     }
 };
 
-use super::IndexCoord;
+use super::{IndexCoord, CircuitVarValue};
 
 // like DimContent, but with padding information
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -74,7 +74,19 @@ impl Display for VectorInfo {
 }
 
 impl VectorInfo {
-    pub fn clip(transform: &BaseArrayTransform, array_shape: &Shape) -> Self {
+    // retrieve vector at specific coordinate of a scheduled array
+    pub fn get_vector_at_coord(array_shape: &Shape, index_map: &HashMap<DimName, usize>, scheduled: &ScheduledArrayTransform) -> Self {
+        let base_offset_map =
+            scheduled.transform.offset_map
+            .map(|offset| offset.eval(index_map));
+
+        let transform = 
+            BaseArrayTransform {
+                array: scheduled.transform.array.clone(),
+                offset_map: base_offset_map,
+                dims: scheduled.transform.dims.clone(),
+            };
+
         let mut materialized_dims: im::Vector<VectorDimContent> = im::Vector::new();
         for dim in transform.dims.iter() {
             let materialized_dim = 
@@ -292,19 +304,19 @@ pub trait ArrayMaterializer {
         schedule: &ArraySchedule,
         base: &BaseArrayTransform,
         scheduled: &ScheduledArrayTransform,
-        registry: &mut VectorRegistry
+        registry: &mut CircuitRegistry
     ) -> ParamCircuitExpr;
 }
 
 /// materializes a schedule for an index-free program.
 pub struct Materializer {
     array_materializers: Vec<Box<dyn ArrayMaterializer>>,
-    registry: VectorRegistry,
+    registry: CircuitRegistry,
 }
 
 impl Materializer {
     pub fn new(array_materializers: Vec<Box<dyn ArrayMaterializer>>) -> Self {
-        Materializer { array_materializers, registry: VectorRegistry::new() }
+        Materializer { array_materializers, registry: CircuitRegistry::new() }
     }
 
     /// packages the materialized expr with the vector registry
@@ -448,7 +460,7 @@ impl ArrayMaterializer for DummyArrayMaterializer {
         _schedule: &ArraySchedule,
         _base: &BaseArrayTransform,
         scheduled: &ScheduledArrayTransform,
-        registry: &mut VectorRegistry
+        registry: &mut CircuitRegistry
     ) -> ParamCircuitExpr {
         let ct_var = registry.fresh_ciphertext_var();
         let mut coord_map: IndexCoordinateMap<CiphertextObject> =
@@ -461,22 +473,11 @@ impl ArrayMaterializer for DummyArrayMaterializer {
             let index_map: HashMap<DimName, usize> =
                 index_vars.clone().into_iter().zip(coord.clone()).collect();
 
-            let base_offset_map =
-                scheduled.transform.offset_map
-                .map(|offset| offset.eval(&index_map));
-
-            let base_transform =
-                BaseArrayTransform {
-                    array: scheduled.transform.array.clone(),
-                    offset_map: base_offset_map,
-                    dims: scheduled.transform.dims.clone(),
-                };
-
-            let vector = VectorInfo::clip(&base_transform, array_shape);
+            let vector = VectorInfo::get_vector_at_coord(array_shape, &index_map, scheduled);
             coord_map.set(coord, CiphertextObject::Vector(vector));
         }
         
-        registry.set_ciphertext_coord_map(ct_var.clone(), coord_map);
+        registry.set_ct_var_value(ct_var.clone(), CircuitVarValue::CoordMap(coord_map));
         ParamCircuitExpr::CiphertextVar(ct_var)
     }
 }
@@ -559,19 +560,7 @@ impl VectorDeriver {
         for coord in coords.clone() {
             let index_map: HashMap<DimName, usize> =
                 index_vars.clone().into_iter().zip(coord.clone()).collect();
-
-            let base_offset_map =
-                scheduled.transform.offset_map
-                .map(|offset| offset.eval(&index_map));
-
-            let base_transform =
-                BaseArrayTransform {
-                    array: scheduled.transform.array.clone(),
-                    offset_map: base_offset_map,
-                    dims: scheduled.transform.dims.clone(),
-                };
-
-            let vector = VectorInfo::clip(&base_transform, array_shape);
+            let vector = VectorInfo::get_vector_at_coord(array_shape, &index_map, scheduled);
             let vector_id = self.register_vector(vector);
             vector_id_map.insert(coord, vector_id);
         }
@@ -694,7 +683,7 @@ impl ArrayMaterializer for DefaultArrayMaterializer {
         _schedule: &ArraySchedule,
         _base: &BaseArrayTransform,
         scheduled: &ScheduledArrayTransform,
-        registry: &mut VectorRegistry
+        registry: &mut CircuitRegistry
     ) -> ParamCircuitExpr {
         let mut obj_map: IndexCoordinateMap<CiphertextObject> =
             IndexCoordinateMap::new(scheduled.exploded_dims.iter());
@@ -702,32 +691,43 @@ impl ArrayMaterializer for DefaultArrayMaterializer {
             IndexCoordinateMap::new(scheduled.exploded_dims.iter());
         let coords = obj_map.coord_iter();
 
-        self.deriver.register_and_derive_vectors(
-            array_shape,
-            coords.clone(),
-            scheduled,
-            &mut obj_map,
-            &mut step_map
-        );
-
         let ct_var = registry.fresh_ciphertext_var();
-        let offset_expr_opt =
-            self.deriver.compute_linear_offset(
-                &step_map,
-                coords,
-                obj_map.index_vars()
+        if !obj_map.is_empty() {
+            self.deriver.register_and_derive_vectors(
+                array_shape,
+                coords.clone(),
+                scheduled,
+                &mut obj_map,
+                &mut step_map
             );
 
-        if let Some(offset_expr) = offset_expr_opt {
-            registry.set_ciphertext_coord_map(ct_var.clone(), obj_map);
-            ParamCircuitExpr::Rotate(
-                Box::new(offset_expr),
-                Box::new(ParamCircuitExpr::CiphertextVar(ct_var))
-            )
+            let offset_expr_opt =
+                self.deriver.compute_linear_offset(
+                    &step_map,
+                    coords,
+                    obj_map.index_vars()
+                );
+
+            if let Some(offset_expr) = offset_expr_opt {
+                registry.set_ct_var_value(ct_var.clone(), CircuitVarValue::CoordMap(obj_map));
+                ParamCircuitExpr::Rotate(
+                    Box::new(offset_expr),
+                    Box::new(ParamCircuitExpr::CiphertextVar(ct_var))
+                )
+
+            } else {
+                // TODO fix this
+                panic!("cannot process derivation with nonlinear offsets")
+            }
 
         } else {
-            // TODO fix this
-            panic!("cannot process derivation with nonlinear offsets")
+            let index_map: HashMap<DimName, usize> = HashMap::new();
+            let vector = VectorInfo::get_vector_at_coord(array_shape, &index_map, scheduled);
+            registry.set_ct_var_value(
+                ct_var.clone(),
+                CircuitVarValue::Object(CiphertextObject::Vector(vector))
+            );
+            ParamCircuitExpr::CiphertextVar(ct_var)
         }
     }
 }
@@ -768,14 +768,14 @@ impl ArrayMaterializer for DiagonalArrayMaterializer {
             false
         }
     }
-
+    
     fn materialize(
         &mut self,
         array_shape: &Shape,
         schedule: &ArraySchedule,
         base: &BaseArrayTransform,
         scheduled: &ScheduledArrayTransform,
-        registry: &mut VectorRegistry
+        registry: &mut CircuitRegistry
     ) -> ParamCircuitExpr {
         if let Some(ClientPreprocessing::Permute(dim_i, dim_j)) = scheduled.preprocessing {
             let mut obj_map: IndexCoordinateMap<CiphertextObject> =
@@ -826,11 +826,6 @@ impl ArrayMaterializer for DiagonalArrayMaterializer {
                     // inner_j_dim.name = inner_i_dim_name;
 
                     let new_scheduled = new_schedule.apply(base);
-
-                    let mut obj_map: IndexCoordinateMap<CiphertextObject> =
-                        IndexCoordinateMap::new(new_scheduled.exploded_dims.iter());
-                    let mut step_map: IndexCoordinateMap<isize> =
-                        IndexCoordinateMap::new(new_scheduled.exploded_dims.iter());
                     let zero_inner_j_coords =
                         obj_map.coord_iter_subset(&inner_i_dim_name, 0..1);
 
@@ -854,11 +849,18 @@ impl ArrayMaterializer for DiagonalArrayMaterializer {
 
                     let ct_var = registry.fresh_ciphertext_var();
                     let offset_expr_opt =
-                        self.deriver.compute_linear_offset(
-                            &step_map,
-                            zero_inner_j_coords,
-                            processed_index_vars
-                        );
+                        if processed_index_vars.len() > 0 {
+                            self.deriver.compute_linear_offset(
+                                &step_map,
+                                zero_inner_j_coords,
+                                processed_index_vars
+                            )
+
+                        } else {
+                            let zero_j_coord = im::vector![0];
+                            let step = *step_map.get(&zero_j_coord);
+                            Some(OffsetExpr::Literal(step))
+                        };
 
                     if let Some(offset_expr) = offset_expr_opt {
                         let rest_inner_j_coords =
@@ -880,7 +882,8 @@ impl ArrayMaterializer for DiagonalArrayMaterializer {
                                 Box::new(OffsetExpr::ExplodedIndexVar(inner_i_dim_name.clone()))
                             );
 
-                        registry.set_ciphertext_coord_map(ct_var.clone(), obj_map);
+                        registry.set_ct_var_value(ct_var.clone(), CircuitVarValue::CoordMap(obj_map));
+
                         ParamCircuitExpr::Rotate(
                             Box::new(new_offset_expr),
                             Box::new(ParamCircuitExpr::CiphertextVar(ct_var))
@@ -939,13 +942,13 @@ mod tests {
     }
 
     fn test_array_materializer(
+        mut amat: Box<dyn ArrayMaterializer>,
         shape: Shape,
         schedule: ArraySchedule,
         base: BaseArrayTransform, 
         scheduled: ScheduledArrayTransform
     ) {
-        let mut amat = DefaultArrayMaterializer::new();
-        let mut registry = VectorRegistry::new();
+        let mut registry = CircuitRegistry::new();
         let circ = amat.materialize(&shape, &schedule, &base, &scheduled, &mut registry);
         println!("{}", circ);
     }
@@ -1093,6 +1096,49 @@ mod tests {
         let scheduled =
             schedule.apply(&base);
 
-        test_array_materializer(shape, schedule, base, scheduled);
+        test_array_materializer(
+            Box::new(DefaultArrayMaterializer::new()),
+            shape, 
+            schedule, 
+            base, 
+            scheduled
+        );
+    }
+
+    #[test]
+    fn test_materialize_diagonal() {
+        let shape: Shape = im::vector![Interval::new(0, 4)];
+
+        let base =
+            BaseArrayTransform {
+                array: String::from("v"),
+                offset_map: BaseOffsetMap::new(2),
+                dims: im::vector![
+                    DimContent::FilledDim { dim: 0, extent: 4, stride: 1 },
+                    DimContent::EmptyDim { extent: 4 },
+                ]
+            };
+
+        let schedule = 
+            ArraySchedule {
+                preprocessing: Some(ClientPreprocessing::Permute(0, 1)),
+                exploded_dims: im::vector![
+                    ScheduleDim { index: 0, stride: 1, extent: 4, name: String::from("x") },
+                ],
+                vectorized_dims: im::vector![
+                    ScheduleDim { index: 1, stride: 1, extent: 4, name: String::from("y") },
+                ]
+            };
+
+        let scheduled =
+            schedule.apply(&base);
+
+        test_array_materializer(
+            Box::new(DiagonalArrayMaterializer::new()),
+            shape, 
+            schedule, 
+            base, 
+            scheduled
+        );
     }
 }

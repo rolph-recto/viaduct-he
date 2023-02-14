@@ -112,6 +112,11 @@ impl IndexCoordinateSystem {
         }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.0.len() == 0 ||
+        self.0.iter().all(|(_, extent)| *extent == 0)
+    }
+
     /// count how many items this coordinate system represents
     pub fn multiplicity(&self) -> usize {
         self.0.iter().fold(1, |acc, (_, extent)| acc * (*extent))
@@ -167,6 +172,10 @@ impl<T: Default> IndexCoordinateMap<T> {
     pub fn multiplicity(&self) -> usize {
         self.coord_system.multiplicity()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.coord_system.is_empty()
+    }
 }
 
 #[derive(Clone,Debug)]
@@ -196,17 +205,26 @@ impl Default for PlaintextObject {
     fn default() -> Self { PlaintextObject::Null }
 }
 
-pub struct VectorRegistry {
-    ct_var_values: HashMap<VarName, IndexCoordinateMap<CiphertextObject>>,
+pub enum CircuitVarValue<T: Default> {
+    CoordMap(IndexCoordinateMap<T>),
+    Object(T)
+}
+
+type CiphertextVarValue = CircuitVarValue<CiphertextObject>;
+type PlaintextVarValue = CircuitVarValue<PlaintextObject>;
+type OffsetVarValue = CircuitVarValue<usize>;
+
+pub struct CircuitRegistry {
+    ct_var_values: HashMap<VarName, CiphertextVarValue>,
     ct_var_id: usize,
 
-    pt_var_values: HashMap<VarName, IndexCoordinateMap<PlaintextObject>>,
+    pt_var_values: HashMap<VarName, PlaintextVarValue>,
     pt_var_id: usize
 }
 
-impl VectorRegistry {
+impl CircuitRegistry {
     fn new() -> Self {
-        VectorRegistry {
+        CircuitRegistry {
             ct_var_values: HashMap::new(),
             ct_var_id: 1,
             pt_var_values: HashMap::new(),
@@ -226,19 +244,19 @@ impl VectorRegistry {
         format!("pt{}", id)
     }
 
-    pub fn set_ciphertext_coord_map(&mut self, ct_var: VarName, coord_map: IndexCoordinateMap<CiphertextObject>) {
-        self.ct_var_values.insert(ct_var, coord_map);
+    pub fn set_ct_var_value(&mut self, ct_var: VarName, value: CiphertextVarValue) {
+        self.ct_var_values.insert(ct_var, value);
     }
 
-    pub fn set_plaintext_coord_map(&mut self, pt_var: VarName, coord_map: IndexCoordinateMap<PlaintextObject>) {
-        self.pt_var_values.insert(pt_var, coord_map);
+    pub fn set_pt_var_value(&mut self, pt_var: VarName, value: PlaintextVarValue) {
+        self.pt_var_values.insert(pt_var, value);
     }
 
-    pub fn get_ciphertext_coord_map(&mut self, ct_var: VarName) -> &IndexCoordinateMap<CiphertextObject> {
+    pub fn get_ct_var_value(&mut self, ct_var: VarName) -> &CiphertextVarValue {
         self.ct_var_values.get(&ct_var).unwrap()
     }
 
-    pub fn get_plaintext_coord_map(&mut self, pt_var: VarName) -> &IndexCoordinateMap<PlaintextObject> {
+    pub fn get_pt_var_value(&mut self, pt_var: VarName) -> &PlaintextVarValue {
         self.pt_var_values.get(&pt_var).unwrap()
     }
 
@@ -258,7 +276,7 @@ impl VectorRegistry {
 pub struct ParamCircuitProgram {
     pub schedule: ExprSchedule,
     pub expr: ParamCircuitExpr,
-    pub registry: VectorRegistry,
+    pub registry: CircuitRegistry,
 }
 
 impl Display for ParamCircuitProgram {
