@@ -84,6 +84,7 @@ impl Default for OffsetExpr {
     }
 }
 
+// a schedule for a dimension
 #[derive(Clone,Debug,PartialEq,Eq,Hash)]
 pub struct ScheduleDim {
     pub index: DimIndex,
@@ -146,8 +147,13 @@ impl ArraySchedule {
 
         sdims.extend(
             self.vectorized_dims.iter()
-            .filter(|vdim| vdim.index == dim)
-            .map(|vdim| (vdim.stride, vdim.extent))
+            .flat_map(|vdim| {
+                if vdim.index == dim {
+                    vec![(vdim.stride, vdim.extent)]
+                } else {
+                    vec![]
+                }
+            })
         );
 
         sdims.sort_by(|(s1,_), (s2,_)| s1.cmp(s2));
@@ -220,6 +226,17 @@ impl ArraySchedule {
             }
         }
     }
+
+    pub fn to_expr_schedule(&self) -> ExprSchedule {
+        ExprSchedule {
+            preprocessing: self.preprocessing.clone(),
+            exploded_dims: self.exploded_dims.clone(),
+            vectorized_dims: 
+                self.vectorized_dims.clone().into_iter()
+                .map(|dim| VectorScheduleDim::Filled(dim))
+                .collect()
+        }
+    }
 }
 
 impl Display for ArraySchedule {
@@ -252,31 +269,116 @@ impl Display for ScheduledArrayTransform {
 }
 
 #[derive(Clone,Debug,PartialEq,Eq)]
-pub enum ExprSchedule {
+pub enum ExprScheduleType {
     Any, // the schedule is arbitrary (i.e. like for literals)
-    Specific(ArraySchedule)
+    Specific(ExprSchedule)
 }
 
-impl Display for ExprSchedule {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ExprSchedule::Any => write!(f, "*"),
-            ExprSchedule::Specific(sched) => write!(f, "{}", sched)
-        }
-    }
-}
-
-impl ExprSchedule {
+impl ExprScheduleType {
     /// counts how many exprs are represented by the schedule
     /// the multiplicity is the 
     pub fn multiplicity(&self) -> usize {
         match self {
-            ExprSchedule::Any => 1,
-            ExprSchedule::Specific(spec_sched) => 
+            ExprScheduleType::Any => 1,
+            ExprScheduleType::Specific(spec_sched) => 
                 spec_sched.exploded_dims.iter()
                 .map(|dim| dim.extent)
                 .fold(1, |acc, x| acc*x)
         }
+    }
+}
+
+impl Display for ExprScheduleType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ExprScheduleType::Any => write!(f, "*"),
+            ExprScheduleType::Specific(sched) => write!(f, "{}", sched)
+        }
+    }
+}
+
+// an output schedule for a vectorized dimension
+#[derive(Clone,Debug,PartialEq,Eq,Hash)]
+pub enum VectorScheduleDim {
+    // a regular dimension that contains elements of the scheduled array
+    Filled(ScheduleDim),
+
+    // reduced dim with the reduced value in the first position,
+    // and the rest are "junk" values
+    // e.g. 1 x x x 2 x x x
+    Reduced(usize),
+
+    // reduced dim that is repeated with elements from other dimensions
+    // e.g. 1 1 1 1 2 2 2 2
+    ReducedRepeated(usize),
+}
+
+impl Display for VectorScheduleDim {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VectorScheduleDim::Filled(sched_dim) =>
+                write!(f, "{}", sched_dim),
+
+            VectorScheduleDim::Reduced(extent) =>
+                write!(f, "R:{}", extent),
+
+            VectorScheduleDim::ReducedRepeated(extent) =>
+                write!(f, "RR:{}", extent),
+        }
+    }
+}
+
+impl VectorScheduleDim {
+    pub fn is_reduced(&self) -> bool {
+        match self {
+            VectorScheduleDim::Filled(_) => false,
+
+            VectorScheduleDim::Reduced(_) |
+            VectorScheduleDim::ReducedRepeated(_) => true
+        }
+    }
+
+    pub fn extent(&self) -> usize {
+        match self {
+            VectorScheduleDim::Filled(dim) => dim.extent,
+
+            VectorScheduleDim::Reduced(extent) |
+            VectorScheduleDim::ReducedRepeated(extent) => *extent
+        }
+    }
+}
+
+// like ArraySchedule, except vectorized dims can have special reduced dimensions
+#[derive(Clone,Debug,PartialEq,Eq,Hash)]
+pub struct ExprSchedule {
+    pub preprocessing: Option<ClientPreprocessing>,
+    pub exploded_dims: im::Vector<ScheduleDim>,
+    pub vectorized_dims: im::Vector<VectorScheduleDim>,
+}
+
+impl Display for ExprSchedule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let exploded_str =
+            self.exploded_dims.iter()
+            .map(|x| x.to_string())
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        let vectorized_str =
+            self.vectorized_dims.iter()
+            .map(|x| x.to_string())
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        write!(f, "{{{}}}[{}]", exploded_str, vectorized_str)
+    }
+}
+
+impl ExprSchedule {
+    /// size of a vector (the product of vectorized dims' extents)
+    pub fn vector_size(&self) -> usize {
+        self.vectorized_dims.iter()
+        .fold(1, |acc, dim| acc * dim.extent())
     }
 }
 
@@ -327,82 +429,133 @@ impl Schedule {
     }
 
     // apply the schedule to an index-free expression and compute the output schedule
-    pub fn compute_output_schedule(&self, expr: &TransformedExpr) -> Option<ExprSchedule> {
+    pub fn compute_output_schedule(&self, expr: &TransformedExpr) -> Result<ExprScheduleType, String> {
         match expr {
             TransformedExpr::ReduceNode(reduced_index, _, body) => {
-                let sched_type = self.compute_output_schedule(body)?;
-                match sched_type {
-                    ExprSchedule::Any => None,
-
-                    ExprSchedule::Specific(body_sched) => {
-                        // TODO: implement reduction for vectorized dims
-                        let mut new_exploded_dims: im::Vector<ScheduleDim> = im::Vector::new();
-                        for mut dim in body_sched.exploded_dims {
-                            if dim.index == *reduced_index { // dim is reduced, remove it
-
-                            } else if dim.index > *reduced_index { // decrease dim index
-                                dim.index -= 1;
-                                new_exploded_dims.push_back(dim);
-
-                            } else {
-                                new_exploded_dims.push_back(dim);
-                            }
-                        }
-
-                        Some(
-                            ExprSchedule::Specific(
-                                ArraySchedule {
-                                    preprocessing: None,
-                                    exploded_dims: new_exploded_dims,
-                                    vectorized_dims: body_sched.vectorized_dims,
-                                }
-                            )
-                        )
-                    }
-                }
+                let body_sched = self.compute_output_schedule(body)?;
+                Schedule::schedule_reduce(*reduced_index, &body_sched)
             }
 
-            // this performs a join on the "schedule status lattice",
-            // where valid schedules are incomparable,
-            // any is bottom and invalid is top
             TransformedExpr::Op(_, expr1, expr2) => {
-                let res1 = self.compute_output_schedule(expr1)?;
-                let res2 = self.compute_output_schedule(expr2)?;
-                match (res1, res2) {
-                    (ExprSchedule::Any, ExprSchedule::Any) => 
-                        Some(ExprSchedule::Any),
-
-                    (ExprSchedule::Any, ExprSchedule::Specific(sched)) |
-                    (ExprSchedule::Specific(sched), ExprSchedule::Any) =>
-                        Some(ExprSchedule::Specific(sched)),
-
-                    (ExprSchedule::Specific(sched1), ExprSchedule::Specific(sched2)) => {
-                        if sched1 == sched2 {
-                            Some(ExprSchedule::Specific(sched1))
-
-                        } else {
-                            None
-                        }
-                    }
-                }
+                let sched1 = self.compute_output_schedule(expr1)?;
+                let sched2 = self.compute_output_schedule(expr2)?;
+                Schedule::schedule_op(&sched1, &sched2)
             },
 
-            TransformedExpr::Literal(_) => Some(ExprSchedule::Any),
+            TransformedExpr::Literal(_) => Schedule::schedule_literal(),
 
             TransformedExpr::ExprRef(ref_id) => {
-                let array_sched = self.schedule_map.get(ref_id)?;
-                Some(ExprSchedule::Specific(array_sched.clone()))
+                if let Some(array_sched) = self.schedule_map.get(ref_id) {
+                    Ok(ExprScheduleType::Specific(array_sched.to_expr_schedule()))
+
+                } else {
+                    Err(String::from("expr ref has no schedule"))
+                }
             },
         }
     }
 
+    pub fn schedule_literal() -> Result<ExprScheduleType, String> {
+        Ok(ExprScheduleType::Any)
+    }
+
+    // this performs a join on the "schedule status lattice",
+    // where valid schedules are incomparable,
+    // any is bottom and invalid is top
+    pub fn schedule_op(sched1: &ExprScheduleType, sched2: &ExprScheduleType) -> Result<ExprScheduleType, String> {
+        match (sched1, sched2) {
+            (ExprScheduleType::Any, ExprScheduleType::Any) => 
+                Ok(ExprScheduleType::Any),
+
+            (ExprScheduleType::Any, ExprScheduleType::Specific(sched)) |
+            (ExprScheduleType::Specific(sched), ExprScheduleType::Any) =>
+                Ok(ExprScheduleType::Specific(sched.clone())),
+
+            (ExprScheduleType::Specific(sched1), ExprScheduleType::Specific(sched2)) => {
+                if sched1 == sched2 {
+                    Ok(ExprScheduleType::Specific(sched1.clone()))
+
+                } else {
+                    Err(String::from("Operand schedules don't match"))
+                }
+            }
+        }
+    }
+
+    pub fn schedule_reduce(reduced_index: usize, body_sched: &ExprScheduleType) -> Result<ExprScheduleType, String> {
+        match body_sched {
+            ExprScheduleType::Any =>
+                Err(String::from("Cannot reduce a literal expression")),
+            
+            ExprScheduleType::Specific(body_sched_spec) => {
+                let mut new_exploded_dims: im::Vector<ScheduleDim> = im::Vector::new();
+
+                for dim in body_sched_spec.exploded_dims.iter() {
+                    if dim.index == reduced_index {
+                        // don't add dimension to the output schedule
+
+                    } else if dim.index > reduced_index { // decrease dim index
+                        let mut new_dim = dim.clone();
+                        new_dim.index -= 1;
+                        new_exploded_dims.push_back(new_dim);
+
+                    } else {
+                        new_exploded_dims.push_back(dim.clone());
+                    }
+                }
+
+                let mut new_vectorized_dims: im::Vector<VectorScheduleDim> = im::Vector::new();
+                for (i, dim) in body_sched_spec.vectorized_dims.iter().enumerate() {
+                    let new_dim = 
+                        match dim {
+                            VectorScheduleDim::Filled(sched_dim) => {
+                                if sched_dim.index == reduced_index {
+                                    if i == 0 { // if outermost dim is reduced, it is repeated
+                                        VectorScheduleDim::ReducedRepeated(sched_dim.extent)
+
+                                    } else {
+                                        VectorScheduleDim::Reduced(sched_dim.extent)
+                                    }
+
+                                } else if sched_dim.index > reduced_index {
+                                    let mut new_sched_dim = sched_dim.clone();
+                                    new_sched_dim.index -= 1;
+                                    VectorScheduleDim::Filled(new_sched_dim)
+                                    
+                                } else {
+                                    dim.clone()
+                                }
+                            },
+
+                            VectorScheduleDim::Reduced(_) |
+                            VectorScheduleDim::ReducedRepeated(_) => {
+                                dim.clone()
+                            }
+                        };
+
+                    new_vectorized_dims.push_back(new_dim);
+                }
+
+                Ok(
+                    ExprScheduleType::Specific(
+                        ExprSchedule {
+                            preprocessing: None,
+                            exploded_dims: new_exploded_dims,
+                            vectorized_dims: new_vectorized_dims
+                        }
+                    )
+                )
+            }
+        }
+    }
+
     pub fn is_schedule_valid(&self, expr: &TransformedExpr) -> bool {
-        self.compute_output_schedule(expr).is_some()
+        self.compute_output_schedule(expr).is_ok()
     }
 }
 
 #[cfg(test)]
-mod tests{
+mod tests {
     use crate::lang::{parser::ProgramParser, index_elim2::IndexElimination2};
     use super::*;
 

@@ -2,7 +2,7 @@ use std::{ops::{Add, Mul}, cmp::max};
 
 use crate::{circ2::{
     ParamCircuitProgram, ParamCircuitExpr, IndexCoordinateSystem, VectorType
-}, lang::Operator, scheduling::ExprSchedule};
+}, lang::Operator, scheduling::ExprScheduleType};
 
 #[derive(Copy,Clone,Debug,PartialEq,Eq)]
 pub struct CostFeatures {
@@ -113,7 +113,7 @@ impl CostEstimator {
     pub fn new() -> Self { CostEstimator {} }
 
     pub fn estimate_cost(&self, program: &ParamCircuitProgram) -> Result<CostFeatures,String> {
-        if let ExprSchedule::Specific(schedule) = &program.schedule {
+        if let ExprScheduleType::Specific(schedule) = &program.schedule {
             let coord_system = IndexCoordinateSystem::new(schedule.exploded_dims.iter());
             let (vec_type, mult, mut cost) = self.estimate_cost_expr(&program.expr, &coord_system);
 
@@ -215,42 +215,39 @@ impl CostEstimator {
                 (body_type, body_mult, body_cost.combine(out_cost))
             },
 
-            ParamCircuitExpr::ReduceVectors(reduced_indices, op, body) => {
+            ParamCircuitExpr::ReduceVectors(_, extent, op, body) => {
                 let (body_type, body_mult, body_cost) = self.estimate_cost_expr(body, coord_system);
-                let reduced_mult =
-                    reduced_indices.iter()
-                    .fold(1, |acc, (_, extent)| acc * (*extent));
-                let out_mult = body_mult / reduced_mult;
+                let out_mult = body_mult / extent;
                 let mut out_cost = CostFeatures::new();
 
                 match (op, body_type) {
                     (Operator::Add, VectorType::Ciphertext) => {
-                        out_cost.ct_ct_add = out_mult * (reduced_mult - 1);
+                        out_cost.ct_ct_add = out_mult * (extent - 1);
                     },
 
                     (Operator::Add, VectorType::Plaintext) => {
-                        out_cost.pt_pt_add = out_mult * (reduced_mult - 1);
+                        out_cost.pt_pt_add = out_mult * (extent - 1);
                     },
 
                     (Operator::Sub, VectorType::Ciphertext) => {
-                        out_cost.ct_ct_sub  = out_mult * (reduced_mult - 1);
+                        out_cost.ct_ct_sub  = out_mult * (extent - 1);
                     },
 
                     (Operator::Sub, VectorType::Plaintext) => {
-                        out_cost.pt_pt_add = out_mult * (reduced_mult - 1);
+                        out_cost.pt_pt_add = out_mult * (extent - 1);
                     },
 
                     (Operator::Mul, VectorType::Ciphertext) => {
-                        out_cost.ct_ct_mult = out_mult * (reduced_mult - 1);
+                        out_cost.ct_ct_mult = out_mult * (extent - 1);
                         
                         // compilation of reduction will try to create a
                         // balanced tree of mults, so there is only log-factor
                         // addition to muldepth
-                        out_cost.ct_ct_muldepth = ((reduced_mult - 1) as f64).log2() as usize;
+                        out_cost.ct_ct_muldepth = ((extent - 1) as f64).log2() as usize;
                     },
 
                     (Operator::Mul, VectorType::Plaintext) => {
-                        out_cost.pt_pt_mult = out_mult * (reduced_mult - 1);
+                        out_cost.pt_pt_mult = out_mult * (extent - 1);
                     }
                 }
 

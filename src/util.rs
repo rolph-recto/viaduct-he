@@ -26,3 +26,36 @@ impl Default for NameGenerator {
         NameGenerator::new()
     }
 }
+
+/// generate a descending list of powers of 2
+/// e.g. given n = 16, return [16, ]
+pub fn gen_pow2_list(n: usize) -> Vec<usize> {
+    // n must be a power of 2
+    assert!(n >= 1 && n & (n-1) == 0);
+
+    let mut res = vec![];
+    let mut cur = n;
+    while cur >= 1 {
+        res.push(cur);
+
+        // logical shift on unsigned int
+        cur >>= 1; 
+    }
+
+    res
+}
+
+#[cfg(test)]
+mod test {
+    use super::gen_pow2_list;
+
+    #[test]
+    fn test_pow2() {
+        assert!(gen_pow2_list(4) == vec![4, 2, 1])
+    }
+
+    #[test]
+    fn test_pow2_2() {
+        assert!(gen_pow2_list(1) == vec![1])
+    }
+}

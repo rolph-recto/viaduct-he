@@ -3,7 +3,7 @@ use std::{collections::{HashSet, HashMap}, fmt::Display, ops::Range};
 
 use crate::{
     lang::{Operator, DimSize},
-    scheduling::{OffsetExpr, ScheduleDim, ExprSchedule, DimName}
+    scheduling::{OffsetExpr, ScheduleDim, ExprScheduleType, DimName}
 };
 
 use self::vector_info::VectorInfo;
@@ -26,7 +26,7 @@ pub enum ParamCircuitExpr {
     Literal(isize),
     Op(Operator, Box<ParamCircuitExpr>, Box<ParamCircuitExpr>),
     Rotate(Box<OffsetExpr>, Box<ParamCircuitExpr>),
-    ReduceVectors(HashSet<(DimName,DimSize)>, Operator, Box<ParamCircuitExpr>),
+    ReduceVectors(DimName, DimSize, Operator, Box<ParamCircuitExpr>),
 }
 
 impl Display for ParamCircuitExpr {
@@ -52,8 +52,8 @@ impl Display for ParamCircuitExpr {
                 write!(f, "rot({}, {})", offset, expr)
             },
 
-            ParamCircuitExpr::ReduceVectors(indices, op, expr) => {
-                write!(f, "reduce({:?}, {}, {})", indices, op, expr)
+            ParamCircuitExpr::ReduceVectors(index, extent, op, expr) => {
+                write!(f, "reduce({}, {}, {})", index, op, expr)
             },
         }
     }
@@ -84,7 +84,7 @@ impl ParamCircuitExpr {
                 body.ciphertext_vars()
             },
 
-            ParamCircuitExpr::ReduceVectors(_, _, body) => {
+            ParamCircuitExpr::ReduceVectors(_, _, _, body) => {
                 body.ciphertext_vars()
             }
         }
@@ -114,7 +114,7 @@ impl ParamCircuitExpr {
                 body.plaintext_vars()
             },
 
-            ParamCircuitExpr::ReduceVectors(_, _, body) => {
+            ParamCircuitExpr::ReduceVectors(_, _, _, body) => {
                 body.plaintext_vars()
             }
         }
@@ -249,7 +249,7 @@ impl<T: Default+Display> Display for IndexCoordinateMap<T> {
     }
 }
 
-#[derive(Clone,Debug)]
+#[derive(Clone,Debug,PartialEq,Eq)]
 pub enum CiphertextObject {
     Null,
     Vector(VectorInfo),
@@ -269,7 +269,7 @@ impl Display for CiphertextObject {
     }
 }
 
-#[derive(Clone,Debug)]
+#[derive(Clone,Debug,PartialEq,Eq)]
 pub enum PlaintextObject { Null }
 
 impl Default for PlaintextObject {
@@ -374,7 +374,7 @@ impl CircuitRegistry {
 /// parameterized circuit packaged with information about input ciphertexts/plaintexts used
 /// the schedule defining exploded dims
 pub struct ParamCircuitProgram {
-    pub schedule: ExprSchedule,
+    pub schedule: ExprScheduleType,
     pub expr: ParamCircuitExpr,
     pub registry: CircuitRegistry,
 }

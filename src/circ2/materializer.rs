@@ -8,12 +8,12 @@ use crate::{
     },
     lang::{
         BaseArrayTransform, Shape, DimContent,
-        index_elim2::{TransformedProgram, TransformedExpr}, 
+        index_elim2::{TransformedProgram, TransformedExpr}, Operator, 
     },
     scheduling::{
-        ArraySchedule, ExprSchedule, DimName, OffsetExpr, ScheduledArrayTransform,
-        Schedule, ScheduleDim, ClientPreprocessing
-    }
+        ArraySchedule, ExprScheduleType, DimName, OffsetExpr, ScheduledArrayTransform,
+        Schedule, ScheduleDim, ClientPreprocessing, VectorScheduleDim, ExprSchedule
+    }, util
 };
 
 use super::{IndexCoord, CircuitVarValue, vector_info::VectorInfo};
@@ -69,82 +69,87 @@ impl Materializer {
         program: &TransformedProgram,
         expr: &TransformedExpr,
         schedule: &Schedule
-    ) -> Result<(ExprSchedule, ParamCircuitExpr), String> {
+    ) -> Result<(ExprScheduleType, ParamCircuitExpr), String> {
         match expr {
             TransformedExpr::Literal(lit) => {
-                Ok((ExprSchedule::Any, ParamCircuitExpr::Literal(*lit)))
+                let sched_lit = Schedule::schedule_literal()?;
+                Ok((sched_lit, ParamCircuitExpr::Literal(*lit)))
             },
 
             TransformedExpr::Op(op, expr1, expr2) => {
                 let (sched1, mat1) = self.materialize_expr(program, expr1, schedule)?;
                 let (sched2, mat2) = self.materialize_expr(program, expr2, schedule)?;
-
-                let expr = 
-                    ParamCircuitExpr::Op(op.clone(), Box::new(mat1), Box::new(mat2));
-
-                let schedule = 
-                    match (sched1, sched2) {
-                        (ExprSchedule::Any, ExprSchedule::Any) =>
-                            ExprSchedule::Any,
-
-                        (ExprSchedule::Any, ExprSchedule::Specific(sched2)) => 
-                            ExprSchedule::Specific(sched2),
-
-                        (ExprSchedule::Specific(sched1), ExprSchedule::Any) =>
-                            ExprSchedule::Specific(sched1),
-
-                        (ExprSchedule::Specific(sched1), ExprSchedule::Specific(sched2)) => {
-                            assert!(sched1 == sched2);
-                            ExprSchedule::Specific(sched1)
-                        }
-                    };
-
+                let schedule = Schedule::schedule_op(&sched1, &sched2)?;
+                let expr = ParamCircuitExpr::Op(op.clone(), Box::new(mat1), Box::new(mat2));
                 Ok((schedule, expr))
             },
 
-            // TODO support reduction in vectorized dims
             // TODO support preprocessing
             TransformedExpr::ReduceNode(reduced_index, op, body) => {
                 let (body_sched, mat_body) =
                     self.materialize_expr(program, body, schedule)?;
 
-                match body_sched {
-                    ExprSchedule::Any => Err("Cannot reduce a literal expression".to_string()),
+                let schedule = Schedule::schedule_reduce(*reduced_index, &body_sched)?;
 
-                    ExprSchedule::Specific(body_sched_spec) => {
-                        let mut new_exploded_dims: im::Vector<ScheduleDim> = im::Vector::new();
-                        let mut reduced_index_vars: HashSet<(DimName,usize)> = HashSet::new();
-                        for mut dim in body_sched_spec.exploded_dims {
-                            if dim.index == *reduced_index { // dim is reduced, remove it
-                                reduced_index_vars.insert((dim.name, dim.extent));
+                if let ExprScheduleType::Specific(body_sched_spec) = body_sched {
+                    let mut reduced_index_vars: HashSet<(DimName,usize)> = HashSet::new();
+                    for dim in body_sched_spec.exploded_dims.iter() {
+                        if dim.index == *reduced_index { // dim is reduced, remove it
+                            reduced_index_vars.insert((dim.name.clone(), dim.extent));
+                        }
+                    }
 
-                            } else if dim.index > *reduced_index { // decrease dim index
-                                dim.index -= 1;
-                                new_exploded_dims.push_back(dim);
+                    let mut reduction_list: Vec<usize> = Vec::new();
+                    let mut block_size: usize = body_sched_spec.vector_size();
 
-                            } else {
-                                new_exploded_dims.push_back(dim);
+                    for dim in body_sched_spec.vectorized_dims.into_iter() {
+                        block_size /= dim.extent();
+
+                        if let VectorScheduleDim::Filled(sched_dim) = dim {
+                            // if extent is 1, there's nothing to reduce!
+                            if sched_dim.index == *reduced_index && sched_dim.extent > 1 {
+                                reduction_list.extend(
+                                    util::gen_pow2_list(sched_dim.extent >> 1)
+                                    .iter().map(|x| x * block_size)
+                                );
                             }
                         }
-
-                        let schedule = 
-                            ExprSchedule::Specific(
-                                ArraySchedule {
-                                    preprocessing: None,
-                                    exploded_dims: new_exploded_dims,
-                                    vectorized_dims: body_sched_spec.vectorized_dims,
-                                }
-                            );
-
-                        let expr = 
-                            ParamCircuitExpr::ReduceVectors(
-                                reduced_index_vars,
-                                op.clone(),
-                                Box::new(mat_body)
-                            );
-
-                        Ok((schedule, expr))
                     }
+
+                    let expr_vec = 
+                        reduced_index_vars.into_iter().fold(
+                            mat_body,
+                            |acc, (var, extent)| {
+                                ParamCircuitExpr::ReduceVectors(
+                                    var,
+                                    extent,
+                                    op.clone(),
+                                    Box::new(acc)
+                                )
+                            }
+                        );
+
+                    let expr = 
+                        reduction_list.into_iter().fold(
+                            expr_vec,
+                            |acc, n| {
+                                ParamCircuitExpr::Op(
+                                    Operator::Add,
+                                    Box::new(acc.clone()),
+                                    Box::new(
+                                        ParamCircuitExpr::Rotate(
+                                            Box::new(OffsetExpr::Literal(-(n as isize))),
+                                            Box::new(acc)
+                                        )
+                                    )
+                                )
+                            }
+                        );
+
+                    Ok((schedule, expr))
+
+                } else {
+                    unreachable!()
                 }
             },
 
@@ -158,7 +163,7 @@ impl Materializer {
                 for amat in self.array_materializers.iter_mut() {
                     if amat.can_materialize(array_shape, schedule, base, &scheduled) {
                         let expr = amat.materialize(array_shape, schedule, base, &scheduled, &mut self.registry);
-                        let schedule = ExprSchedule::Specific(schedule.clone());
+                        let schedule = ExprScheduleType::Specific(schedule.to_expr_schedule());
                         return Ok((schedule, expr))
                     }
                 }
@@ -428,10 +433,15 @@ impl VectorDeriver {
             registry.set_ct_var_value(ct_var.clone(), CircuitVarValue::CoordMap(obj_map));
 
             if let Some(linear_offset_expr) = offset_expr_opt {
-                ParamCircuitExpr::Rotate(
-                    Box::new(linear_offset_expr),
-                    Box::new(ParamCircuitExpr::CiphertextVar(ct_var))
-                )
+                if let Some(0) = linear_offset_expr.const_value() {
+                    ParamCircuitExpr::CiphertextVar(ct_var)
+
+                } else {
+                    ParamCircuitExpr::Rotate(
+                        Box::new(linear_offset_expr),
+                        Box::new(ParamCircuitExpr::CiphertextVar(ct_var))
+                    )
+                }
 
             } else { // introduce new offset variable, since we can't create an offset expr
                 let offset_var = registry.fresh_offset_var();
@@ -685,11 +695,29 @@ impl ArrayMaterializer for DiagonalArrayMaterializer {
 mod tests {
     use interval::{Interval, ops::Range};
 
-    use crate::lang::{parser::ProgramParser, index_elim2::IndexElimination2, source::SourceProgram, BaseOffsetMap};
+    use crate::lang::{parser::ProgramParser, index_elim2::IndexElimination2, source::SourceProgram, BaseOffsetMap, index_elim::Transform};
     use super::*;
 
+    fn test_materializer(program: TransformedProgram, schedule: Schedule) -> ParamCircuitProgram {
+        assert!(schedule.is_schedule_valid(&program.expr));
+
+        let materializer =
+            Materializer::new(vec![
+                Box::new(DefaultArrayMaterializer::new())
+            ]);
+
+        let res_mat = materializer.materialize(&program, &schedule);
+        assert!(res_mat.is_ok());
+
+        let param_circ = res_mat.unwrap();
+        println!("{}", param_circ.schedule);
+        println!("{}", param_circ.expr);
+
+        param_circ
+    }
+
     // generate an initial schedule for a program
-    fn test_materializer(src: &str) {
+    fn test_materializer_from_src(src: &str) {
         let parser = ProgramParser::new();
         let program: SourceProgram = parser.parse(src).unwrap();
 
@@ -700,18 +728,7 @@ mod tests {
 
         let program = res.unwrap();
         let init_schedule = Schedule::gen_initial_schedule(&program);
-
-        let materializer =
-            Materializer::new(vec![
-                Box::new(DefaultArrayMaterializer::new())
-            ]);
-
-        let res_mat = materializer.materialize(&program, &init_schedule);
-        assert!(res_mat.is_ok());
-
-        let param_circ = res_mat.unwrap();
-        println!("{}", param_circ.schedule);
-        println!("{}", param_circ.expr);
+        test_materializer(program, init_schedule);
     }
 
     fn test_array_materializer(
@@ -720,7 +737,7 @@ mod tests {
         schedule: ArraySchedule,
         base: BaseArrayTransform, 
         scheduled: ScheduledArrayTransform
-    ) {
+    ) -> (CircuitRegistry, ParamCircuitExpr) {
         let mut registry = CircuitRegistry::new();
         let circ = amat.materialize(&shape, &schedule, &base, &scheduled, &mut registry);
 
@@ -728,11 +745,13 @@ mod tests {
         for ct_var in circ.ciphertext_vars() {
             println!("{} =>\n{}", ct_var, registry.get_ct_var_value(&ct_var));
         }
+
+        (registry, circ)
     }
 
     #[test]
     fn test_imgblur() {
-        test_materializer(
+        test_materializer_from_src(
         "input img: [(0,16),(0,16)]
             for x: (0, 16) {
                 for y: (0, 16) {
@@ -744,7 +763,7 @@ mod tests {
 
     #[test]
     fn test_imgblur2() {
-        test_materializer(
+        test_materializer_from_src(
         "input img: [(0,16),(0,16)]
             let res = 
                 for x: (0, 16) {
@@ -764,7 +783,7 @@ mod tests {
 
     #[test]
     fn test_convolve() {
-        test_materializer(
+        test_materializer_from_src(
         "input img: [(0,16),(0,16)]
             let conv1 = 
                 for x: (0, 15) {
@@ -784,7 +803,7 @@ mod tests {
 
     #[test]
     fn test_matmatmul() {
-        test_materializer(
+        test_materializer_from_src(
             "input A: [(0,4),(0,4)]
             input B: [(0,4),(0,4)]
             for i: (0,4) {
@@ -797,7 +816,7 @@ mod tests {
 
     #[test]
     fn test_matmatmul2() {
-        test_materializer(
+        test_materializer_from_src(
             "input A1: [(0,4),(0,4)]
             input A2: [(0,4),(0,4)]
             input B: [(0,4),(0,4)]
@@ -819,7 +838,7 @@ mod tests {
 
     #[test]
     fn test_dotprod_pointless() {
-        test_materializer(
+        test_materializer_from_src(
         "
             input A: [(0,3)]
             input B: [(0,3)]
@@ -830,7 +849,7 @@ mod tests {
 
     #[test]
     fn test_matvecmul() {
-        test_materializer(
+        test_materializer_from_src(
         "
             input M: [(0,2),(0,2)]
             input v: [(0,2)]
@@ -848,7 +867,7 @@ mod tests {
         let base =
             BaseArrayTransform {
                 array: String::from("img"),
-                offset_map: BaseOffsetMap::new(4),
+                offset_map: BaseOffsetMap::new(2),
                 dims: im::vector![
                     DimContent::FilledDim { dim: 0, extent: 3, stride: 1 },
                     DimContent::FilledDim { dim: 1, extent: 3, stride: 1 },
@@ -873,13 +892,32 @@ mod tests {
         let scheduled =
             schedule.apply(&base);
 
-        test_array_materializer(
-            Box::new(DefaultArrayMaterializer::new()),
-            shape, 
-            schedule, 
-            base, 
-            scheduled
-        );
+        let (mut registry, circ) =
+            test_array_materializer(
+                Box::new(DefaultArrayMaterializer::new()),
+                shape, 
+                schedule, 
+                base, 
+                scheduled
+            );
+
+        let ct_var = circ.ciphertext_vars().iter().next().unwrap().clone();
+        if let CircuitVarValue::CoordMap(coord_map) = registry.get_ct_var_value(&ct_var) {
+            // ct_var should be mapped to the same vector at all coords
+            assert!(coord_map.multiplicity() == 9);
+            let values: Vec<&CiphertextObject> =
+                coord_map.value_iter()
+                .map(|(_, value)| value)
+                .collect();
+
+            let first = *values.first().unwrap();
+            assert!(
+                values.iter().all(|x| **x == *first)
+            )
+
+        } else {
+            assert!(false)
+        }
     }
 
     #[test]
@@ -954,5 +992,51 @@ mod tests {
             base, 
             scheduled
         );
+    }
+
+    #[test]
+    fn test_vectorized_reduce() {
+        let program =
+            TransformedProgram {
+                expr:
+                    TransformedExpr::ReduceNode(
+                        1,
+                        Operator::Add,
+                        Box::new(TransformedExpr::ExprRef(1))
+                    ),
+
+                inputs: HashMap::from([
+                    (1,
+                        BaseArrayTransform {
+                            array: String::from("a"),
+                            offset_map: BaseOffsetMap::new(2),
+                            dims: im::vector![
+                                DimContent::FilledDim { dim: 0, extent: 4, stride: 1 },
+                                DimContent::FilledDim { dim: 1, extent: 4, stride: 1 },
+                            ]
+                        }
+                    )
+                ]),
+
+                array_shapes: HashMap::from([
+                    (String::from("a"), im::vector![Interval::new(0, 4), Interval::new(0, 4)])
+                ])
+            };
+
+        let schedule =
+            Schedule {
+                schedule_map: im::HashMap::from(vec![
+                    (1, ArraySchedule {
+                        preprocessing: None,
+                        exploded_dims: im::vector![],
+                        vectorized_dims: im::vector![
+                            ScheduleDim { index: 0, stride: 1, extent: 4, name: String::from("i") },
+                            ScheduleDim { index: 1, stride: 1, extent: 4, name: String::from("j") },
+                        ],
+                    })
+                ])
+            };
+
+        test_materializer(program, schedule);
     }
 }
