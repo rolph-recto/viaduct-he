@@ -183,7 +183,7 @@ impl PathContext {
 #[derive(Clone, Debug)]
 struct IndexingVarData {
     index_var: IndexName,
-    stride: isize, 
+    stride: usize, 
 }
 
 #[derive(Clone, Debug)]
@@ -312,40 +312,41 @@ impl IndexElimination2 {
                     },
 
                     Operator::Sub => {
-                        let neg_var_data2: im::Vector<IndexingVarData> =
-                                data2.var_data.into_iter().map(|var| {
-                                    IndexingVarData {
-                                        index_var: var.index_var,
-                                        stride: -var.stride,
-                                    }
-                                }).collect();
+                        // TODO cannot handle negative strides for now
+                        assert!(data2.var_data.is_empty());
 
                         Ok(IndexingData {
-                            var_data: data1.var_data + neg_var_data2,
+                            var_data: data1.var_data,
                             offset: data1.offset - data2.offset
                         })
                     },
 
                     Operator::Mul => {
-                        if data1.var_data.len() == 0 || data2.var_data.len() == 0 {
+                        if data1.var_data.len() > 0 && data2.offset > 0 {
                             let mul_var_data1: im::Vector<IndexingVarData> =
                                 data1.var_data.into_iter().map(|var| {
                                     IndexingVarData {
                                         index_var: var.index_var,
-                                        stride: var.stride * data2.offset,
-                                    }
-                                }).collect();
-
-                            let mul_var_data2: im::Vector<IndexingVarData> =
-                                data2.var_data.into_iter().map(|var| {
-                                    IndexingVarData {
-                                        index_var: var.index_var,
-                                        stride: var.stride * data1.offset,
+                                        stride: var.stride * (data2.offset as usize),
                                     }
                                 }).collect();
 
                             Ok(IndexingData {
-                                var_data: mul_var_data1 + mul_var_data2,
+                                var_data: mul_var_data1,
+                                offset: data1.offset * data2.offset
+                            })
+
+                        } else if data2.var_data.len() > 0 && data1.offset > 0 {
+                            let mul_var_data2: im::Vector<IndexingVarData> =
+                                data2.var_data.into_iter().map(|var| {
+                                    IndexingVarData {
+                                        index_var: var.index_var,
+                                        stride: var.stride * (data1.offset as usize),
+                                    }
+                                }).collect();
+
+                            Ok(IndexingData {
+                                var_data: mul_var_data2,
                                 offset: data1.offset * data2.offset
                             })
 
@@ -406,7 +407,7 @@ impl IndexElimination2 {
                 let array_dims = array_extent.len();
 
                 // process indexing sites
-                let mut index_to_output_dim_map: HashMap<IndexName, (DimIndex, isize)> = HashMap::new();
+                let mut index_to_output_dim_map: HashMap<IndexName, (DimIndex, usize)> = HashMap::new();
                 let mut array_offset_map = BaseOffsetMap::new(array_extent.len());
                 for (index_dim, index_expr) in index_list.iter().enumerate() {
                     let indexing_data = self.process_index_expr(index_expr)?;
@@ -522,7 +523,7 @@ impl IndexElimination2 {
                                     } => {
                                         let new_offset =
                                             indexed_output_shape.offset_map.get(dim) + 
-                                            (output_transform.offset_map.get(dim) * indexed_stride);
+                                            (output_transform.offset_map.get(dim) * (indexed_stride as isize));
 
                                         indexed_output_shape.offset_map.set(indexed_dim, new_offset);
 

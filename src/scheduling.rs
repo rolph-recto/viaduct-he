@@ -180,7 +180,7 @@ impl ArraySchedule {
                             Box::new(cur_offset),
                             Box::new(
                                 OffsetExpr::Mul(
-                                    Box::new(OffsetExpr::Literal(*stride)),
+                                    Box::new(OffsetExpr::Literal(*stride as isize)),
                                     Box::new(OffsetExpr::Var(sched_dim.name.clone()))
                                 )
                             )
@@ -205,7 +205,7 @@ impl ArraySchedule {
                         DimContent::FilledDim {
                             dim: *dim_index,
                             extent: sched_dim.extent,
-                            stride: content_stride * (sched_dim.stride as isize),
+                            stride: content_stride * sched_dim.stride,
                         }
                     }
 
@@ -482,6 +482,7 @@ impl Schedule {
         }
     }
 
+    // TODO support preprocessing
     pub fn schedule_reduce(reduced_index: usize, body_sched: &ExprScheduleType) -> Result<ExprScheduleType, String> {
         match body_sched {
             ExprScheduleType::Any =>

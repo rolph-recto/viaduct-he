@@ -49,7 +49,7 @@ pub type DimIndex = usize;
 pub enum DimContent {
     // a dimension where array elements change along one specific dimension
     // of the array being indexed
-    FilledDim { dim: DimIndex, extent: usize, stride: isize },
+    FilledDim { dim: DimIndex, extent: usize, stride: usize },
 
     // a dimension where array elements do not change
     EmptyDim { extent: usize }

@@ -270,7 +270,19 @@ impl Display for CiphertextObject {
 }
 
 #[derive(Clone,Debug,PartialEq,Eq)]
-pub enum PlaintextObject { Null }
+pub enum PlaintextObject {
+    Null,
+
+    // plaintext filled with a constant value
+    Const(isize),
+
+    // plaintext of 1s and 0s used to mask 
+    // the mask is a vector of (dim_size, lower, upper)
+    // where [lower, upper) defines the interval filled with 1s;
+    // values outside of this interval is 0, so when multiplied with a vector
+    // elements outside of the interval will be zeroed out
+    Mask(im::Vector<(usize, usize, usize)>)
+}
 
 impl Default for PlaintextObject {
     fn default() -> Self { PlaintextObject::Null }
@@ -372,7 +384,6 @@ impl CircuitRegistry {
 }
 
 /// parameterized circuit packaged with information about input ciphertexts/plaintexts used
-/// the schedule defining exploded dims
 pub struct ParamCircuitProgram {
     pub schedule: ExprScheduleType,
     pub expr: ParamCircuitExpr,

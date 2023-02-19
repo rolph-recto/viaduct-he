@@ -4,19 +4,19 @@ use bimap::BiHashMap;
 use crate::{
     circ2::{
         IndexCoordinateMap, CiphertextObject, ParamCircuitExpr,
-        CircuitRegistry, ParamCircuitProgram
+        CircuitRegistry, ParamCircuitProgram, IndexCoord, CircuitVarValue,
+        vector_info::VectorInfo,
     },
     lang::{
-        BaseArrayTransform, Shape, DimContent,
-        index_elim2::{TransformedProgram, TransformedExpr}, Operator, 
+        BaseArrayTransform, Shape, DimContent, Operator, 
+        index_elim2::{TransformedProgram, TransformedExpr},
     },
     scheduling::{
         ArraySchedule, ExprScheduleType, DimName, OffsetExpr, ScheduledArrayTransform,
-        Schedule, ScheduleDim, ClientPreprocessing, VectorScheduleDim, ExprSchedule
-    }, util
+        Schedule, ClientPreprocessing, VectorScheduleDim
+    },
+    util
 };
-
-use super::{IndexCoord, CircuitVarValue, vector_info::VectorInfo};
 
 pub trait ArrayMaterializer {
     fn can_materialize(
@@ -62,8 +62,6 @@ impl Materializer {
         )
     }
 
-    // TODO: refactor logic of computing output schedules into a separate struct
-    // since this share the same logic as Schedule::compute_output_schedule
     fn materialize_expr(
         &mut self,
         program: &TransformedProgram,
@@ -319,7 +317,7 @@ impl VectorDeriver {
             if vector_id != parent_id { // the vector is derived from some parent 
                 let vector = self.get_vector(vector_id);
                 let parent = self.get_vector(parent_id);
-                let steps = parent.derive(vector).unwrap();
+                let (steps, mask) = parent.derive(vector).unwrap();
 
                 step_map.set(coord.clone(), steps);
                 obj_map.set(coord, CiphertextObject::Vector(parent.clone()));
@@ -695,7 +693,7 @@ impl ArrayMaterializer for DiagonalArrayMaterializer {
 mod tests {
     use interval::{Interval, ops::Range};
 
-    use crate::lang::{parser::ProgramParser, index_elim2::IndexElimination2, source::SourceProgram, BaseOffsetMap, index_elim::Transform};
+    use crate::{lang::{parser::ProgramParser, index_elim2::IndexElimination2, source::SourceProgram, BaseOffsetMap, index_elim::Transform}, scheduling::ScheduleDim};
     use super::*;
 
     fn test_materializer(program: TransformedProgram, schedule: Schedule) -> ParamCircuitProgram {
