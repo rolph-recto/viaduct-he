@@ -271,8 +271,6 @@ impl Display for CiphertextObject {
 
 #[derive(Clone,Debug,PartialEq,Eq)]
 pub enum PlaintextObject {
-    Null,
-
     // plaintext filled with a constant value
     Const(isize),
 
@@ -285,7 +283,17 @@ pub enum PlaintextObject {
 }
 
 impl Default for PlaintextObject {
-    fn default() -> Self { PlaintextObject::Null }
+    fn default() -> Self { PlaintextObject::Const(1) }
+}
+
+impl Display for PlaintextObject {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PlaintextObject::Const(lit) => write!(f, "{}", lit),
+
+            PlaintextObject::Mask(mask) => write!(f, "{:?}", mask)
+        }
+    }
 }
 
 pub enum CircuitVarValue<T: Default> {

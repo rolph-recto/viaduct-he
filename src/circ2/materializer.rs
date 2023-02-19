@@ -3,7 +3,7 @@ use bimap::BiHashMap;
 
 use crate::{
     circ2::{
-        IndexCoordinateMap, CiphertextObject, ParamCircuitExpr,
+        IndexCoordinateMap, CiphertextObject, PlaintextObject, ParamCircuitExpr,
         CircuitRegistry, ParamCircuitProgram, IndexCoord, CircuitVarValue,
         vector_info::VectorInfo,
     },
@@ -82,7 +82,7 @@ impl Materializer {
                 Ok((schedule, expr))
             },
 
-            // TODO support preprocessing
+            // TODO support client transforms
             TransformedExpr::ReduceNode(reduced_index, op, body) => {
                 let (body_sched, mat_body) =
                     self.materialize_expr(program, body, schedule)?;
@@ -291,6 +291,7 @@ impl VectorDeriver {
         scheduled: &ScheduledArrayTransform,
         preprocessing: Option<ClientPreprocessing>,
         obj_map: &mut IndexCoordinateMap<CiphertextObject>,
+        mask_map: &mut IndexCoordinateMap<PlaintextObject>,
         step_map: &mut IndexCoordinateMap<isize>,
     ) {
         let mut vector_id_map: HashMap<IndexCoord, VectorId> = HashMap::new();
@@ -320,6 +321,7 @@ impl VectorDeriver {
                 let (steps, mask) = parent.derive(vector).unwrap();
 
                 step_map.set(coord.clone(), steps);
+                mask_map.set(coord.clone(), mask);
                 obj_map.set(coord, CiphertextObject::Vector(parent.clone()));
 
             } else { // the vector is not derived
@@ -404,6 +406,8 @@ impl VectorDeriver {
     ) -> ParamCircuitExpr {
         let mut obj_map: IndexCoordinateMap<CiphertextObject> =
             IndexCoordinateMap::new(scheduled.exploded_dims.iter());
+        let mut mask_map: IndexCoordinateMap<PlaintextObject> =
+            IndexCoordinateMap::new(scheduled.exploded_dims.iter());
         let mut step_map: IndexCoordinateMap<isize> =
             IndexCoordinateMap::new(scheduled.exploded_dims.iter());
         let index_vars = obj_map.index_vars();
@@ -415,29 +419,48 @@ impl VectorDeriver {
             scheduled,
             preprocessing,
             &mut obj_map,
+            &mut mask_map,
             &mut step_map);
 
         let ct_var = registry.fresh_ct_var();
+        let pt_var = registry.fresh_pt_var();
 
-        if !obj_map.is_empty() {
-            // attempt to compute offset expr
-            let offset_expr_opt =
-                self.compute_linear_offset(
-                    &step_map,
-                    coords,
-                    index_vars
-                );
+        if !obj_map.is_empty() { // there is an array of vectors
+            let mask_is_nonconst =
+                mask_map.value_iter().any(|(_, mask)| {
+                    match mask {
+                        PlaintextObject::Const(_) => false,
+                        PlaintextObject::Mask(_) => true,
+                    }
+                });
 
             registry.set_ct_var_value(ct_var.clone(), CircuitVarValue::CoordMap(obj_map));
+            registry.set_pt_var_value(pt_var.clone(), CircuitVarValue::CoordMap(mask_map));
+
+            let masked_expr =
+                if mask_is_nonconst {
+                    ParamCircuitExpr::Op(
+                        Operator::Mul,
+                        Box::new(ParamCircuitExpr::CiphertextVar(ct_var)),
+                        Box::new(ParamCircuitExpr::PlaintextVar(pt_var))
+                    )
+
+                } else {
+                    ParamCircuitExpr::CiphertextVar(ct_var)
+                };
+
+            // attempt to compute offset expr
+            let offset_expr_opt =
+                self.compute_linear_offset(&step_map, coords, index_vars);
 
             if let Some(linear_offset_expr) = offset_expr_opt {
                 if let Some(0) = linear_offset_expr.const_value() {
-                    ParamCircuitExpr::CiphertextVar(ct_var)
+                    masked_expr
 
                 } else {
                     ParamCircuitExpr::Rotate(
                         Box::new(linear_offset_expr),
-                        Box::new(ParamCircuitExpr::CiphertextVar(ct_var))
+                        Box::new(masked_expr)
                     )
                 }
 
@@ -447,11 +470,11 @@ impl VectorDeriver {
 
                 ParamCircuitExpr::Rotate(
                     Box::new(OffsetExpr::Var(offset_var)),
-                    Box::new(ParamCircuitExpr::CiphertextVar(ct_var))
+                    Box::new(masked_expr)
                 )
             }
 
-        } else {
+        } else { // there is only a single vector
             let index_map: HashMap<DimName, usize> = HashMap::new();
             let vector =
                 VectorInfo::get_vector_at_coord(shape, &index_map, scheduled, preprocessing);
@@ -515,7 +538,7 @@ impl ArrayMaterializer for DiagonalArrayMaterializer {
         _array_shape: &Shape,
         schedule: &ArraySchedule,
         _base: &BaseArrayTransform,
-        scheduled: &ScheduledArrayTransform,
+        _scheduled: &ScheduledArrayTransform,
     ) -> bool {
         if let Some(ClientPreprocessing::Permute(dim_i, dim_j)) = schedule.preprocessing {
             // dim i must be exploded and dim j must be the outermost vectorized dim
@@ -584,6 +607,8 @@ impl ArrayMaterializer for DiagonalArrayMaterializer {
                 DimContent::EmptyDim { extent: extent_j }) => {
                     let mut obj_map: IndexCoordinateMap<CiphertextObject> =
                         IndexCoordinateMap::new(scheduled.exploded_dims.iter());
+                    let mut mask_map: IndexCoordinateMap<PlaintextObject> =
+                        IndexCoordinateMap::new(scheduled.exploded_dims.iter());
                     let mut step_map: IndexCoordinateMap<isize> =
                         IndexCoordinateMap::new(scheduled.exploded_dims.iter());
                     let mut new_schedule = schedule.clone();
@@ -610,6 +635,7 @@ impl ArrayMaterializer for DiagonalArrayMaterializer {
                         &new_scheduled,
                         None,
                         &mut obj_map,
+                        &mut mask_map,
                         &mut step_map);
 
                     let mut processed_index_vars = obj_map.index_vars();
@@ -742,6 +768,9 @@ mod tests {
         println!("{}", circ);
         for ct_var in circ.ciphertext_vars() {
             println!("{} =>\n{}", ct_var, registry.get_ct_var_value(&ct_var));
+        }
+        for pt_var in circ.plaintext_vars() {
+            println!("{} =>\n{}", pt_var, registry.get_pt_var_value(&pt_var));
         }
 
         (registry, circ)
