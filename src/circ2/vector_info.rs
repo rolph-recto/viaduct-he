@@ -1,4 +1,4 @@
-use std::{fmt::Display, collections::{HashMap, HashSet}, cmp::max};
+use std::{fmt::Display, collections::{HashMap, HashSet}, cmp::{max, min}};
 
 use gcollections::ops::Bounded;
 
@@ -233,7 +233,7 @@ impl VectorInfo {
                 });
 
             let mut nonvectorized_dims =
-                (0..self.offset_map.num_dims())
+                (0..min(self.offset_map.num_dims(), other.offset_map.num_dims()))
                 .filter(|dim| {
                     !self.dims.iter().any(|dim2_content| {
                         match dim2_content {
