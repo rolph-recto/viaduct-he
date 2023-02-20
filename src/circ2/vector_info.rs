@@ -2,7 +2,10 @@ use std::{fmt::Display, collections::{HashMap, HashSet}, cmp::{max, min}};
 
 use gcollections::ops::Bounded;
 
-use crate::{lang::{DimIndex, ArrayName, OffsetMap, Shape, BaseArrayTransform, DimContent}, scheduling::{ClientPreprocessing, DimName, ScheduledArrayTransform}};
+use crate::{
+    lang::{DimIndex, ArrayName, OffsetMap, Shape, ArrayTransform, DimContent},
+    scheduling::{ClientPreprocessing, DimName, ArraySchedule}
+};
 
 use super::PlaintextObject;
 
@@ -15,7 +18,7 @@ pub enum VectorDimContent {
         dim: DimIndex, extent: usize, stride: usize,
 
         // out of bounds intervals
-        oob_left: usize, oob_right: usize
+        oob_left: usize, oob_right: usize,
     },
 
     EmptyDim { extent: usize },
@@ -25,13 +28,15 @@ impl Display for VectorDimContent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             VectorDimContent::FilledDim {
-                dim, extent, stride, oob_left: pad_left, oob_right: pad_right
+                dim, extent, stride, oob_left, oob_right, 
             } => {
-                if *pad_left == 0 && *pad_right == 0 {
+                let mut extra: String = String::new();
+
+                if *oob_left == 0 && *oob_right == 0 {
                     write!(f, "{{{}:{}::{}}}", dim, extent, stride)
 
                 } else {
-                    write!(f, "{{{}:{}::{}[pad=({},{})]}}", dim, extent, stride, pad_left, pad_right)
+                    write!(f, "{{{}:{}::{}[oob=({},{})]}}", dim, extent, stride, oob_left, oob_right)
                 }
             },
 
@@ -92,61 +97,54 @@ impl VectorInfo {
     pub fn get_vector_at_coord(
         array_shape: &Shape,
         index_map: &HashMap<DimName, usize>,
-        scheduled: &ScheduledArrayTransform,
+        schedule: &ArraySchedule,
+        transform: &ArrayTransform,
         preprocessing: Option<ClientPreprocessing>,
     ) -> Self {
-        let base_offset_map =
-            scheduled.transform.offset_map
+        let mut clipped_offset_map =
+            schedule.get_offset_map(transform)
             .map(|offset| offset.eval(index_map));
 
-        let transform = 
-            BaseArrayTransform {
-                array: scheduled.transform.array.clone(),
-                offset_map: base_offset_map,
-                dims: scheduled.transform.dims.clone(),
-            };
-
         let mut materialized_dims: im::Vector<VectorDimContent> = im::Vector::new();
-        let mut clipped_offset_map: OffsetMap<usize> =
-            transform.offset_map.map(|offset| *offset as usize );
-
-        for dim in transform.dims.iter() {
+        for dim in schedule.vectorized_dims.iter() {
+            let dim_content = transform.dims.get(dim.index).unwrap();
             let materialized_dim = 
-                match *dim {
+                match dim_content {
                     // clip dimension to (0, array dimension's extent)
-                    DimContent::FilledDim { dim, extent, stride } => {
-                        let dim_offset = *transform.offset_map.get(dim);
-                        let array_extent = array_shape[dim].upper() as usize;
+                    DimContent::FilledDim { dim: idim, extent: _, stride: istride } => {
+                        let dim_offset = *clipped_offset_map.get(*idim);
+                        let array_extent = array_shape[*idim].upper() as usize;
+                        let new_stride = *istride * dim.stride;
 
                         // indexing less than 0; clip
-                        let mut pad_left: usize = 0;
-                        while dim_offset + ((pad_left * stride) as isize) < 0 {
-                            pad_left += 1;
+                        let mut oob_left: usize = 0;
+                        while dim_offset + ((oob_left * new_stride) as isize) < 0 {
+                            oob_left += 1;
                         }
                         
                         // indexing beyond array_extent; clip
-                        let mut pad_right: usize = 0;
-                        while dim_offset + ((stride*(extent-1-pad_right)) as isize) >= array_extent as isize {
-                            pad_right += 1;
+                        let mut oob_right: usize = 0;
+                        while dim_offset + ((new_stride * (dim.extent - 1 - oob_right)) as isize) >= array_extent as isize {
+                            oob_right += 1;
                         }
 
-                        // increment offset pad pad_left
-                        let cur_offset = *clipped_offset_map.get(dim);
-                        clipped_offset_map.set(dim, cur_offset + ((pad_left * stride) as usize));
+                        // increment offset by oob_left
+                        let cur_offset = *clipped_offset_map.get(*idim);
+                        clipped_offset_map.set(*idim, cur_offset + ((oob_left * new_stride) as isize));
                         
-                        let new_extent = extent - pad_left - pad_right;
+                        let new_extent = dim.extent - oob_left - oob_right;
 
                         VectorDimContent::FilledDim {
-                            dim,
+                            dim: *idim,
                             extent: new_extent,
-                            stride,
-                            oob_left: pad_left as usize,
-                            oob_right: pad_right as usize
+                            stride: new_stride,
+                            oob_left,
+                            oob_right
                         }
                     },
 
-                    DimContent::EmptyDim { extent } => {
-                        VectorDimContent::EmptyDim { extent }
+                    DimContent::EmptyDim { extent: _ } => {
+                        VectorDimContent::EmptyDim { extent: dim.extent }
                     }
                 };
 
@@ -156,7 +154,7 @@ impl VectorInfo {
         VectorInfo {
             array: transform.array.clone(),
             preprocessing,
-            offset_map: clipped_offset_map,
+            offset_map: clipped_offset_map.map(|offset| *offset as usize),
             dims: materialized_dims,
         }
     }

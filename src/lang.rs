@@ -126,15 +126,13 @@ impl<T: Clone+Display> Index<usize> for OffsetMap<T> {
 }
 
 #[derive(Clone,Debug)]
-pub struct ArrayTransform<T: Clone+Display, S: Clone+Display> {
+pub struct ArrayTransform {
     pub array: ArrayName,
-    pub offset_map: OffsetMap<T>,
-    pub dims: im::Vector<S>,
+    pub offset_map: OffsetMap<isize>,
+    pub dims: im::Vector<DimContent>,
 }
 
-pub type BaseArrayTransform = ArrayTransform<isize, DimContent>;
-
-impl<T: Clone+Display, S: Clone+Display> Display for ArrayTransform<T, S> {
+impl Display for ArrayTransform {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}[{}]<{}>",
             self.array,

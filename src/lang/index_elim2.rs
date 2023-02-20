@@ -63,7 +63,7 @@ pub type InputArrayDim = (ExprRefId, DimIndex);
 
 pub struct TransformedProgram {
     pub expr: TransformedExpr,
-    pub inputs: HashMap<ExprRefId, BaseArrayTransform>,
+    pub inputs: HashMap<ExprRefId, ArrayTransform>,
     pub array_shapes: HashMap<ArrayName, Shape>,
 }
 
@@ -199,7 +199,7 @@ pub struct IndexElimination2 {
     store: ArrayEnvironment,
 
     // map from expr ref ids to array shapes
-    transform_shape_map: HashMap<ExprRefId, BaseArrayTransform>,
+    transform_shape_map: HashMap<ExprRefId, ArrayTransform>,
 
     // map from expr ref ids to transformed exprs
     transform_map: HashMap<ExprRefId, TransformedExpr>,
@@ -224,7 +224,7 @@ impl IndexElimination2 {
         id
     }
 
-    fn register_transformed_expr(&mut self, array_shape: BaseArrayTransform) -> ExprRefId {
+    fn register_transformed_expr(&mut self, array_shape: ArrayTransform) -> ExprRefId {
         let id = self.fresh_expr_id();
         self.transform_shape_map.insert(id, array_shape);
         id
@@ -362,7 +362,7 @@ impl IndexElimination2 {
     fn transform_expr(
         &mut self,
         expr: &SourceExpr,
-        output_transform: &BaseArrayTransform,
+        output_transform: &ArrayTransform,
         path_ctx: &PathContext,
     ) -> Result<TransformedExpr,String> {
         match expr {
@@ -605,7 +605,7 @@ impl IndexElimination2 {
 
         // backwards analysis goes from output expression and computes
         // required shapes for indexed arrays
-        let mut transformed_inputs: HashMap<ExprRefId, BaseArrayTransform> = HashMap::new();
+        let mut transformed_inputs: HashMap<ExprRefId, ArrayTransform> = HashMap::new();
         let mut worklist = vec![output_id];
         while worklist.len() > 0 {
             let cur_id = worklist.pop().unwrap();

@@ -91,6 +91,10 @@ pub struct ScheduleDim {
     pub stride: usize,
     pub extent: usize,
     pub name: String,
+
+    // pad_left and pad_right should only be nonzero for vectorized dims!
+    pub pad_left: usize,
+    pub pad_right: usize,
 }
 
 impl Display for ScheduleDim {
@@ -160,8 +164,7 @@ impl ArraySchedule {
         sdims.into_iter().map(|(_,extent)| extent).collect()
     }
 
-    // apply schedule to an array transform
-    pub fn apply(&self, transform: &BaseArrayTransform) -> ScheduledArrayTransform {
+    pub fn get_offset_map(&self, transform: &ArrayTransform) -> OffsetMap<OffsetExpr> {
         let num_dims = transform.offset_map.num_dims();
         let mut param_offset_map: OffsetMap<OffsetExpr> = OffsetMap::new(num_dims);
         for i in 0..num_dims {
@@ -169,8 +172,10 @@ impl ArraySchedule {
             param_offset_map.set(i, OffsetExpr::Literal(cur_offset));
         }
 
-        // process exploded dims
         for sched_dim in self.exploded_dims.iter() {
+            // exploded dims should not have padding!
+            assert!(sched_dim.pad_left == 0 && sched_dim.pad_right == 0);
+
             let dim_content = transform.dims.get(sched_dim.index).unwrap();
             match dim_content {
                 DimContent::FilledDim { dim, extent: _, stride } => {
@@ -194,37 +199,7 @@ impl ArraySchedule {
             }
         }
 
-        // process vectorized dims
-        let mut new_vectorized_dims: im::Vector<DimContent> = im::Vector::new();
-        for sched_dim in self.vectorized_dims.iter() {
-            let dim_content = transform.dims.get(sched_dim.index).unwrap();
-            let new_dim =
-                match dim_content {
-                    // increase stride according to schedule dim, trunate extent
-                    DimContent::FilledDim { dim: dim_index, extent: _, stride: content_stride } => {
-                        DimContent::FilledDim {
-                            dim: *dim_index,
-                            extent: sched_dim.extent,
-                            stride: content_stride * sched_dim.stride,
-                        }
-                    }
-
-                    // truncate to schedule dim's extent
-                    DimContent::EmptyDim { extent: _ } => {
-                        DimContent::EmptyDim{ extent: sched_dim.extent }
-                    }
-                };
-            new_vectorized_dims.push_back(new_dim);
-        }
-
-        ScheduledArrayTransform {
-            exploded_dims: self.exploded_dims.clone(),
-            transform: ArrayTransform {
-                array: transform.array.clone(),
-                offset_map: param_offset_map,
-                dims: new_vectorized_dims,
-            }
-        }
+        param_offset_map
     }
 
     pub fn to_expr_schedule(&self) -> ExprSchedule {
@@ -254,17 +229,6 @@ impl Display for ArraySchedule {
             .join(", ");
 
         write!(f, "{{{}}}[{}]", exploded_str, vectorized_str)
-    }
-}
-
-pub struct ScheduledArrayTransform {
-    pub exploded_dims: im::Vector<ScheduleDim>,
-    pub transform: ArrayTransform<OffsetExpr, DimContent>,
-}
-
-impl Display for ScheduledArrayTransform {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?} {}", self.exploded_dims, self.transform)
     }
 }
 
@@ -411,7 +375,9 @@ impl Schedule {
                         index: i,
                         stride: 1,
                         extent: dim.extent(),
-                        name: format!("i{}", class_id)
+                        name: format!("i{}", class_id),
+                        pad_left: 0,
+                        pad_right: 0,
                     }
                 )
             }

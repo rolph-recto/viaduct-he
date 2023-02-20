@@ -2,11 +2,10 @@ use itertools::Itertools;
 use std::{collections::{HashSet, HashMap}, fmt::Display, ops::Range};
 
 use crate::{
+    circ2::{vector_info::VectorInfo},
     lang::{Operator, DimSize},
     scheduling::{OffsetExpr, ScheduleDim, ExprScheduleType, DimName}
 };
-
-use self::vector_info::VectorInfo;
 
 pub mod cost;
 pub mod materializer;
