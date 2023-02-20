@@ -3,11 +3,10 @@ use std::{fmt::Display, collections::{HashMap, HashSet}, cmp::{max, min}};
 use gcollections::ops::Bounded;
 
 use crate::{
+    circ2::PlaintextObject,
     lang::{DimIndex, ArrayName, OffsetMap, Shape, ArrayTransform, DimContent},
     scheduling::{ClientPreprocessing, DimName, ArraySchedule}
 };
-
-use super::PlaintextObject;
 
 // like DimContent, but with padding information
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -19,29 +18,40 @@ pub enum VectorDimContent {
 
         // out of bounds intervals
         oob_left: usize, oob_right: usize,
+        
+        // padding
+        pad_left: usize, pad_right: usize,
     },
 
-    EmptyDim { extent: usize },
+    EmptyDim { extent: usize, pad_left: usize, pad_right: usize, },
 }
 
 impl Display for VectorDimContent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             VectorDimContent::FilledDim {
-                dim, extent, stride, oob_left, oob_right, 
+                dim, extent, stride, oob_left, oob_right, pad_left, pad_right
             } => {
                 let mut extra: String = String::new();
 
-                if *oob_left == 0 && *oob_right == 0 {
-                    write!(f, "{{{}:{}::{}}}", dim, extent, stride)
-
-                } else {
-                    write!(f, "{{{}:{}::{}[oob=({},{})]}}", dim, extent, stride, oob_left, oob_right)
+                if *oob_left != 0 || *oob_right != 0 {
+                    extra.push_str(&format!("[oob=({},{})]", oob_left, oob_right));
                 }
+
+                if *pad_left != 0 || *pad_right != 0 {
+                    extra.push_str(&format!("[pad=({},{})]", pad_left, pad_right));
+                }
+
+                write!(f, "{{{}:{}::{}{}}}", dim, extent, stride, extra)
             },
 
-            VectorDimContent::EmptyDim { extent } => {
-                write!(f, "{{{}}}", extent)
+            VectorDimContent::EmptyDim { extent, pad_left, pad_right } => {
+                if *pad_left != 0 || *pad_right != 0 {
+                    write!(f, "{{{}[pad=({},{})]}}", extent, pad_left, pad_right)
+
+                } else {
+                    write!(f, "{{{}}}", extent)
+                }
             },
         }
     }
@@ -50,11 +60,17 @@ impl Display for VectorDimContent {
 impl VectorDimContent {
     pub fn size(&self) -> usize {
         match self {
-            VectorDimContent::FilledDim { dim, extent, stride, oob_left, oob_right } =>
-                oob_left + extent + oob_right,
+            VectorDimContent::FilledDim {
+                dim, extent, stride,
+                oob_left, oob_right,
+                pad_left, pad_right
+            } => {
+                pad_left + oob_left + extent + oob_right + pad_right
+            }
 
-            VectorDimContent::EmptyDim { extent } =>
-                *extent
+            VectorDimContent::EmptyDim { extent, pad_left, pad_right } => {
+                pad_left + (*extent) + pad_right
+            }
         }
     }
 }
@@ -139,12 +155,18 @@ impl VectorInfo {
                             extent: new_extent,
                             stride: new_stride,
                             oob_left,
-                            oob_right
+                            oob_right,
+                            pad_left: dim.pad_left,
+                            pad_right: dim.pad_right,
                         }
                     },
 
                     DimContent::EmptyDim { extent: _ } => {
-                        VectorDimContent::EmptyDim { extent: dim.extent }
+                        VectorDimContent::EmptyDim {
+                            extent: dim.extent,
+                            pad_left: dim.pad_left,
+                            pad_right: dim.pad_right,
+                        }
                     }
                 };
 
@@ -178,11 +200,13 @@ impl VectorInfo {
                     match (*dim1, *dim2) {
                         (VectorDimContent::FilledDim {
                             dim: idim1, extent: extent1, stride: stride1,
-                            oob_left: oob_left1, oob_right: oob_right1
+                            oob_left: oob_left1, oob_right: oob_right1,
+                            pad_left: pad_left1, pad_right: pad_right1,
                         },
                         VectorDimContent::FilledDim {
                             dim: idim2, extent: extent2, stride: stride2,
-                            oob_left: pad_left2, oob_right: oob_right2
+                            oob_left: oob_left2, oob_right: oob_right2,
+                            pad_left: pad_left2, pad_right: pad_right2,
                         }) => {
                             // dimensions point to the same indexed dimension (duh)
                             let same_dim = idim1 == idim2;
@@ -217,15 +241,19 @@ impl VectorInfo {
                             same_size && in_extent && self_no_oob
                         },
                         
-                        (VectorDimContent::EmptyDim { extent: extent1 },
-                        VectorDimContent::EmptyDim { extent: extent2 }) => {
-                            extent1 == extent2
+                        (VectorDimContent::EmptyDim { extent: extent1, pad_left: pad_left1, pad_right: pad_right1 },
+                        VectorDimContent::EmptyDim { extent: extent2, pad_left: pad_left2, pad_right: pad_right2  }) => {
+                            pad_left1 + extent1 + pad_right1 == pad_left2 + extent2 + pad_right2 &&
+
+                            // can always truncate empty dims with more padding,
+                            // but don't support extending dims (yet)
+                            extent1 >= extent2
                         },
 
-                        (VectorDimContent::FilledDim { dim, extent, stride, oob_left: pad_left, oob_right: pad_right },
-                            VectorDimContent::EmptyDim { extent: _ }) |
-                        (VectorDimContent::EmptyDim { extent },
-                            VectorDimContent::FilledDim { dim, extent: _, stride, oob_left: pad_left, oob_right: pad_right })
+                        (VectorDimContent::FilledDim { dim: _, extent: _, stride: _, oob_left: _, oob_right: _, pad_left: _, pad_right: _ },
+                            VectorDimContent::EmptyDim { extent: _, pad_left: _, pad_right: _ }) |
+                        (VectorDimContent::EmptyDim { extent: _, pad_left: _, pad_right: _ },
+                            VectorDimContent::FilledDim { dim: _, extent: _, stride: _, oob_left: _, oob_right: _, pad_left: _, pad_right: _ })
                         => false,
                     }
                 });
@@ -236,10 +264,11 @@ impl VectorInfo {
                     !self.dims.iter().any(|dim2_content| {
                         match dim2_content {
                             VectorDimContent::FilledDim {
-                                dim: dim2, extent: _, stride: _, oob_left: _, oob_right: _
+                                dim: dim2, extent: _, stride: _,
+                                oob_left: _, oob_right: _, pad_left: _, pad_right: _,
                             } => dim == dim2,
 
-                            VectorDimContent::EmptyDim { extent: _ } => false,
+                            VectorDimContent::EmptyDim { extent: _, pad_left: _, pad_right : _ } => false,
                         }
                     })
                 });
@@ -252,7 +281,7 @@ impl VectorInfo {
             if self.array == other.array && dims_derivable && nonvectorized_dims_equal_offsets {
                 let mut block_size: usize = 1;
                 let mut rotate_steps = 0;
-                let mut mask_dim_info: im::Vector<(usize, usize, usize, usize, usize)> = im::Vector::new();
+                let mut mask_dim_info: im::Vector<(usize, usize, usize)> = im::Vector::new();
 
                 self.dims.iter()
                 .zip(other.dims.iter()).rev()
@@ -260,16 +289,14 @@ impl VectorInfo {
                     match (*dim1, *dim2) {
                         (VectorDimContent::FilledDim {
                             dim: idim1, extent: extent1, stride: stride1,
-                            oob_left: oob_left1, oob_right: pad_right1
+                            oob_left: oob_left1, oob_right: oob_right1,
+                            pad_left: pad_left1, pad_right: pad_right1,
                         },
                         VectorDimContent::FilledDim {
                             dim: idim2, extent: extent2, stride: stride2,
-                            oob_left: oob_left2, oob_right: oob_right2
+                            oob_left: oob_left2, oob_right: oob_right2,
+                            pad_left: pad_left2, pad_right: pad_right2,
                         }) => {
-                            // TODO replace this with actual fields
-                            let (pad_left1, pad_right1): (usize, usize) = (0, 0);
-                            let (pad_left2, pad_right2): (usize, usize) = (0, 0);
-
                             let offset1 = self.offset_map[idim1];
                             let offset2 = other.offset_map[idim2];
 
@@ -295,12 +322,12 @@ impl VectorInfo {
                                 (oob_left2_lo_intersect || oob_left2_hi_intersect);
 
                             let mask_lo =
-                                    if need_mask_left {
-                                        pad_left2 + oob_left2
+                                if need_mask_left {
+                                    pad_left2 + oob_left2
 
-                                    } else {
-                                        pad_left2
-                                    };
+                                } else {
+                                    pad_left2
+                                };
 
                             let oob_right2_lo = pad_left2 + oob_left2 + extent2;
                             let oob_right2_hi = oob_right2_lo + oob_right2;
@@ -316,45 +343,61 @@ impl VectorInfo {
                                 (oob_right2_lo_intersect || oob_right2_hi_intersect);
 
                             let mask_hi = 
-                                    // mask right?
-                                    if need_mask_right {
-                                        dim_size - pad_right2 - oob_right2 - 1
+                                if need_mask_right {
+                                    dim_size - pad_right2 - oob_right2 - 1
 
-                                    } else {
-                                        dim_size - pad_right2 - 1
-                                    };
+                                } else {
+                                    dim_size - pad_right2 - 1
+                                };
 
-                            mask_dim_info.push_back((dim_size, pad_left2, pad_right2, mask_lo, mask_hi));
+                            let mask_dim =
+                                // don't mask anything
+                                if mask_lo == pad_left2 && mask_hi == dim_size - pad_right2 - 1 {
+                                    (dim_size, 0, dim_size-1)
+
+                                } else { // mask the OOB region
+                                    (dim_size, mask_lo, mask_hi)
+                                };
+
+                            mask_dim_info.push_back(mask_dim);
                         },
                         
-                        (VectorDimContent::EmptyDim { extent: extent1 },
-                        VectorDimContent::EmptyDim { extent: _ }) => {
-                            block_size *= extent1;
+                        (VectorDimContent::EmptyDim { extent: extent1, pad_left: pad_left1, pad_right: pad_right1 },
+                        VectorDimContent::EmptyDim { extent: extent2, pad_left: pad_left2, pad_right: pad_right2 }) => {
+                            let dim_size = pad_left1 + extent1 + pad_right1;
+                            block_size *= dim_size;
 
-                            // TODO: replace zeros with pad_left and pad_right
-                            mask_dim_info.push_back((extent1, 0, 0, 0, extent1-1));
+                            let mask_dim =
+                                // don't mask anything
+                                if pad_left1 == pad_left2 && pad_right1 == pad_right2 {
+                                    (dim_size, 0, dim_size - 1)
+
+                                } else {
+                                    (dim_size, pad_left2, pad_right2)
+                                };
+ 
+                            mask_dim_info.push_back(mask_dim);
                         },
 
-                        (VectorDimContent::FilledDim { dim, extent, stride, oob_left: pad_left, oob_right: pad_right },
-                            VectorDimContent::EmptyDim { extent: _ }) |
-                        (VectorDimContent::EmptyDim { extent },
-                            VectorDimContent::FilledDim { dim, extent: _, stride, oob_left: pad_left, oob_right: pad_right })
+                        (VectorDimContent::FilledDim { dim: _, extent: _, stride: _, oob_left: _, oob_right: _, pad_left: _, pad_right: _ },
+                            VectorDimContent::EmptyDim { extent: _, pad_left: _, pad_right: _ }) |
+                        (VectorDimContent::EmptyDim { extent: _, pad_left: _, pad_right: _ },
+                            VectorDimContent::FilledDim { dim: _, extent: _, stride: _, oob_left: _, oob_right: _, pad_left: _, pad_right: _ })
                         => unreachable!()
                     }
                 });
 
+                let is_mask_const =
+                    mask_dim_info.iter().all(|(size, lo, hi)| {
+                        *lo == 00 && *hi == size - 1
+                    });
+
                 let mask =
-                    if mask_dim_info.iter().all(|(size, pad_left, pad_right, lo, hi)| {
-                        *lo == *pad_left && *hi == size - pad_right -1
-                    }) {
+                    if is_mask_const {
                         PlaintextObject::Const(1)
 
                     } else {
-                        let mask_vec: im::Vector<(usize, usize, usize)> =
-                            mask_dim_info.into_iter().map(|(size, _, _, lo, hi)|
-                                (size, lo, hi)
-                            ).collect();
-                        PlaintextObject::Mask(mask_vec)
+                        PlaintextObject::Mask(mask_dim_info)
                     };
 
                 Some((rotate_steps, mask))
@@ -397,8 +440,8 @@ mod tests {
                         dim: 0,
                         extent: 4,
                         stride: 1,
-                        oob_left: 0,
-                        oob_right: 0,
+                        oob_left: 0, oob_right: 0,
+                        pad_left: 0, pad_right: 0,
                     }
                 ],
             };
@@ -415,8 +458,8 @@ mod tests {
                         dim: 0,
                         extent: 4,
                         stride: 1,
-                        oob_left: 0,
-                        oob_right: 0,
+                        oob_left: 0, oob_right: 0,
+                        pad_left: 0, pad_right: 0,
                     }
                 ],
             };
@@ -467,8 +510,8 @@ mod tests {
                         dim: 0,
                         extent: 4,
                         stride: 1,
-                        oob_left: 0,
-                        oob_right: 0,
+                        oob_left: 0, oob_right: 0,
+                        pad_left: 0, pad_right: 0,
                     }
                 ],
             };
@@ -487,8 +530,8 @@ mod tests {
                         dim: 0,
                         extent: 3,
                         stride: 1,
-                        oob_left: 1,
-                        oob_right: 0,
+                        oob_left: 1, oob_right: 0,
+                        pad_left: 0, pad_right: 0,
                     }
                 ],
             };
@@ -514,8 +557,8 @@ mod tests {
                         dim: 0,
                         extent: 4,
                         stride: 1,
-                        oob_left: 0,
-                        oob_right: 0,
+                        oob_left: 0, oob_right: 0,
+                        pad_left: 0, pad_right: 0,
                     }
                 ],
             };
@@ -531,8 +574,8 @@ mod tests {
                         dim: 0,
                         extent: 3,
                         stride: 1,
-                        oob_left: 0,
-                        oob_right: 1,
+                        oob_left: 0, oob_right: 1,
+                        pad_left: 0, pad_right: 0,
                     }
                 ],
             };
@@ -557,8 +600,8 @@ mod tests {
                         dim: 0,
                         extent: 4,
                         stride: 1,
-                        oob_left: 0,
-                        oob_right: 0,
+                        oob_left: 0, oob_right: 0,
+                        pad_left: 0, pad_right: 0,
                     }
                 ],
             };
@@ -577,8 +620,8 @@ mod tests {
                         dim: 0,
                         extent: 3,
                         stride: 1,
-                        oob_left: 1,
-                        oob_right: 0,
+                        oob_left: 1, oob_right: 0,
+                        pad_left: 0, pad_right: 0,
                     }
                 ],
             };
@@ -604,8 +647,8 @@ mod tests {
                         dim: 0,
                         extent: 4,
                         stride: 1,
-                        oob_left: 0,
-                        oob_right: 0,
+                        oob_left: 0, oob_right: 0,
+                        pad_left: 0, pad_right: 0,
                     }
                 ],
             };
@@ -622,8 +665,8 @@ mod tests {
                         dim: 0,
                         extent: 3,
                         stride: 1,
-                        oob_left: 1,
-                        oob_right: 0,
+                        oob_left: 1, oob_right: 0,
+                        pad_left: 0, pad_right: 0,
                     }
                 ],
             };
