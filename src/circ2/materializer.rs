@@ -882,6 +882,7 @@ mod tests {
         );
     }
 
+    // convolution with masking for out-of-bounds accessesyy
     #[test]
     fn test_materialize_img_array() {
         let shape: Shape = im::vector![Interval::new(0, 16), Interval::new(0, 16)];
@@ -908,6 +909,63 @@ mod tests {
                 vectorized_dims: im::vector![
                     ScheduleDim { index: 2, stride: 1, extent: 16, name: String::from("x"), pad_left: 0, pad_right: 0 },
                     ScheduleDim { index: 3, stride: 1, extent: 16, name: String::from("y"), pad_left: 0, pad_right: 0 }
+                ]
+            };
+
+        let (mut registry, circ) =
+            test_array_materializer(
+                Box::new(DefaultArrayMaterializer::new()),
+                shape, 
+                schedule, 
+                base, 
+            );
+
+        let ct_var = circ.ciphertext_vars().iter().next().unwrap().clone();
+        if let CircuitVarValue::CoordMap(coord_map) = registry.get_ct_var_value(&ct_var) {
+            // ct_var should be mapped to the same vector at all coords
+            assert!(coord_map.multiplicity() == 9);
+            let values: Vec<&CiphertextObject> =
+                coord_map.value_iter()
+                .map(|(_, value)| value)
+                .collect();
+
+            let first = *values.first().unwrap();
+            assert!(
+                values.iter().all(|x| **x == *first)
+            )
+
+        } else {
+            assert!(false)
+        }
+    }
+
+    // convolution with padding for out-of-bounds accesses
+    #[test]
+    fn test_materialize_img_array_padding() {
+        let shape: Shape = im::vector![Interval::new(0, 16), Interval::new(0, 16)];
+
+        let base =
+            ArrayTransform {
+                array: String::from("img"),
+                offset_map: BaseOffsetMap::new(2),
+                dims: im::vector![
+                    DimContent::FilledDim { dim: 0, extent: 3, stride: 1 },
+                    DimContent::FilledDim { dim: 1, extent: 3, stride: 1 },
+                    DimContent::FilledDim { dim: 0, extent: 16, stride: 1 },
+                    DimContent::FilledDim { dim: 1, extent: 16, stride: 1 },
+                ]
+            };
+
+        let schedule = 
+            ArraySchedule {
+                preprocessing: None,
+                exploded_dims: im::vector![
+                    ScheduleDim { index: 0, stride: 1, extent: 3, name: String::from("i"), pad_left: 0, pad_right: 0 },
+                    ScheduleDim { index: 1, stride: 1, extent: 3, name: String::from("j"), pad_left: 0, pad_right: 0 }
+                ],
+                vectorized_dims: im::vector![
+                    ScheduleDim { index: 2, stride: 1, extent: 16, name: String::from("x"), pad_left: 3, pad_right: 3 },
+                    ScheduleDim { index: 3, stride: 1, extent: 16, name: String::from("y"), pad_left: 3, pad_right: 3 }
                 ]
             };
 
