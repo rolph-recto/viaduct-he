@@ -141,6 +141,13 @@ impl IndexCoordinateSystem {
         .map(|coord| im::Vector::from(coord))
     }
 
+    pub fn index_map_iter(&self) -> impl Iterator<Item=HashMap<DimName,usize>> + Clone {
+        let index_vars = self.index_vars();
+        self.coord_iter().map(move |coord| {
+            index_vars.clone().into_iter().zip(coord).collect()
+        })
+    }
+
     // iterate through coordinates while fixing an index to be a subset of its range
     pub fn coord_iter_subset(&self, dim: &DimName, range: Range<usize>) -> impl Iterator<Item=im::Vector<usize>> + Clone {
         self.0.iter()
@@ -186,20 +193,15 @@ impl IndexCoordinateSystem {
 }
 
 // map from index variable coordinates to values
-pub struct IndexCoordinateMap<T: Default> {
+pub struct IndexCoordinateMap<T> {
     coord_system: IndexCoordinateSystem,
     coord_map: HashMap<IndexCoord, T>
 }
 
-impl<T: Default> IndexCoordinateMap<T> {
+impl<T> IndexCoordinateMap<T> {
     pub fn new<'a, A: Iterator<Item = &'a ScheduleDim>>(dims: A) -> Self {
         let coord_system = IndexCoordinateSystem::new(dims);
         let mut coord_map: HashMap<IndexCoord, T> = HashMap::new();
-        for coord in coord_system.coord_iter() {
-            let im_coord = im::Vector::from(coord);
-            coord_map.insert(im_coord, T::default());
-        }
-        
         IndexCoordinateMap { coord_system, coord_map }
     }
 
@@ -207,13 +209,30 @@ impl<T: Default> IndexCoordinateMap<T> {
         self.coord_system.coord_iter()
     }
 
+    pub fn index_map_iter(&self) -> impl Iterator<Item=HashMap<DimName,usize>> + Clone {
+        self.coord_system.index_map_iter()
+    }
+
+    pub fn coord_as_index_map(&self, coord: IndexCoord) -> HashMap<DimName, usize> {
+        self.coord_system.0.iter()
+        .map(|(dim_name, _)| dim_name.clone())
+        .zip(coord)
+        .collect()
+    }
+
+    pub fn index_map_as_coord(&self, index_map: HashMap<DimName,usize>) -> IndexCoord {
+        self.coord_system.0.iter()
+        .map(|(dim_name, _)| index_map[dim_name])
+        .collect()
+    }
+
     pub fn coord_iter_subset(&self, dim: &DimName, range: Range<usize>) -> impl Iterator<Item=IndexCoord> + Clone {
         self.coord_system.coord_iter_subset(dim, range)
     }
 
-    pub fn value_iter(&self) -> impl Iterator<Item=(IndexCoord,&T)> + Clone {
+    pub fn value_iter(&self) -> impl Iterator<Item=(IndexCoord,Option<&T>)> + Clone {
         self.coord_iter().map(|coord| {
-            let value = &self.coord_map[&coord];
+            let value = self.coord_map.get(&coord);
             (coord, value)
         })
     }
@@ -223,12 +242,11 @@ impl<T: Default> IndexCoordinateMap<T> {
     }
 
     pub fn set(&mut self, coord: IndexCoord, value: T) {
-        assert!(self.coord_map.contains_key(&coord));
         self.coord_map.insert(coord, value);
     }
 
-    pub fn get(&self, coord: &IndexCoord) -> &T {
-        &self.coord_map[coord]
+    pub fn get(&self, coord: &IndexCoord) -> Option<&T> {
+        self.coord_map.get(coord)
     }
 
     pub fn multiplicity(&self) -> usize {
@@ -240,10 +258,10 @@ impl<T: Default> IndexCoordinateMap<T> {
     }
 }
 
-impl<T: Default+Display> Display for IndexCoordinateMap<T> {
+impl<T> Display for IndexCoordinateMap<T> where T: std::fmt::Debug {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.value_iter().try_for_each(|(coord, value)| {
-            write!(f, "{:?} => {}\n", coord, value)
+            write!(f, "{:?} => {:?}\n", coord, value)
         })
     }
 }
@@ -295,23 +313,23 @@ impl Display for PlaintextObject {
     }
 }
 
-pub enum CircuitVarValue<T: Default> {
+pub enum CircuitValue<T> {
     CoordMap(IndexCoordinateMap<T>),
     Object(T)
 }
 
-impl<T: Default+Display> Display for CircuitVarValue<T> {
+impl<T> Display for CircuitValue<T> where T: std::fmt::Debug {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CircuitVarValue::CoordMap(map) => write!(f, "{}", map),
-            CircuitVarValue::Object(obj) => write!(f, "{}", obj),
+            CircuitValue::CoordMap(map) => write!(f, "{}", map),
+            CircuitValue::Object(obj) => write!(f, "{:?}", obj),
         }
     }
 }
 
-type CiphertextVarValue = CircuitVarValue<CiphertextObject>;
-type PlaintextVarValue = CircuitVarValue<PlaintextObject>;
-type OffsetVarValue = CircuitVarValue<isize>;
+type CiphertextVarValue = CircuitValue<CiphertextObject>;
+type PlaintextVarValue = CircuitValue<PlaintextObject>;
+type OffsetVarValue = CircuitValue<isize>;
 
 /// data structure that maintains values for variables in parameterized circuits
 pub struct CircuitRegistry {

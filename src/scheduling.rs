@@ -1,7 +1,7 @@
 
-use std::{collections::{HashMap, HashSet}, fmt::Display};
+use std::{collections::{HashMap, HashSet}, fmt::Display, cmp::max};
 
-use crate::lang::{*, index_elim2::{TransformedExpr, TransformedProgram}};
+use crate::{lang::{*, index_elim2::{TransformedExpr, TransformedProgram}}, circ2::{IndexCoordinateMap, vector_info::VectorInfo, CircuitValue}};
 
 pub type DimName = String;
 pub type ExplodedIndexStore = HashMap<DimName, usize>;
@@ -131,41 +131,11 @@ impl ClientPreprocessing {
     }
 }
 
-#[derive(Clone,Debug,PartialEq,Eq,Hash)]
-pub struct ArraySchedule {
-    pub preprocessing: Option<ClientPreprocessing>,
-    pub exploded_dims: im::Vector<ScheduleDim>,
-    pub vectorized_dims: im::Vector<ScheduleDim>,
-}
-
-impl ArraySchedule {
-    // compute the scheduled tiling for a given dimension
-    pub fn get_tiling(&self, dim: DimIndex) -> Vec<usize> {
-        let mut sdims: Vec<(usize, usize)> = Vec::new();
-        
-        sdims.extend(
-            self.exploded_dims.iter()
-            .filter(|edim| edim.index == dim)
-            .map(|edim| (edim.stride, edim.extent))
-        );
-
-        sdims.extend(
-            self.vectorized_dims.iter()
-            .flat_map(|vdim| {
-                if vdim.index == dim {
-                    vec![(vdim.stride, vdim.extent)]
-                } else {
-                    vec![]
-                }
-            })
-        );
-
-        sdims.sort_by(|(s1,_), (s2,_)| s1.cmp(s2));
-        sdims.into_iter().map(|(_,extent)| extent).collect()
-    }
+pub trait HasExplodedDims {
+    fn get_exploded_dims(&self) -> Vec<&ScheduleDim>;
 
     // get a parameterized offset map for the *array* indexed by transform
-    pub fn get_indexed_offset_map(&self, transform: &ArrayTransform) -> OffsetMap<OffsetExpr> {
+    fn get_indexed_offset_map(&self, transform: &ArrayTransform) -> OffsetMap<OffsetExpr> {
         let num_dims = transform.offset_map.num_dims();
         let mut param_offset_map: OffsetMap<OffsetExpr> = OffsetMap::new(num_dims);
         for i in 0..num_dims {
@@ -173,7 +143,7 @@ impl ArraySchedule {
             param_offset_map.set(i, OffsetExpr::Literal(cur_offset));
         }
 
-        for sched_dim in self.exploded_dims.iter() {
+        for sched_dim in self.get_exploded_dims() {
             // exploded dims should not have padding!
             assert!(sched_dim.pad_left == 0 && sched_dim.pad_right == 0);
 
@@ -204,14 +174,14 @@ impl ArraySchedule {
     }
 
     // get a parameterized offset map for the transform itself
-    pub fn get_transform_offset_map(&self, transform: &ArrayTransform) -> OffsetMap<OffsetExpr> {
+    fn get_transform_offset_map(&self, transform: &ArrayTransform) -> OffsetMap<OffsetExpr> {
         let num_dims = transform.dims.len();
         let mut param_offset_map: OffsetMap<OffsetExpr> = OffsetMap::new(num_dims);
         for i in 0..num_dims {
             param_offset_map.set(i, OffsetExpr::Literal(0));
         }
 
-        for sched_dim in self.exploded_dims.iter() {
+        for sched_dim in self.get_exploded_dims() {
             let cur_offset = param_offset_map.get(sched_dim.index).clone();
             let new_offset =
                 OffsetExpr::Add(
@@ -229,9 +199,44 @@ impl ArraySchedule {
 
         param_offset_map
     }
+}
 
-    pub fn to_expr_schedule(&self) -> ExprSchedule {
+#[derive(Clone,Debug,PartialEq,Eq,Hash)]
+pub struct TransformSchedule {
+    pub preprocessing: Option<ClientPreprocessing>,
+    pub exploded_dims: im::Vector<ScheduleDim>,
+    pub vectorized_dims: im::Vector<ScheduleDim>,
+}
+
+impl TransformSchedule {
+    // compute the scheduled tiling for a given dimension
+    pub fn get_tiling(&self, dim: DimIndex) -> Vec<usize> {
+        let mut sdims: Vec<(usize, usize)> = Vec::new();
+        
+        sdims.extend(
+            self.exploded_dims.iter()
+            .filter(|edim| edim.index == dim)
+            .map(|edim| (edim.stride, edim.extent))
+        );
+
+        sdims.extend(
+            self.vectorized_dims.iter()
+            .flat_map(|vdim| {
+                if vdim.index == dim {
+                    vec![(vdim.stride, vdim.extent)]
+                } else {
+                    vec![]
+                }
+            })
+        );
+
+        sdims.sort_by(|(s1,_), (s2,_)| s1.cmp(s2));
+        sdims.into_iter().map(|(_,extent)| extent).collect()
+    }
+
+    pub fn to_expr_schedule(&self, shape: Shape) -> ExprSchedule {
         ExprSchedule {
+            shape,
             preprocessing: self.preprocessing.clone(),
             exploded_dims: self.exploded_dims.clone(),
             vectorized_dims: 
@@ -242,7 +247,13 @@ impl ArraySchedule {
     }
 }
 
-impl Display for ArraySchedule {
+impl HasExplodedDims for TransformSchedule {
+    fn get_exploded_dims(&self) -> Vec<&ScheduleDim> {
+        self.exploded_dims.iter().collect()
+    }
+}
+
+impl Display for TransformSchedule {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let exploded_str =
             self.exploded_dims.iter()
@@ -341,8 +352,9 @@ impl VectorScheduleDim {
 }
 
 // like ArraySchedule, except vectorized dims can have special reduced dimensions
-#[derive(Clone,Debug,PartialEq,Eq,Hash)]
+#[derive(Clone,Debug,PartialEq,Eq)]
 pub struct ExprSchedule {
+    pub shape: Shape,
     pub preprocessing: Option<ClientPreprocessing>,
     pub exploded_dims: im::Vector<ScheduleDim>,
     pub vectorized_dims: im::Vector<VectorScheduleDim>,
@@ -372,11 +384,40 @@ impl ExprSchedule {
         self.vectorized_dims.iter()
         .fold(1, |acc, dim| acc * dim.extent())
     }
+
+    // materialize schedule into a coordinate map of vectors
+    // similar to DummyArrayMaterializer
+    pub fn materialize(&self) -> CircuitValue<VectorInfo> {
+        if self.exploded_dims.len() > 0 {
+            let mut coord_map = IndexCoordinateMap::new(self.exploded_dims.iter());
+            for index_map in coord_map.index_map_iter() {
+                let vector =
+                    VectorInfo::get_expr_vector_at_coord(&index_map, self, None);
+
+                let coord = coord_map.index_map_as_coord(index_map);
+                coord_map.set(coord, vector);
+            }
+
+            CircuitValue::CoordMap(coord_map)
+
+        } else {
+            let index_map: HashMap<DimName, usize> = HashMap::new();
+            CircuitValue::Object(
+                VectorInfo::get_expr_vector_at_coord(&index_map, self, None)
+            )
+        }
+    }
+}
+
+impl HasExplodedDims for ExprSchedule {
+    fn get_exploded_dims(&self) -> Vec<&ScheduleDim> {
+        self.exploded_dims.iter().collect()
+    }
 }
 
 #[derive(Clone,Debug,PartialEq,Eq,Hash)]
 pub struct Schedule {
-    pub schedule_map: im::HashMap<ExprRefId,ArraySchedule>
+    pub schedule_map: im::HashMap<ExprRefId,TransformSchedule>
 }
 
 impl Display for Schedule {
@@ -391,7 +432,7 @@ impl Schedule {
     // generate an initial schedule 
     // the initial schedule explodes *all* dims
     pub fn gen_initial_schedule(program: &TransformedProgram) -> Self {
-        let mut schedule_map: im::HashMap<ExprRefId,ArraySchedule> = im::HashMap::new();
+        let mut schedule_map: im::HashMap<ExprRefId,TransformSchedule> = im::HashMap::new();
         let dim_class_map = program.compute_dim_equiv_classes();
 
         for (ref_id, transform) in program.inputs.iter() {
@@ -410,7 +451,7 @@ impl Schedule {
                 )
             }
             let schedule =
-                ArraySchedule {
+                TransformSchedule {
                     preprocessing: None,
                     exploded_dims: schedule_dims,
                     vectorized_dims: im::Vector::new(),
@@ -423,16 +464,16 @@ impl Schedule {
     }
 
     // apply the schedule to an index-free expression and compute the output schedule
-    pub fn compute_output_schedule(&self, expr: &TransformedExpr) -> Result<ExprScheduleType, String> {
+    pub fn compute_output_schedule(&self, program: &TransformedProgram, expr: &TransformedExpr) -> Result<ExprScheduleType, String> {
         match expr {
             TransformedExpr::ReduceNode(reduced_index, _, body) => {
-                let body_sched = self.compute_output_schedule(body)?;
+                let body_sched = self.compute_output_schedule(program, body)?;
                 Schedule::schedule_reduce(*reduced_index, &body_sched)
             }
 
             TransformedExpr::Op(_, expr1, expr2) => {
-                let sched1 = self.compute_output_schedule(expr1)?;
-                let sched2 = self.compute_output_schedule(expr2)?;
+                let sched1 = self.compute_output_schedule(program, expr1)?;
+                let sched2 = self.compute_output_schedule(program, expr2)?;
                 Schedule::schedule_op(&sched1, &sched2)
             },
 
@@ -440,7 +481,11 @@ impl Schedule {
 
             TransformedExpr::ExprRef(ref_id) => {
                 if let Some(array_sched) = self.schedule_map.get(ref_id) {
-                    Ok(ExprScheduleType::Specific(array_sched.to_expr_schedule()))
+                    // TODO: generalize this to more than just input transforms
+                    let transform = program.inputs.get(ref_id).unwrap();
+                    let expr_schedule =
+                        array_sched.to_expr_schedule(transform.as_shape());
+                    Ok(ExprScheduleType::Specific(expr_schedule))
 
                 } else {
                     Err(String::from("expr ref has no schedule"))
@@ -533,9 +578,14 @@ impl Schedule {
                     new_vectorized_dims.push_back(new_dim);
                 }
 
+                let mut new_shape = body_sched_spec.shape.clone();
+                new_shape.remove(reduced_index);
+
                 Ok(
                     ExprScheduleType::Specific(
+                        // TODO support preprocessing here
                         ExprSchedule {
+                            shape: new_shape,
                             preprocessing: None,
                             exploded_dims: new_exploded_dims,
                             vectorized_dims: new_vectorized_dims
@@ -546,8 +596,8 @@ impl Schedule {
         }
     }
 
-    pub fn is_schedule_valid(&self, expr: &TransformedExpr) -> bool {
-        self.compute_output_schedule(expr).is_ok()
+    pub fn is_schedule_valid(&self, program: &TransformedProgram, expr: &TransformedExpr) -> bool {
+        self.compute_output_schedule(program, expr).is_ok()
     }
 }
 
@@ -573,7 +623,7 @@ mod tests {
         println!("{}", &init_schedule);
 
         // the initial schedule should always be valid!
-        assert!(init_schedule.is_schedule_valid(&program.expr))
+        assert!(init_schedule.is_schedule_valid(&program, &program.expr))
     }
 
     #[test]

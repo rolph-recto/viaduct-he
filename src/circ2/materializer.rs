@@ -4,7 +4,7 @@ use bimap::BiHashMap;
 use crate::{
     circ2::{
         IndexCoordinateMap, CiphertextObject, PlaintextObject, ParamCircuitExpr,
-        CircuitRegistry, ParamCircuitProgram, IndexCoord, CircuitVarValue,
+        CircuitRegistry, ParamCircuitProgram, IndexCoord, CircuitValue,
         vector_info::VectorInfo,
     },
     lang::{
@@ -12,7 +12,7 @@ use crate::{
         index_elim2::{TransformedProgram, TransformedExpr},
     },
     scheduling::{
-        ArraySchedule, ExprScheduleType, DimName, OffsetExpr, Schedule,
+        TransformSchedule, ExprScheduleType, DimName, OffsetExpr, Schedule,
         ClientPreprocessing, VectorScheduleDim
     },
     util
@@ -22,14 +22,14 @@ pub trait ArrayMaterializer {
     fn can_materialize(
         &self,
         array_shape: &Shape,
-        schedule: &ArraySchedule,
+        schedule: &TransformSchedule,
         transform: &ArrayTransform,
     ) -> bool;
 
     fn materialize(
         &mut self,
         array_shape: &Shape,
-        schedule: &ArraySchedule,
+        schedule: &TransformSchedule,
         transform: &ArrayTransform,
         registry: &mut CircuitRegistry
     ) -> ParamCircuitExpr;
@@ -158,7 +158,8 @@ impl Materializer {
                 for amat in self.array_materializers.iter_mut() {
                     if amat.can_materialize(array_shape, schedule, transform) {
                         let expr = amat.materialize(array_shape, schedule, transform, &mut self.registry);
-                        let schedule = ExprScheduleType::Specific(schedule.to_expr_schedule());
+                        let shape = transform.as_shape();
+                        let schedule = ExprScheduleType::Specific(schedule.to_expr_schedule(shape));
                         return Ok((schedule, expr))
                     }
                 }
@@ -239,7 +240,7 @@ impl VectorDeriver {
     pub fn register_and_derive_vectors(
         &mut self,
         array_shape: &Shape,
-        schedule: &ArraySchedule,
+        schedule: &TransformSchedule,
         transform: &ArrayTransform,
         preprocessing: Option<ClientPreprocessing>,
         coords: impl Iterator<Item=IndexCoord> + Clone,
@@ -255,7 +256,7 @@ impl VectorDeriver {
                 index_vars.clone().into_iter().zip(coord.clone()).collect();
 
             let vector =
-                VectorInfo::get_vector_at_coord(array_shape, &index_map, schedule, transform, preprocessing);
+                VectorInfo::get_input_vector_at_coord(array_shape, &index_map, schedule, transform, preprocessing);
 
             let vector_id = self.register_vector(vector);
             vector_id_map.insert(coord, vector_id);
@@ -300,7 +301,7 @@ impl VectorDeriver {
 
         // probe at (0,...,0) to get the base offset
         let base_coord: im::Vector<usize> = im::Vector::from(vec![0; index_vars.len()]);
-        let base_offset: isize = *step_map.get(&base_coord);
+        let base_offset: isize = *step_map.get(&base_coord).unwrap();
 
         // probe at (0,..,1,..,0) to get the coefficient for the ith index var
         // only do this for processed_index_vars, not *all* index vars
@@ -309,7 +310,7 @@ impl VectorDeriver {
             let mut index_coord = base_coord.clone();
             index_coord[i] = 1;
 
-            let step_offset = *step_map.get(&index_coord);
+            let step_offset = *step_map.get(&index_coord).unwrap();
             coefficients.push(step_offset - base_offset);
         }
 
@@ -335,7 +336,7 @@ impl VectorDeriver {
 
         // validate computed offset expr
         for coord in valid_coords {
-            let value = *step_map.get(&coord);
+            let value = *step_map.get(&coord).unwrap();
             let index_map: HashMap<DimName, usize> =
                 index_vars.clone().into_iter().zip(coord.clone()).collect();
 
@@ -353,7 +354,7 @@ impl VectorDeriver {
     pub fn gen_circuit_expr(
         &mut self,
         array_shape: &Shape,
-        schedule: &ArraySchedule,
+        schedule: &TransformSchedule,
         transform: &ArrayTransform,
         registry: &mut CircuitRegistry,
         preprocessing: Option<ClientPreprocessing>,
@@ -375,7 +376,8 @@ impl VectorDeriver {
             coords.clone(),
             &mut obj_map,
             &mut mask_map,
-            &mut step_map);
+            &mut step_map
+        );
 
         let ct_var = registry.fresh_ct_var();
         let pt_var = registry.fresh_pt_var();
@@ -383,14 +385,16 @@ impl VectorDeriver {
         if !obj_map.is_empty() { // there is an array of vectors
             let mask_is_nonconst =
                 mask_map.value_iter().any(|(_, mask)| {
-                    match mask {
-                        PlaintextObject::Const(_) => false,
-                        PlaintextObject::Mask(_) => true,
+                    if let Some(PlaintextObject::Const(_)) = mask {
+                        false
+
+                    } else {
+                        true
                     }
                 });
 
-            registry.set_ct_var_value(ct_var.clone(), CircuitVarValue::CoordMap(obj_map));
-            registry.set_pt_var_value(pt_var.clone(), CircuitVarValue::CoordMap(mask_map));
+            registry.set_ct_var_value(ct_var.clone(), CircuitValue::CoordMap(obj_map));
+            registry.set_pt_var_value(pt_var.clone(), CircuitValue::CoordMap(mask_map));
 
             let masked_expr =
                 if mask_is_nonconst {
@@ -421,7 +425,7 @@ impl VectorDeriver {
 
             } else { // introduce new offset variable, since we can't create an offset expr
                 let offset_var = registry.fresh_offset_var();
-                registry.set_offset_var_value(offset_var.clone(), CircuitVarValue::CoordMap(step_map));
+                registry.set_offset_var_value(offset_var.clone(), CircuitValue::CoordMap(step_map));
 
                 ParamCircuitExpr::Rotate(
                     Box::new(OffsetExpr::Var(offset_var)),
@@ -432,11 +436,11 @@ impl VectorDeriver {
         } else { // there is only a single vector
             let index_map: HashMap<DimName, usize> = HashMap::new();
             let vector =
-                VectorInfo::get_vector_at_coord(array_shape, &index_map, schedule, transform, preprocessing);
+                VectorInfo::get_input_vector_at_coord(array_shape, &index_map, schedule, transform, preprocessing);
 
             registry.set_ct_var_value(
                 ct_var.clone(),
-                CircuitVarValue::Object(CiphertextObject::Vector(vector))
+                CircuitValue::Object(CiphertextObject::Vector(vector))
             );
             ParamCircuitExpr::CiphertextVar(ct_var)
         }
@@ -451,7 +455,7 @@ impl ArrayMaterializer for DummyArrayMaterializer {
     fn can_materialize(
         &self,
         _array_shape: &Shape,
-        schedule: &ArraySchedule,
+        schedule: &TransformSchedule,
         _transform: &ArrayTransform,
     ) -> bool {
         schedule.preprocessing.is_none()
@@ -460,7 +464,7 @@ impl ArrayMaterializer for DummyArrayMaterializer {
     fn materialize(
         &mut self,
         array_shape: &Shape,
-        schedule: &ArraySchedule,
+        schedule: &TransformSchedule,
         transform: &ArrayTransform,
         registry: &mut CircuitRegistry
     ) -> ParamCircuitExpr {
@@ -471,17 +475,15 @@ impl ArrayMaterializer for DummyArrayMaterializer {
         let index_vars = coord_map.index_vars();
 
         // register vectors
-        for coord in coord_map.coord_iter() {
-            let index_map: HashMap<DimName, usize> =
-                index_vars.clone().into_iter().zip(coord.clone()).collect();
-
+        for index_map in coord_map.index_map_iter() {
             let vector =
-                VectorInfo::get_vector_at_coord(array_shape, &index_map, schedule, transform, None);
+                VectorInfo::get_input_vector_at_coord(array_shape, &index_map, schedule, transform, None);
 
+            let coord = coord_map.index_map_as_coord(index_map);
             coord_map.set(coord, CiphertextObject::Vector(vector));
         }
         
-        registry.set_ct_var_value(ct_var.clone(), CircuitVarValue::CoordMap(coord_map));
+        registry.set_ct_var_value(ct_var.clone(), CircuitValue::CoordMap(coord_map));
         ParamCircuitExpr::CiphertextVar(ct_var)
     }
 }
@@ -503,7 +505,7 @@ impl ArrayMaterializer for DefaultArrayMaterializer {
     fn can_materialize(
         &self,
         _array_shape: &Shape,
-        schedule: &ArraySchedule,
+        schedule: &TransformSchedule,
         _transform: &ArrayTransform,
     ) -> bool {
         schedule.preprocessing.is_none()
@@ -512,7 +514,7 @@ impl ArrayMaterializer for DefaultArrayMaterializer {
     fn materialize(
         &mut self,
         shape: &Shape,
-        schedule: &ArraySchedule,
+        schedule: &TransformSchedule,
         transform: &ArrayTransform,
         registry: &mut CircuitRegistry
     ) -> ParamCircuitExpr {
@@ -532,7 +534,7 @@ impl ArrayMaterializer for DiagonalArrayMaterializer {
     fn can_materialize(
         &self,
         _array_shape: &Shape,
-        schedule: &ArraySchedule,
+        schedule: &TransformSchedule,
         _base: &ArrayTransform,
     ) -> bool {
         if let Some(ClientPreprocessing::Permute(dim_i, dim_j)) = schedule.preprocessing {
@@ -570,7 +572,7 @@ impl ArrayMaterializer for DiagonalArrayMaterializer {
     fn materialize(
         &mut self,
         shape: &Shape,
-        schedule: &ArraySchedule,
+        schedule: &TransformSchedule,
         transform: &ArrayTransform,
         registry: &mut CircuitRegistry
     ) -> ParamCircuitExpr {
@@ -667,8 +669,8 @@ impl ArrayMaterializer for DiagonalArrayMaterializer {
                         let mut ref_coord = coord.clone();
                         ref_coord[inner_j_name_index] = 0;
 
-                        let ref_obj = obj_map.get(&ref_coord).clone();
-                        let ref_step = *step_map.get(&ref_coord);
+                        let ref_obj = obj_map.get(&ref_coord).unwrap().clone();
+                        let ref_step = *step_map.get(&ref_coord).unwrap();
                         let inner_j_value = coord[inner_j_name_index];
 
                         obj_map.set(coord.clone(), ref_obj);
@@ -686,11 +688,11 @@ impl ArrayMaterializer for DiagonalArrayMaterializer {
 
                         } else {
                             let zero_j_coord = im::vector![0];
-                            let step = *step_map.get(&zero_j_coord);
+                            let step = *step_map.get(&zero_j_coord).unwrap();
                             Some(OffsetExpr::Literal(step))
                         };
 
-                    registry.set_ct_var_value(ct_var.clone(), CircuitVarValue::CoordMap(obj_map));
+                    registry.set_ct_var_value(ct_var.clone(), CircuitValue::CoordMap(obj_map));
 
                     if let Some(offset_expr) = offset_expr_opt {
                         let new_offset_expr =
@@ -706,7 +708,7 @@ impl ArrayMaterializer for DiagonalArrayMaterializer {
 
                     } else {
                         let offset_var = registry.fresh_offset_var();
-                        registry.set_offset_var_value(offset_var.clone(), CircuitVarValue::CoordMap(step_map));
+                        registry.set_offset_var_value(offset_var.clone(), CircuitValue::CoordMap(step_map));
 
                         ParamCircuitExpr::Rotate(
                             Box::new(OffsetExpr::Var(offset_var)),
@@ -730,7 +732,7 @@ mod tests {
     use super::*;
 
     fn test_materializer(program: TransformedProgram, schedule: Schedule) -> ParamCircuitProgram {
-        assert!(schedule.is_schedule_valid(&program.expr));
+        assert!(schedule.is_schedule_valid(&program, &program.expr));
 
         let materializer =
             Materializer::new(vec![
@@ -765,7 +767,7 @@ mod tests {
     fn test_array_materializer(
         mut amat: Box<dyn ArrayMaterializer>,
         shape: Shape,
-        schedule: ArraySchedule,
+        schedule: TransformSchedule,
         transform: ArrayTransform, 
     ) -> (CircuitRegistry, ParamCircuitExpr) {
         let mut registry = CircuitRegistry::new();
@@ -911,7 +913,7 @@ mod tests {
             };
 
         let schedule = 
-            ArraySchedule {
+            TransformSchedule {
                 preprocessing: None,
                 exploded_dims: im::vector![
                     ScheduleDim { index: 0, stride: 1, extent: 3, name: String::from("i"), pad_left: 0, pad_right: 0 },
@@ -932,12 +934,12 @@ mod tests {
             );
 
         let ct_var = circ.ciphertext_vars().iter().next().unwrap().clone();
-        if let CircuitVarValue::CoordMap(coord_map) = registry.get_ct_var_value(&ct_var) {
+        if let CircuitValue::CoordMap(coord_map) = registry.get_ct_var_value(&ct_var) {
             // ct_var should be mapped to the same vector at all coords
             assert!(coord_map.multiplicity() == 9);
             let values: Vec<&CiphertextObject> =
                 coord_map.value_iter()
-                .map(|(_, value)| value)
+                .map(|(_, value)| value.unwrap())
                 .collect();
 
             let first = *values.first().unwrap();
@@ -968,7 +970,7 @@ mod tests {
             };
 
         let schedule = 
-            ArraySchedule {
+            TransformSchedule {
                 preprocessing: None,
                 exploded_dims: im::vector![
                     ScheduleDim { index: 0, stride: 1, extent: 3, name: String::from("i"), pad_left: 0, pad_right: 0 },
@@ -989,12 +991,12 @@ mod tests {
             );
 
         let ct_var = circ.ciphertext_vars().iter().next().unwrap().clone();
-        if let CircuitVarValue::CoordMap(coord_map) = registry.get_ct_var_value(&ct_var) {
+        if let CircuitValue::CoordMap(coord_map) = registry.get_ct_var_value(&ct_var) {
             // ct_var should be mapped to the same vector at all coords
             assert!(coord_map.multiplicity() == 9);
             let values: Vec<&CiphertextObject> =
                 coord_map.value_iter()
-                .map(|(_, value)| value)
+                .map(|(_, value)| value.unwrap())
                 .collect();
 
             let first = *values.first().unwrap();
@@ -1022,7 +1024,7 @@ mod tests {
             };
 
         let schedule = 
-            ArraySchedule {
+            TransformSchedule {
                 preprocessing: Some(ClientPreprocessing::Permute(0, 1)),
                 exploded_dims: im::vector![
                     ScheduleDim { index: 0, stride: 1, extent: 4, name: String::from("x"), pad_left: 0, pad_right: 0 },
@@ -1055,7 +1057,7 @@ mod tests {
             };
 
         let schedule = 
-            ArraySchedule {
+            TransformSchedule {
                 preprocessing: Some(ClientPreprocessing::Permute(0, 1)),
                 exploded_dims: im::vector![
                     ScheduleDim { index: 0, stride: 1, extent: 4, name: String::from("x"), pad_left: 0, pad_right: 0 },
@@ -1105,7 +1107,7 @@ mod tests {
         let schedule =
             Schedule {
                 schedule_map: im::HashMap::from(vec![
-                    (1, ArraySchedule {
+                    (1, TransformSchedule {
                         preprocessing: None,
                         exploded_dims: im::vector![],
                         vectorized_dims: im::vector![

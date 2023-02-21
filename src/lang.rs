@@ -2,7 +2,9 @@ use core::fmt::Display;
 use std::collections::HashMap;
 use std::ops::Index;
 
+use gcollections::ops::Bounded;
 use interval::Interval;
+use interval::ops::Range;
 use lalrpop_util::lalrpop_mod;
 
 lalrpop_mod!(pub parser);
@@ -142,5 +144,34 @@ impl Display for ArrayTransform {
                 .collect::<Vec<String>>()
                 .join(", ")
         )
+    }
+}
+
+impl ArrayTransform {
+    /// return the "identity" transform for a shape
+    pub fn from_shape(name: ArrayName, shape: &Shape) -> ArrayTransform {
+        ArrayTransform {
+            array: name,
+            offset_map: OffsetMap::new(shape.len()),
+            dims:
+                shape.iter().enumerate().map(|(i, dim)| {
+                    DimContent::FilledDim { dim: i, extent: dim.upper() as usize, stride: 1 }
+                }).collect()
+        }
+    }
+
+    /// convert a transform into a shape
+    pub fn as_shape(&self) -> Shape {
+        self.dims.iter().map(|dim| {
+            match dim {
+                DimContent::FilledDim { dim, extent, stride } => {
+                    Interval::new(0 as i64, *extent as i64)
+                },
+
+                DimContent::EmptyDim { extent } => {
+                    Interval::new(0 as i64, *extent as i64)
+                }
+            }
+        }).collect()
     }
 }
