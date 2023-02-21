@@ -23,7 +23,11 @@ pub enum VectorDimContent {
         pad_left: usize, pad_right: usize,
     },
 
-    EmptyDim { extent: usize, pad_left: usize, pad_right: usize, },
+    // dim that has repeated elements from other dims
+    EmptyDim { extent: usize, pad_left: usize, pad_right: usize, oob_right: usize, },
+
+    // dim with a reduced element in its first coordinate
+    ReducedDim { extent: usize, pad_left: usize, pad_right: usize, },
 }
 
 impl Display for VectorDimContent {
@@ -45,12 +49,25 @@ impl Display for VectorDimContent {
                 write!(f, "{{{}:{}::{}{}}}", dim, extent, stride, extra)
             },
 
-            VectorDimContent::EmptyDim { extent, pad_left, pad_right } => {
+            VectorDimContent::EmptyDim { extent, pad_left, pad_right, oob_right } => {
+                let mut extra: String = String::new();
                 if *pad_left != 0 || *pad_right != 0 {
-                    write!(f, "{{{}[pad=({},{})]}}", extent, pad_left, pad_right)
+                    extra.push_str(&format!("[pad=({},{})]", pad_left, pad_right));
+                }
+
+                if *oob_right != 0 {
+                    extra.push_str(&format!("[oob=(0,{})]", oob_right));
+                }
+
+                write!(f, "{{{}{}}}", extent, extra)
+            },
+
+            VectorDimContent::ReducedDim { extent, pad_left, pad_right } => {
+                if *pad_left != 0 || *pad_right != 0 {
+                    write!(f, "{{R{}[pad=({},{})]}}", extent, pad_left, pad_right)
 
                 } else {
-                    write!(f, "{{{}}}", extent)
+                    write!(f, "{{R{}}}", extent)
                 }
             },
         }
@@ -61,16 +78,20 @@ impl VectorDimContent {
     pub fn size(&self) -> usize {
         match self {
             VectorDimContent::FilledDim {
-                dim, extent, stride,
+                dim: _, extent, stride: _,
                 oob_left, oob_right,
                 pad_left, pad_right
             } => {
                 pad_left + oob_left + extent + oob_right + pad_right
             }
 
-            VectorDimContent::EmptyDim { extent, pad_left, pad_right } => {
+            VectorDimContent::EmptyDim { extent, pad_left, pad_right, oob_right } => {
+                pad_left + (*extent) + pad_right + oob_right
+            },
+
+            VectorDimContent::ReducedDim { extent, pad_left, pad_right } => {
                 pad_left + (*extent) + pad_right
-            }
+            },
         }
     }
 }
@@ -118,16 +139,21 @@ impl VectorInfo {
         preprocessing: Option<ClientPreprocessing>,
     ) -> Self {
         let mut clipped_offset_map =
-            schedule.get_offset_map(transform)
+            schedule.get_indexed_offset_map(transform)
             .map(|offset| offset.eval(index_map));
+
+        let transform_offset_map =
+            schedule.get_transform_offset_map(transform)
+            .map(|offset| offset.eval(index_map) as usize);
 
         let mut materialized_dims: im::Vector<VectorDimContent> = im::Vector::new();
         for dim in schedule.vectorized_dims.iter() {
             let dim_content = transform.dims.get(dim.index).unwrap();
+            let transform_dim_offset = transform_offset_map.get(dim.index);
             let materialized_dim = 
                 match dim_content {
                     // clip dimension to (0, array dimension's extent)
-                    DimContent::FilledDim { dim: idim, extent: _, stride: istride } => {
+                    DimContent::FilledDim { dim: idim, extent: transform_extent, stride: istride } => {
                         let dim_offset = *clipped_offset_map.get(*idim);
                         let array_extent = array_shape[*idim].upper() as usize;
                         let new_stride = *istride * dim.stride;
@@ -141,6 +167,10 @@ impl VectorInfo {
                         // indexing beyond array_extent; clip
                         let mut oob_right: usize = 0;
                         while dim_offset + ((new_stride * (dim.extent - 1 - oob_right)) as isize) >= array_extent as isize {
+                            oob_right += 1;
+                        }
+
+                        while transform_dim_offset + (dim.stride * (dim.extent - 1 - oob_right)) >= *transform_extent {
                             oob_right += 1;
                         }
 
@@ -161,11 +191,17 @@ impl VectorInfo {
                         }
                     },
 
-                    DimContent::EmptyDim { extent: _ } => {
+                    DimContent::EmptyDim { extent: transform_extent } => {
+                        let mut oob_right: usize = 0;
+                        while transform_dim_offset + (dim.stride * (dim.extent - 1 - oob_right)) >= *transform_extent {
+                            oob_right += 1;
+                        }
+
                         VectorDimContent::EmptyDim {
                             extent: dim.extent,
                             pad_left: dim.pad_left,
                             pad_right: dim.pad_right,
+                            oob_right,
                         }
                     }
                 };
@@ -183,6 +219,8 @@ impl VectorInfo {
 
     // derive other from self
     pub fn derive(&self, other: &VectorInfo) -> Option<(isize, PlaintextObject)> {
+        use VectorDimContent::*;
+
         if self.dims.len() != other.dims.len() {
             None
 
@@ -191,6 +229,7 @@ impl VectorInfo {
 
         } else {
             let mut seen_dims: HashSet<DimIndex> = HashSet::new();
+            let mut dims_to_fill: Vec<usize> = Vec::new();
 
             // check derivability conditions
             let dims_derivable = 
@@ -198,12 +237,12 @@ impl VectorInfo {
                 .zip(other.dims.iter())
                 .all(|(dim1, dim2)| {
                     match (*dim1, *dim2) {
-                        (VectorDimContent::FilledDim {
+                        (FilledDim {
                             dim: idim1, extent: extent1, stride: stride1,
                             oob_left: oob_left1, oob_right: oob_right1,
                             pad_left: pad_left1, pad_right: pad_right1,
                         },
-                        VectorDimContent::FilledDim {
+                        FilledDim {
                             dim: idim2, extent: extent2, stride: stride2,
                             oob_left: oob_left2, oob_right: oob_right2,
                             pad_left: pad_left2, pad_right: pad_right2,
@@ -234,6 +273,7 @@ impl VectorInfo {
                                 offset1 + (stride1 * extent1) >= offset2 + (stride2 * extent2);
 
                             // self cannot have out of bounds values
+                            // TODO this is not needed!
                             let self_no_oob = oob_left1 == 0 && oob_right1 == 0;
 
                             seen_dims.insert(idim1);
@@ -241,20 +281,45 @@ impl VectorInfo {
                             same_size && in_extent && self_no_oob
                         },
                         
-                        (VectorDimContent::EmptyDim { extent: extent1, pad_left: pad_left1, pad_right: pad_right1 },
-                        VectorDimContent::EmptyDim { extent: extent2, pad_left: pad_left2, pad_right: pad_right2  }) => {
-                            pad_left1 + extent1 + pad_right1 == pad_left2 + extent2 + pad_right2 &&
+                        // empty dims will not be rotated for derivation, but
+                        // but they might need to be masked
+                        (EmptyDim { extent: extent1, pad_left: pad_left1, pad_right: pad_right1, oob_right: oob_right1 },
+                        EmptyDim { extent: extent2, pad_left: pad_left2, pad_right: pad_right2, oob_right: oob_right2  }) => {
+                            pad_left1 + extent1 + pad_right1 + oob_right1 == pad_left2 + extent2 + pad_right2 + oob_right2 &&
+
+                            // the padding for derived vector must be more
+                            // thant the padding for the parent, since we can
+                            // only mask parent contents (not add more)
+                            pad_left1 <= pad_left2 && pad_right1 + oob_right1 <= pad_right2 + oob_right2 &&
 
                             // can always truncate empty dims with more padding,
                             // but don't support extending dims (yet)
                             extent1 >= extent2
                         },
 
-                        (VectorDimContent::FilledDim { dim: _, extent: _, stride: _, oob_left: _, oob_right: _, pad_left: _, pad_right: _ },
-                            VectorDimContent::EmptyDim { extent: _, pad_left: _, pad_right: _ }) |
-                        (VectorDimContent::EmptyDim { extent: _, pad_left: _, pad_right: _ },
-                            VectorDimContent::FilledDim { dim: _, extent: _, stride: _, oob_left: _, oob_right: _, pad_left: _, pad_right: _ })
-                        => false,
+                        // we can derive an empty dim
+                        // TODO add reduced dim to a list of dims to fill back in
+                        (ReducedDim { extent: extent1, pad_left: pad_left1, pad_right: pad_right1 },
+                        EmptyDim { extent: extent2, pad_left: pad_left2, pad_right: pad_right2, oob_right: oob_right2 }) =>  {
+                            // this has the same restrictions as deriving from
+                            // an empty dim, except we need to fill the
+                            // reduced parent dim first
+                            pad_left1 + extent1 + pad_right1 == pad_left2 + extent2 + pad_right2 + oob_right2 &&
+                            pad_left1 <= pad_left2 && pad_right1 <= pad_right2 + oob_right2 &&
+                            extent1 >= extent2
+                        },
+
+                        (FilledDim { dim: _, extent: _, stride: _, oob_left: _, oob_right: _, pad_left: _, pad_right: _ },
+                        EmptyDim { extent: _, pad_left: _, pad_right: _, oob_right: _ }) |
+
+                        (EmptyDim { extent: _, pad_left: _, pad_right: _, oob_right: _ },
+                        FilledDim { dim: _, extent: _, stride: _, oob_left: _, oob_right: _, pad_left: _, pad_right: _ }) |
+
+                        (_, ReducedDim { extent: _, pad_left: _, pad_right: _ }) |
+
+                        (ReducedDim { extent:_, pad_left:_, pad_right:_ },
+                        FilledDim { dim:_, extent:_, stride:_, oob_left:_, oob_right:_, pad_left:_, pad_right:_ }) =>
+                            false,
                     }
                 });
 
@@ -263,12 +328,13 @@ impl VectorInfo {
                 .filter(|dim| {
                     !self.dims.iter().any(|dim2_content| {
                         match dim2_content {
-                            VectorDimContent::FilledDim {
+                            FilledDim {
                                 dim: dim2, extent: _, stride: _,
                                 oob_left: _, oob_right: _, pad_left: _, pad_right: _,
                             } => dim == dim2,
 
-                            VectorDimContent::EmptyDim { extent: _, pad_left: _, pad_right : _ } => false,
+                            EmptyDim { extent: _, pad_left: _, pad_right : _, oob_right: _ } |
+                            ReducedDim { extent: _, pad_left: _, pad_right : _ } => false,
                         }
                     })
                 });
@@ -278,21 +344,32 @@ impl VectorInfo {
                     self.offset_map.get(dim) == other.offset_map.get(dim)
                 });
 
-            if self.array == other.array && dims_derivable && nonvectorized_dims_equal_offsets {
+            if self.array != other.array || !dims_derivable || !nonvectorized_dims_equal_offsets {
+                None
+
+            } else {
                 let mut block_size: usize = 1;
                 let mut rotate_steps = 0;
-                let mut mask_dim_info: im::Vector<(usize, usize, usize)> = im::Vector::new();
+
+                // tuple of (dim_size, mask_opt) for each dim
+                // if mask_opt is None, nothing to mask;
+                // otherwise, mask along interval (lo, hi) where mask_opt = Some((lo, hi))
+                let mut mask_dim_info: Vec<(usize, Option<(usize, usize)>)> = Vec::new();
 
                 self.dims.iter()
                 .zip(other.dims.iter()).rev()
-                .for_each(|(dim1, dim2)| {
+                .enumerate()
+                .for_each(|(i, (dim1, dim2))| {
                     match (*dim1, *dim2) {
-                        (VectorDimContent::FilledDim {
+                        // this assumes that parent OOB and pad regions are zeroed out
+                        // the masking here will prevent the contents of parent
+                        // from being in the OOB region of the derived vector
+                        (FilledDim {
                             dim: idim1, extent: extent1, stride: stride1,
                             oob_left: oob_left1, oob_right: oob_right1,
                             pad_left: pad_left1, pad_right: pad_right1,
                         },
-                        VectorDimContent::FilledDim {
+                        FilledDim {
                             dim: idim2, extent: extent2, stride: stride2,
                             oob_left: oob_left2, oob_right: oob_right2,
                             pad_left: pad_left2, pad_right: pad_right2,
@@ -308,102 +385,140 @@ impl VectorInfo {
                             rotate_steps += dim_steps * (block_size as isize);
                             block_size *= dim_size;
 
-                            let oob_left2_lo = pad_left2;
-                            let oob_left2_hi = oob_left2_lo + oob_left2;
+                            // assume that the dimensions are laid out in the parent like:
+                            // wrapl_content1 | wrapl pad_right | pad_left1 | oob_left1 | content1 | oob_right1 | pad_right1 | wrapr pad_left1 | wrapr_content1
 
-                            let oob_left2_lo_intersect =
-                                dim_steps - ((pad_right1 + pad_left1) as isize) > oob_left2_lo as isize;
+                            let wrapl_content1_hi = 
+                                dim_steps - (pad_right1 as isize) - 1;
 
-                            let oob_left2_hi_intersect =
-                                dim_steps + (pad_left1 as isize) < oob_left2_hi as isize;
+                            let content1_lo =
+                                dim_steps + ((pad_left1 + oob_left1) as isize);
 
-                            let need_mask_left =
-                                oob_left2_lo != oob_left2_hi &&
-                                (oob_left2_lo_intersect || oob_left2_hi_intersect);
+                            let content1_hi =
+                                dim_steps + ((pad_left1 + oob_left1 + extent1) as isize) - 1;
 
-                            let mask_lo =
-                                if need_mask_left {
-                                    pad_left2 + oob_left2
+                            let wrapr_content1_lo = 
+                                dim_steps + ((dim_size + pad_left1) as isize);
 
-                                } else {
-                                    pad_left2
-                                };
+                            let oob_left2_lo = pad_left2 as isize;
+                            let oob_left2_hi = oob_left2_lo + (oob_left2 as isize);
 
-                            let oob_right2_lo = pad_left2 + oob_left2 + extent2;
-                            let oob_right2_hi = oob_right2_lo + oob_right2;
+                            let oob_right2_lo = (pad_left2 + oob_left2 + extent2) as isize;
+                            let oob_right2_hi = oob_right2_lo + (oob_right2 as isize);
 
-                            let oob_right2_lo_intersect =
-                                dim_steps + ((pad_left1 + extent1) as isize) > oob_right2_lo as isize;
+                            // check if wrapl_content1_hi or content1_lo
+                            // intersects with the oob_left interval
+                            let oob_left2_intersect =
+                                wrapl_content1_hi >= oob_left2_lo ||
+                                content1_lo <= oob_left2_hi;
 
-                            let oob_right2_hi_intersect =
-                                dim_steps + ((pad_left1 + extent1 + pad_right1 + pad_left1) as isize) < oob_right2_hi as isize;
-
-                            let need_mask_right =
-                                oob_right2_hi != oob_right2_lo &&
-                                (oob_right2_lo_intersect || oob_right2_hi_intersect);
-
-                            let mask_hi = 
-                                if need_mask_right {
-                                    dim_size - pad_right2 - oob_right2 - 1
+                            // if the OOB left interval in derived vector is nonempty
+                            // and parent's contents intersect with it, mask OOB left in derived
+                            let mask_lo_opt =
+                                if oob_left2_lo != oob_left2_hi && oob_left2_intersect {
+                                    Some(pad_left2 + oob_left2)
 
                                 } else {
-                                    dim_size - pad_right2 - 1
+                                    None
                                 };
 
-                            let mask_dim =
-                                // don't mask anything
-                                if mask_lo == pad_left2 && mask_hi == dim_size - pad_right2 - 1 {
-                                    (dim_size, 0, dim_size-1)
+                            // check if content1_hi or wrapr_content1_lo
+                            // intersects with the oob_left interval
+                            let oob_right2_intersect =
+                                content1_hi >= oob_right2_lo ||
+                                wrapr_content1_lo <= oob_right2_hi;
 
-                                } else { // mask the OOB region
-                                    (dim_size, mask_lo, mask_hi)
+                            // if the OOB right interval in derived vector is nonempty
+                            // and parent's contents intersect with it, mask OOB right in derived
+                            let mask_hi_opt = 
+                                if oob_right2_hi != oob_right2_lo && oob_right2_intersect {
+                                    Some(dim_size - pad_right2 - oob_right2 - 1)
+
+                                } else {
+                                    None
                                 };
 
-                            mask_dim_info.push_back(mask_dim);
+                            let dim_mask =
+                                match (mask_lo_opt, mask_hi_opt) {
+                                    (None, None) => None,
+
+                                    (None, Some(hi)) => Some((pad_left2, hi)),
+
+                                    (Some(lo), None) => Some((lo, dim_size - pad_right2 - 1)),
+
+                                    (Some(lo), Some(hi)) => Some((lo, hi))
+                                };
+
+                            mask_dim_info.push((dim_size, dim_mask));
                         },
                         
-                        (VectorDimContent::EmptyDim { extent: extent1, pad_left: pad_left1, pad_right: pad_right1 },
-                        VectorDimContent::EmptyDim { extent: extent2, pad_left: pad_left2, pad_right: pad_right2 }) => {
+                        (EmptyDim { extent: extent1, pad_left: pad_left1, pad_right: pad_right1, oob_right: oob_right1 },
+                        EmptyDim { extent: extent2, pad_left: pad_left2, pad_right: pad_right2, oob_right: oob_right2 }) => {
+                            let dim_size = pad_left1 + extent1 + pad_right1 + oob_right1;
+                            block_size *= dim_size;
+
+                            let dim_mask =
+                                // don't mask anything
+                                if pad_left1 == pad_left2 && pad_right1 + oob_right1 == pad_right2 + oob_right2 {
+                                    None
+
+                                } else {
+                                    Some((pad_left2, dim_size - pad_right2 - oob_right2 -1))
+                                };
+ 
+                            mask_dim_info.push((dim_size, dim_mask));
+                        },
+
+                        (ReducedDim { extent: extent1, pad_left: pad_left1, pad_right: pad_right1 },
+                        EmptyDim { extent: extent2, pad_left: pad_left2, pad_right: pad_right2, oob_right: oob_right2  }) => {
                             let dim_size = pad_left1 + extent1 + pad_right1;
                             block_size *= dim_size;
 
-                            let mask_dim =
+                            let dim_mask =
                                 // don't mask anything
-                                if pad_left1 == pad_left2 && pad_right1 == pad_right2 {
-                                    (dim_size, 0, dim_size - 1)
+                                if pad_left1 == pad_left2 && pad_right1 == pad_right2 + oob_right2 {
+                                    None
 
                                 } else {
-                                    (dim_size, pad_left2, pad_right2)
+                                    Some((pad_left2, dim_size - pad_right2 - oob_right2 -1))
                                 };
- 
-                            mask_dim_info.push_back(mask_dim);
+
+                            dims_to_fill.push(self.dims.len() - 1 -i);
+                            mask_dim_info.push((dim_size, dim_mask));
                         },
 
-                        (VectorDimContent::FilledDim { dim: _, extent: _, stride: _, oob_left: _, oob_right: _, pad_left: _, pad_right: _ },
-                            VectorDimContent::EmptyDim { extent: _, pad_left: _, pad_right: _ }) |
-                        (VectorDimContent::EmptyDim { extent: _, pad_left: _, pad_right: _ },
-                            VectorDimContent::FilledDim { dim: _, extent: _, stride: _, oob_left: _, oob_right: _, pad_left: _, pad_right: _ })
-                        => unreachable!()
+                        (ReducedDim { extent:_, pad_left:_, pad_right:_ },
+                        FilledDim { dim:_, extent:_, stride:_, oob_left:_, oob_right:_, pad_left:_, pad_right:_ }) |
+                        (FilledDim { dim: _, extent: _, stride: _, oob_left: _, oob_right: _, pad_left: _, pad_right: _ },
+                        EmptyDim { extent: _, pad_left: _, pad_right: _, oob_right: _ }) |
+                        (EmptyDim { extent: _, pad_left: _, pad_right: _, oob_right: _ },
+                        FilledDim { dim: _, extent: _, stride: _, oob_left: _, oob_right: _, pad_left: _, pad_right: _ }) |
+                        (_, ReducedDim { extent: _, pad_left: _, pad_right: _ }) =>
+                            unreachable!(),
                     }
                 });
 
                 let is_mask_const =
-                    mask_dim_info.iter().all(|(size, lo, hi)| {
-                        *lo == 00 && *hi == size - 1
-                    });
+                    mask_dim_info.iter()
+                    .all(|(_, dim_mask)| dim_mask.is_none());
 
                 let mask =
                     if is_mask_const {
                         PlaintextObject::Const(1)
 
                     } else {
-                        PlaintextObject::Mask(mask_dim_info)
+                        let mask =
+                            mask_dim_info.into_iter().map(|(dim_size, dim_mask)| {
+                                match dim_mask {
+                                    Some((lo, hi)) => (dim_size, lo, hi),
+                                    None => (dim_size, 0, dim_size - 1)
+                                }
+                            }).collect();
+
+                        PlaintextObject::Mask(mask)
                     };
 
                 Some((rotate_steps, mask))
-
-            } else {
-                None
             }
         }
     }
@@ -470,7 +585,6 @@ mod tests {
         assert_eq!(res.0, 0);
         assert_eq!(res.1, PlaintextObject::Const(1));
     }
-
 
     #[test]
     fn test_vector_derive2() {
@@ -588,53 +702,6 @@ mod tests {
     }
 
     #[test]
-    fn test_vector_derive5() {
-        // vec1: 0 1 2 3
-        let vec1 = 
-            VectorInfo {
-                array: String::from("a"),
-                preprocessing: None,
-                offset_map: OffsetMap::new(2),
-                dims: im::vector![
-                    VectorDimContent::FilledDim {
-                        dim: 0,
-                        extent: 4,
-                        stride: 1,
-                        oob_left: 0, oob_right: 0,
-                        pad_left: 0, pad_right: 0,
-                    }
-                ],
-            };
-
-        // vec2: x 1 2 3
-        let mut offset2: OffsetMap<usize> = OffsetMap::new(2);
-        offset2.set(0, 1);
-
-        let vec2= 
-            VectorInfo {
-                array: String::from("a"),
-                preprocessing: None,
-                offset_map: offset2,
-                dims: im::vector![
-                    VectorDimContent::FilledDim {
-                        dim: 0,
-                        extent: 3,
-                        stride: 1,
-                        oob_left: 1, oob_right: 0,
-                        pad_left: 0, pad_right: 0,
-                    }
-                ],
-            };
-
-        let res = vec1.derive(&vec2).unwrap();
-        println!("{:?}", res);
-
-        // vec1 just needs to be masked to derive vec2, no rotation required
-        assert_eq!(res.0, 0);
-        assert_ne!(res.1, PlaintextObject::Const(1));
-    }
-
-    #[test]
     fn test_vector_derive6() {
         // vec1: 0 1 2 3
         let vec1 = 
@@ -677,5 +744,65 @@ mod tests {
         // rot(1, vec1) == rot2
         assert_eq!(res.0, 1);
         assert_ne!(res.1, PlaintextObject::Const(1));
+    }
+
+    #[test]
+    fn test_vector_derive7() {
+        // vec1: R X X X
+        // (R is reduced value)
+        let vec1 = 
+            VectorInfo {
+                array: String::from("a"),
+                preprocessing: None,
+                offset_map: OffsetMap::new(2),
+                dims: im::vector![
+                    VectorDimContent::FilledDim {
+                        dim: 0,
+                        stride: 1,
+                        extent: 4,
+                        pad_left: 0,
+                        pad_right: 0,
+                        oob_left: 0,
+                        oob_right: 0,
+                    },
+                    VectorDimContent::ReducedDim {
+                        extent: 4,
+                        pad_left: 0,
+                        pad_right: 0,
+                    },
+                ],
+            };
+
+        let offset2: OffsetMap<usize> = OffsetMap::new(2);
+        let vec2= 
+            VectorInfo {
+                array: String::from("a"),
+                preprocessing: None,
+                offset_map: offset2,
+                dims: im::vector![
+                    VectorDimContent::FilledDim {
+                        dim: 0,
+                        stride: 1,
+                        extent: 4,
+                        pad_left: 0,
+                        pad_right: 0,
+                        oob_left: 0,
+                        oob_right: 0,
+                    },
+                    VectorDimContent::EmptyDim {
+                        extent: 4,
+                        pad_left: 0,
+                        pad_right: 0,
+                        oob_right: 0,
+                    }
+                ],
+            };
+
+        let res = vec1.derive(&vec2).unwrap();
+        println!("{:?}", res);
+
+        // rot(1, vec1) == rot2
+        assert_eq!(res.0, 0);
+        assert_eq!(res.1, PlaintextObject::Const(1));
     }
 }

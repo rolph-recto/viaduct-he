@@ -164,7 +164,8 @@ impl ArraySchedule {
         sdims.into_iter().map(|(_,extent)| extent).collect()
     }
 
-    pub fn get_offset_map(&self, transform: &ArrayTransform) -> OffsetMap<OffsetExpr> {
+    // get a parameterized offset map for the *array* indexed by transform
+    pub fn get_indexed_offset_map(&self, transform: &ArrayTransform) -> OffsetMap<OffsetExpr> {
         let num_dims = transform.offset_map.num_dims();
         let mut param_offset_map: OffsetMap<OffsetExpr> = OffsetMap::new(num_dims);
         for i in 0..num_dims {
@@ -197,6 +198,34 @@ impl ArraySchedule {
                 // if the dim is empty, no offset needs to be updated
                 DimContent::EmptyDim { extent: _ } => {}
             }
+        }
+
+        param_offset_map
+    }
+
+    // get a parameterized offset map for the transform itself
+    pub fn get_transform_offset_map(&self, transform: &ArrayTransform) -> OffsetMap<OffsetExpr> {
+        let num_dims = transform.dims.len();
+        let mut param_offset_map: OffsetMap<OffsetExpr> = OffsetMap::new(num_dims);
+        for i in 0..num_dims {
+            let cur_offset = *transform.offset_map.get(i);
+            param_offset_map.set(i, OffsetExpr::Literal(cur_offset));
+        }
+
+        for sched_dim in self.exploded_dims.iter() {
+            let cur_offset = param_offset_map.get(sched_dim.index).clone();
+            let new_offset =
+                OffsetExpr::Add(
+                    Box::new(cur_offset),
+                    Box::new(
+                        OffsetExpr::Mul(
+                            Box::new(OffsetExpr::Literal(sched_dim.stride as isize)),
+                            Box::new(OffsetExpr::Var(sched_dim.name.clone()))
+                        )
+                    )
+                );
+
+            param_offset_map.set(sched_dim.index, new_offset);
         }
 
         param_offset_map
@@ -477,7 +506,9 @@ impl Schedule {
                         match dim {
                             VectorScheduleDim::Filled(sched_dim) => {
                                 if sched_dim.index == reduced_index {
-                                    if i == 0 { // if outermost dim is reduced, it is repeated
+                                    // if outermost dim is reduced and there's no padding,
+                                    // the dim contents are repeated
+                                    if i == 0 && sched_dim.pad_left == 0 && sched_dim.pad_right == 0 {
                                         VectorScheduleDim::ReducedRepeated(sched_dim.extent)
 
                                     } else {

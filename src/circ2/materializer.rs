@@ -149,7 +149,7 @@ impl Materializer {
                 }
             },
 
-            // this is assumed to be a transformation of an input array
+            // TODO this is assumed to be a transformation of an input array
             TransformedExpr::ExprRef(ref_id) => {
                 let schedule = &schedule.schedule_map[ref_id];
                 let transform = &program.inputs[ref_id];
@@ -166,49 +166,6 @@ impl Materializer {
                 Err(format!("No array materializer can process expr ref {}", ref_id))
             },
         }
-    }
-}
-
-// array materializer that doesn't attempt to derive vectors
-pub struct DummyArrayMaterializer {}
-
-impl ArrayMaterializer for DummyArrayMaterializer {
-    // the dummy materializer can only materialize arrays w/o client preprocessing
-    fn can_materialize(
-        &self,
-        _array_shape: &Shape,
-        schedule: &ArraySchedule,
-        _transform: &ArrayTransform,
-    ) -> bool {
-        schedule.preprocessing.is_none()
-    }
-
-    fn materialize(
-        &mut self,
-        array_shape: &Shape,
-        schedule: &ArraySchedule,
-        transform: &ArrayTransform,
-        registry: &mut CircuitRegistry
-    ) -> ParamCircuitExpr {
-        let ct_var = registry.fresh_ct_var();
-        let mut coord_map: IndexCoordinateMap<CiphertextObject> =
-            IndexCoordinateMap::new(schedule.exploded_dims.iter());
-
-        let index_vars = coord_map.index_vars();
-
-        // register vectors
-        for coord in coord_map.coord_iter() {
-            let index_map: HashMap<DimName, usize> =
-                index_vars.clone().into_iter().zip(coord.clone()).collect();
-
-            let vector =
-                VectorInfo::get_vector_at_coord(array_shape, &index_map, schedule, transform, None);
-
-            coord_map.set(coord, CiphertextObject::Vector(vector));
-        }
-        
-        registry.set_ct_var_value(ct_var.clone(), CircuitVarValue::CoordMap(coord_map));
-        ParamCircuitExpr::CiphertextVar(ct_var)
     }
 }
 
@@ -486,6 +443,49 @@ impl VectorDeriver {
     }
 }
 
+// array materializer that doesn't attempt to derive vectors
+pub struct DummyArrayMaterializer {}
+
+impl ArrayMaterializer for DummyArrayMaterializer {
+    // the dummy materializer can only materialize arrays w/o client preprocessing
+    fn can_materialize(
+        &self,
+        _array_shape: &Shape,
+        schedule: &ArraySchedule,
+        _transform: &ArrayTransform,
+    ) -> bool {
+        schedule.preprocessing.is_none()
+    }
+
+    fn materialize(
+        &mut self,
+        array_shape: &Shape,
+        schedule: &ArraySchedule,
+        transform: &ArrayTransform,
+        registry: &mut CircuitRegistry
+    ) -> ParamCircuitExpr {
+        let ct_var = registry.fresh_ct_var();
+        let mut coord_map: IndexCoordinateMap<CiphertextObject> =
+            IndexCoordinateMap::new(schedule.exploded_dims.iter());
+
+        let index_vars = coord_map.index_vars();
+
+        // register vectors
+        for coord in coord_map.coord_iter() {
+            let index_map: HashMap<DimName, usize> =
+                index_vars.clone().into_iter().zip(coord.clone()).collect();
+
+            let vector =
+                VectorInfo::get_vector_at_coord(array_shape, &index_map, schedule, transform, None);
+
+            coord_map.set(coord, CiphertextObject::Vector(vector));
+        }
+        
+        registry.set_ct_var_value(ct_var.clone(), CircuitVarValue::CoordMap(coord_map));
+        ParamCircuitExpr::CiphertextVar(ct_var)
+    }
+}
+
 pub struct DefaultArrayMaterializer {
     deriver: VectorDeriver,
 }
@@ -549,7 +549,18 @@ impl ArrayMaterializer for DiagonalArrayMaterializer {
             // TODO: for now, assume i and j are NOT tiled
             let tiling_i = schedule.get_tiling(dim_i);
             let tiling_j = schedule.get_tiling(dim_j);
-            tiling_i == tiling_j && tiling_i.len() == 1 && i_exploded && j_outermost_vectorized
+
+            // dim i and j cannot have any padding
+            let no_padding =
+                schedule.vectorized_dims.iter().all(|dim| {
+                    (dim.index == dim_i && dim.pad_left == 0 && dim.pad_right == 0) ||
+                    (dim.index == dim_j && dim.pad_left == 0 && dim.pad_right == 0) ||
+                    (dim.index != dim_i || dim.index != dim_j)
+                });
+
+            // TODO: for now, assume i and j are NOT tiled
+            tiling_i == tiling_j && tiling_i.len() == 1 && i_exploded
+            && j_outermost_vectorized && no_padding
 
         } else {
             false
@@ -715,7 +726,7 @@ impl ArrayMaterializer for DiagonalArrayMaterializer {
 mod tests {
     use interval::{Interval, ops::Range};
 
-    use crate::{lang::{parser::ProgramParser, index_elim2::IndexElimination2, source::SourceProgram, BaseOffsetMap, index_elim::Transform}, scheduling::ScheduleDim};
+    use crate::{lang::{parser::ProgramParser, index_elim2::IndexElimination2, source::SourceProgram, BaseOffsetMap}, scheduling::ScheduleDim};
     use super::*;
 
     fn test_materializer(program: TransformedProgram, schedule: Schedule) -> ParamCircuitProgram {
