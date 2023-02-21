@@ -208,8 +208,7 @@ impl ArraySchedule {
         let num_dims = transform.dims.len();
         let mut param_offset_map: OffsetMap<OffsetExpr> = OffsetMap::new(num_dims);
         for i in 0..num_dims {
-            let cur_offset = *transform.offset_map.get(i);
-            param_offset_map.set(i, OffsetExpr::Literal(cur_offset));
+            param_offset_map.set(i, OffsetExpr::Literal(0));
         }
 
         for sched_dim in self.exploded_dims.iter() {
