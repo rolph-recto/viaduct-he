@@ -10,11 +10,11 @@ use crate::{
     },
     lang::{
         ArrayTransform, Shape, DimContent, Operator, 
-        index_elim::{TransformedProgram, TransformedExpr},
+        index_elim::{TransformedProgram, TransformedExpr}, ExprRefId, Extent,
     },
     scheduling::{
         TransformSchedule, ExprScheduleType, DimName, OffsetExpr, Schedule,
-        ClientPreprocessing, VectorScheduleDim
+        ClientPreprocessing, VectorScheduleDim, OffsetEnvironment, ExprSchedule
     },
     util
 };
@@ -39,39 +39,63 @@ pub trait ArrayMaterializer {
 /// materializes a schedule for an index-free program.
 pub struct Materializer {
     array_materializers: Vec<Box<dyn ArrayMaterializer>>,
+    program: TransformedProgram,
     registry: CircuitRegistry,
+    circuit_map: HashMap<ExprRefId, ParamCircuitExpr>,
+    expr_name_map: HashMap<ExprRefId, String>,
+    expr_schedule_map: HashMap<ExprRefId, ExprScheduleType>,
 }
 
 impl Materializer {
-    pub fn new(array_materializers: Vec<Box<dyn ArrayMaterializer>>) -> Self {
-        Materializer { array_materializers, registry: CircuitRegistry::new() }
+    pub fn new(
+        array_materializers: Vec<Box<dyn ArrayMaterializer>>,
+        program: TransformedProgram,
+    ) -> Self {
+        Materializer {
+            array_materializers,
+            program,
+            registry: CircuitRegistry::new(),
+            circuit_map: HashMap::new(),
+            expr_schedule_map: HashMap::new(),
+            expr_name_map: HashMap::new(),
+        }
     }
 
     /// packages the materialized expr with the vector registry
-    pub fn materialize(
-        mut self,
-        program: &TransformedProgram,
-        schedule: &Schedule
-    ) -> Result<ParamCircuitProgram, String> {
-        let (schedule, expr) =
-            self.materialize_expr(
-                &program,
-                program.get_expr(program.output_expr),
-                schedule
-            )?;
+    pub fn materialize(mut self, schedule: &Schedule) -> Result<ParamCircuitProgram, String> {
+        let expr_ids = self.program.get_expr_order();
 
-        Ok(
-            ParamCircuitProgram {
-                schedule, expr, registry: self.registry
-            }
-        )
+        let mut circuit_list: Vec<(String, Vec<(DimName,Extent)>, ParamCircuitExpr)> = vec![];
+        expr_ids.into_iter().try_for_each(|id| -> Result<(), String> {
+            let expr = self.program.get_expr(id).clone();
+            let (schedule, circuit) =
+                self.materialize_expr(&expr, schedule)?;
+
+            let name = format!("expr_{}", id);
+            let dims =
+                match &schedule {
+                    ExprScheduleType::Any => vec![],
+
+                    ExprScheduleType::Specific(spec_sched) => {
+                        spec_sched.exploded_dims.iter().map(|dim| {
+                            (dim.name.clone(), dim.extent)
+                        }).collect()
+                    }
+                };
+
+            self.circuit_map.insert(id, circuit.clone());
+            self.expr_schedule_map.insert(id, schedule);
+            self.expr_name_map.insert(id, name.clone());
+            circuit_list.push((name, dims, circuit));
+            Ok(())
+        })?;
+
+
+        Ok(ParamCircuitProgram { registry: self.registry, circuit_list })
     }
 
     fn materialize_expr(
-        &mut self,
-        program: &TransformedProgram,
-        expr: &TransformedExpr,
-        schedule: &Schedule
+        &mut self, expr: &TransformedExpr, schedule: &Schedule
     ) -> Result<(ExprScheduleType, ParamCircuitExpr), String> {
         match expr {
             TransformedExpr::Literal(lit) => {
@@ -80,8 +104,8 @@ impl Materializer {
             },
 
             TransformedExpr::Op(op, expr1, expr2) => {
-                let (sched1, mat1) = self.materialize_expr(program, expr1, schedule)?;
-                let (sched2, mat2) = self.materialize_expr(program, expr2, schedule)?;
+                let (sched1, mat1) = self.materialize_expr(expr1, schedule)?;
+                let (sched2, mat2) = self.materialize_expr(expr2, schedule)?;
                 let schedule = Schedule::schedule_op(&sched1, &sched2)?;
                 let expr = ParamCircuitExpr::Op(op.clone(), Box::new(mat1), Box::new(mat2));
                 Ok((schedule, expr))
@@ -90,7 +114,7 @@ impl Materializer {
             // TODO support client transforms
             TransformedExpr::ReduceNode(reduced_index, op, body) => {
                 let (body_sched, mat_body) =
-                    self.materialize_expr(program, body, schedule)?;
+                    self.materialize_expr(body, schedule)?;
 
                 let schedule = Schedule::schedule_reduce(*reduced_index, &body_sched)?;
 
@@ -158,20 +182,34 @@ impl Materializer {
 
             // TODO this is assumed to be a transformation of an input array
             TransformedExpr::ExprRef(ref_id) => {
-                let schedule = &schedule.schedule_map[ref_id];
-                let transform = &program.input_map[ref_id];
-                let array_shape = &program.array_shapes[&transform.array];
+                if self.program.is_expr(*ref_id) {
+                    let ref_schedule_type = self.expr_schedule_map.get(ref_id).unwrap();
+                    match ref_schedule_type {
+                        ExprScheduleType::Any => {
+                            Err(format!("no support for expressions being literals yet"))
+                        },
 
-                for amat in self.array_materializers.iter_mut() {
-                    if amat.can_materialize(array_shape, schedule, transform) {
-                        let expr = amat.materialize(array_shape, schedule, transform, &mut self.registry);
-                        let shape = transform.as_shape();
-                        let schedule = ExprScheduleType::Specific(schedule.to_expr_schedule(shape));
-                        return Ok((schedule, expr))
+                        ExprScheduleType::Specific(ref_sched) => {
+                            todo!()
+                        }
                     }
-                }
 
-                Err(format!("No array materializer can process expr ref {}", ref_id))
+                } else {
+                    let schedule = &schedule.schedule_map[ref_id];
+                    let transform = &self.program.input_map[ref_id];
+                    let array_shape = &self.program.array_shapes[&transform.array];
+
+                    for amat in self.array_materializers.iter_mut() {
+                        if amat.can_materialize(array_shape, schedule, transform) {
+                            let expr = amat.materialize(array_shape, schedule, transform, &mut self.registry);
+                            let shape = transform.as_shape();
+                            let schedule = ExprScheduleType::Specific(schedule.to_expr_schedule(shape));
+                            return Ok((schedule, expr))
+                        }
+                    }
+
+                    Err(format!("No array materializer can process expr ref {}", ref_id))
+                }
             },
         }
     }
@@ -264,7 +302,7 @@ impl VectorDeriver {
 
             let vector =
                 VectorInfo::get_input_vector_at_coord(
-                    &index_map,
+                    index_map,
                     array_shape,
                     schedule,
                     transform,
@@ -289,13 +327,13 @@ impl VectorDeriver {
 
                 step_map.set(coord.clone(), steps);
                 mask_map.set(coord.clone(), mask);
-                obj_map.set(coord, CiphertextObject::Vector(parent.clone()));
+                obj_map.set(coord, CiphertextObject::InputVector(parent.clone()));
 
             } else { // the vector is not derived
                 let vector = self.get_vector(vector_id);
                 step_map.set(coord.clone(), 0);
                 mask_map.set(coord.clone(), PlaintextObject::Const(1));
-                obj_map.set(coord, CiphertextObject::Vector(vector.clone()));
+                obj_map.set(coord, CiphertextObject::InputVector(vector.clone()));
             }
         }
     }
@@ -354,7 +392,8 @@ impl VectorDeriver {
             let index_map: HashMap<DimName, usize> =
                 index_vars.clone().into_iter().zip(coord.clone()).collect();
 
-            let predicted_value = offset_expr.eval(&index_map);
+            let offset_env = OffsetEnvironment::new(index_map);
+            let predicted_value = offset_expr.eval(&offset_env);
             if value != predicted_value {
                 return None
             }
@@ -452,7 +491,7 @@ impl VectorDeriver {
             let index_map: HashMap<DimName, usize> = HashMap::new();
             let vector =
                 VectorInfo::get_input_vector_at_coord(
-                    &index_map,
+                    index_map,
                     array_shape,
                     schedule, 
                     transform,
@@ -461,7 +500,7 @@ impl VectorDeriver {
 
             registry.set_ct_var_value(
                 ct_var.clone(),
-                CircuitValue::Object(CiphertextObject::Vector(vector))
+                CircuitValue::Object(CiphertextObject::InputVector(vector))
             );
             ParamCircuitExpr::CiphertextVar(ct_var)
         }
@@ -500,7 +539,7 @@ impl ArrayMaterializer for DummyArrayMaterializer {
                 transform,
                 schedule.preprocessing,
             ).map(|_, vector| {
-                CiphertextObject::Vector(vector.clone())
+                CiphertextObject::InputVector(vector.clone())
             });
         
         registry.set_ct_var_value(ct_var.clone(), CircuitValue::CoordMap(coord_map));
@@ -753,16 +792,18 @@ mod tests {
         assert!(schedule.is_schedule_valid(&program, program.get_expr(program.output_expr)));
 
         let materializer =
-            Materializer::new(vec![
-                Box::new(DefaultArrayMaterializer::new())
-            ]);
+            Materializer::new(
+                vec![
+                    Box::new(DefaultArrayMaterializer::new())
+                ],
+                program
+            );
 
-        let res_mat = materializer.materialize(&program, &schedule);
+        let res_mat = materializer.materialize(&schedule);
         assert!(res_mat.is_ok());
 
         let param_circ = res_mat.unwrap();
-        println!("{}", param_circ.schedule);
-        println!("{}", param_circ.expr);
+        println!("{}", param_circ);
 
         param_circ
     }

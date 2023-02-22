@@ -3,8 +3,8 @@ use std::{collections::{HashSet, HashMap}, fmt::Display, ops::Range};
 
 use crate::{
     circ2::{vector_info::VectorInfo},
-    lang::{Operator, DimSize},
-    scheduling::{OffsetExpr, ScheduleDim, ExprScheduleType, DimName}
+    lang::{Operator, DimSize, ExprRefId, Extent},
+    scheduling::{OffsetExpr, ScheduleDim, ExprScheduleType, DimName, ExprSchedule}
 };
 
 pub mod cost;
@@ -296,13 +296,15 @@ impl<T: Display> Display for IndexCoordinateMap<T> {
 
 #[derive(Clone,Debug,PartialEq,Eq)]
 pub enum CiphertextObject {
-    Vector(VectorInfo),
+    InputVector(VectorInfo),
+
+    // VectorRef(String, IndexCoord)
 }
 
 impl Display for CiphertextObject {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CiphertextObject::Vector(v) => write!(f, "{}", v)
+            CiphertextObject::InputVector(v) => write!(f, "{}", v)
         }
     }
 }
@@ -431,14 +433,15 @@ impl CircuitRegistry {
 
 /// parameterized circuit packaged with information about input ciphertexts/plaintexts used
 pub struct ParamCircuitProgram {
-    pub schedule: ExprScheduleType,
-    pub expr: ParamCircuitExpr,
     pub registry: CircuitRegistry,
+    pub circuit_list: Vec<(String, Vec<(DimName,Extent)>, ParamCircuitExpr)>
 }
 
 impl Display for ParamCircuitProgram {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} {}", self.schedule, self.expr)
+        self.circuit_list.iter().try_for_each(|(name, dims, circuit)| {
+            write!(f, "let {}{:?} = {}\n", name, dims, circuit)
+        })
     }
 }
 

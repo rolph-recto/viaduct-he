@@ -139,6 +139,22 @@ impl TransformedProgram {
         self.expr_map.get(&ref_id).unwrap()
     }
 
+    pub fn get_output_expr(&self) -> &TransformedExpr {
+        self.expr_map.get(&self.output_expr).unwrap()
+    }
+
+    pub fn is_expr(&self, ref_id: ExprRefId) -> bool {
+        let contains = self.expr_map.contains_key(&ref_id);
+        assert!(contains == !self.input_map.contains_key(&ref_id));
+        contains
+    }
+
+    pub fn is_input(&self, ref_id: ExprRefId) -> bool {
+        let contains = self.input_map.contains_key(&ref_id);
+        assert!(contains == !self.expr_map.contains_key(&ref_id));
+        contains
+    }
+
     pub fn compute_dim_equiv_classes(&self) -> HashMap<InputArrayDim, usize> {
         // TODO fix this
         let (dim_eqs, _) =
@@ -873,5 +889,20 @@ mod tests{
             };
 
         assert_eq!(program.get_expr_order(), vec![3, 2, 5, 1]);
+    }
+
+    #[test]
+    fn test_expr_order2() {
+        let program =
+            TransformedProgram {
+                output_expr: 1,
+                expr_map: HashMap::from([
+                    (1, TransformedExpr::Literal(5)),
+                ]),
+                input_map: HashMap::new(),
+                array_shapes: HashMap::new(),
+            };
+
+        assert_eq!(program.get_expr_order(), vec![1]);
     }
 }

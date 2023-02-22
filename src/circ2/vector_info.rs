@@ -5,7 +5,7 @@ use gcollections::ops::Bounded;
 use crate::{
     circ2::PlaintextObject,
     lang::{DimIndex, ArrayName, OffsetMap, Shape, ArrayTransform, DimContent},
-    scheduling::{ClientPreprocessing, DimName, TransformSchedule, HasExplodedDims, ScheduleDim, ExprSchedule, VectorScheduleDim}
+    scheduling::{ClientPreprocessing, DimName, TransformSchedule, HasExplodedDims, ScheduleDim, ExprSchedule, VectorScheduleDim, OffsetEnvironment}
 };
 
 use super::{IndexCoordinateSystem, IndexCoordinateMap};
@@ -199,19 +199,21 @@ impl VectorInfo {
 
     // retrieve vector at specific coordinate of a scheduled array
     pub fn get_input_vector_at_coord(
-        index_map: &HashMap<DimName, usize>,
+        index_map: HashMap<DimName, usize>,
         shape: &Shape,
         schedule: &TransformSchedule,
         transform: &ArrayTransform,
         preprocessing: Option<ClientPreprocessing>,
     ) -> Self {
+        let offset_env = OffsetEnvironment::new(index_map);
+
         let mut clipped_offset_map =
             schedule.get_indexed_offset_map(transform)
-            .map(|offset| offset.eval(index_map));
+            .map(|offset| offset.eval(&offset_env));
 
         let transform_offset_map =
             schedule.get_transform_offset_map(transform)
-            .map(|offset| offset.eval(index_map) as usize);
+            .map(|offset| offset.eval(&offset_env) as usize);
 
         let mut materialized_dims: im::Vector<VectorDimContent> = im::Vector::new();
         for dim in schedule.vectorized_dims.iter() {
@@ -240,7 +242,7 @@ impl VectorInfo {
         for index_map in coord_map.index_map_iter() {
             let vector =
                 VectorInfo::get_input_vector_at_coord(
-                    &index_map,
+                    index_map.clone(),
                     shape,
                     schedule,
                     transform,
@@ -254,20 +256,22 @@ impl VectorInfo {
     }
 
     pub fn get_expr_vector_at_coord(
-        index_map: &HashMap<DimName, usize>,
+        index_map: HashMap<DimName, usize>,
         expr_schedule: &ExprSchedule,
         preprocessing: Option<ClientPreprocessing>,
     ) -> Self {
         let transform =
             ArrayTransform::from_shape(String::from("__expr__"), &expr_schedule.shape);
 
+        let offset_env = OffsetEnvironment::new(index_map);
+
         let mut clipped_offset_map =
             expr_schedule.get_indexed_offset_map(&transform)
-            .map(|offset| offset.eval(index_map));
+            .map(|offset| offset.eval(&offset_env));
 
         let transform_offset_map =
             expr_schedule.get_transform_offset_map(&transform)
-            .map(|offset| offset.eval(index_map) as usize);
+            .map(|offset| offset.eval(&offset_env) as usize);
 
         let mut materialized_dims: im::Vector<VectorDimContent> = im::Vector::new();
         for dim in expr_schedule.vectorized_dims.iter() {
@@ -307,7 +311,7 @@ impl VectorInfo {
 
         for index_map in coord_map.index_map_iter() {
             let vector =
-                VectorInfo::get_expr_vector_at_coord(&index_map, expr_schedule, preprocessing);
+                VectorInfo::get_expr_vector_at_coord(index_map.clone(), expr_schedule, preprocessing);
 
             coord_map.set(coord_map.index_map_as_coord(index_map), vector);
         }

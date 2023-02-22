@@ -106,13 +106,38 @@ weighted.input_ciphertexts
     }
 }
 
+impl Default for CostFeatures {
+    fn default() -> Self {
+        Self {
+            input_ciphertexts: 0,
+            input_plaintexts: 0,
+            output_ciphertexts: 0,
+            rotations: 0,
+            ct_ct_add: 0,
+            pt_ct_add: 0,
+            pt_pt_add: 0,
+            ct_ct_mult: 0,
+            pt_ct_mult: 0,
+            pt_pt_mult: 0,
+            ct_ct_sub: 0,
+            pt_ct_sub: 0,
+            pt_pt_sub: 0,
+            ct_ct_muldepth: 0,
+            pt_ct_muldepth: 0,
+        }
+    }
+}
+
 /// estimate cost of an param circuit program
 pub struct CostEstimator {}
 
 impl CostEstimator {
     pub fn new() -> Self { CostEstimator {} }
 
+    // TODO finish
     pub fn estimate_cost(&self, program: &ParamCircuitProgram) -> Result<CostFeatures,String> {
+        Ok(CostFeatures::default())
+        /*
         if let ExprScheduleType::Specific(schedule) = &program.schedule {
             let coord_system = IndexCoordinateSystem::new(schedule.exploded_dims.iter());
             let (vec_type, mult, mut cost) = self.estimate_cost_expr(&program.expr, &coord_system);
@@ -130,6 +155,7 @@ impl CostEstimator {
         } else {
             Err("Cannot estimate cost of literal expression".to_string())
         }
+        */
     }
 
     fn estimate_cost_expr(&self, expr: &ParamCircuitExpr, coord_system: &IndexCoordinateSystem) -> (VectorType, usize, CostFeatures) {
@@ -276,9 +302,12 @@ mod tests{
         let init_schedule = Schedule::gen_initial_schedule(&program);
 
         let materializer =
-            Materializer::new(vec![Box::new(DummyArrayMaterializer {})]);
+            Materializer::new(
+                vec![Box::new(DummyArrayMaterializer {})],
+                program,
+            );
 
-        let res_mat = materializer.materialize(&program, &init_schedule);
+        let res_mat = materializer.materialize(&init_schedule);
         assert!(res_mat.is_ok());
 
         let param_circ = res_mat.unwrap();

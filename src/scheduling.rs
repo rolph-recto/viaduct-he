@@ -6,7 +6,21 @@ use gcollections::ops::Bounded;
 use crate::{lang::{*, index_elim::{TransformedExpr, TransformedProgram}}, circ2::{IndexCoordinateMap, vector_info::VectorInfo, CircuitValue}};
 
 pub type DimName = String;
-pub type ExplodedIndexStore = HashMap<DimName, usize>;
+
+pub struct OffsetEnvironment {
+    index_map: HashMap<DimName, usize>,
+    function_values: HashMap<String, isize>,
+}
+
+impl OffsetEnvironment {
+    pub fn new(index_map: HashMap<DimName, usize>) -> Self {
+        OffsetEnvironment { index_map, function_values: HashMap::new() }
+    }
+
+    pub fn set_function_value(&mut self, func: String, value: isize) {
+        self.function_values.insert(func, value);
+    }
+}
 
 #[derive(Clone,Debug,PartialEq,Eq,Hash)]
 pub enum OffsetExpr {
@@ -14,10 +28,11 @@ pub enum OffsetExpr {
     Mul(Box<OffsetExpr>, Box<OffsetExpr>),
     Literal(isize),
     Var(DimName),
+    FunctionVar(String, im::Vector<DimName>),
 }
 
 impl OffsetExpr {
-    pub fn eval(&self, store: &ExplodedIndexStore) -> isize {
+    pub fn eval(&self, store: &OffsetEnvironment) -> isize {
         match self {
             OffsetExpr::Add(expr1, expr2) => {
                 let val1 = expr1.eval(store);
@@ -33,7 +48,9 @@ impl OffsetExpr {
 
             OffsetExpr::Literal(lit) => *lit,
 
-            OffsetExpr::Var(var) => store[var] as isize
+            OffsetExpr::Var(var) => store.index_map[var] as isize,
+
+            OffsetExpr::FunctionVar(func, _) => store.function_values[func],
         }
     }
 
@@ -54,6 +71,8 @@ impl OffsetExpr {
             OffsetExpr::Literal(lit) => Some(*lit),
 
             OffsetExpr::Var(_) => None,
+
+            OffsetExpr::FunctionVar(_, _) => None,
         }
     }
 }
@@ -75,6 +94,10 @@ impl Display for OffsetExpr {
 
             OffsetExpr::Var(var) => {
                 write!(f, "{}", var)
+            },
+
+            OffsetExpr::FunctionVar(func, vars) => {
+                write!(f, "{}{:?}", func, vars)
             }
         }
     }
@@ -400,7 +423,7 @@ impl ExprSchedule {
             let mut coord_map = IndexCoordinateMap::new(self.exploded_dims.iter());
             for index_map in coord_map.index_map_iter() {
                 let vector =
-                    VectorInfo::get_expr_vector_at_coord(&index_map, self, None);
+                    VectorInfo::get_expr_vector_at_coord(index_map.clone(), self, None);
 
                 let coord = coord_map.index_map_as_coord(index_map);
                 coord_map.set(coord, vector);
@@ -411,7 +434,7 @@ impl ExprSchedule {
         } else {
             let index_map: HashMap<DimName, usize> = HashMap::new();
             CircuitValue::Object(
-                VectorInfo::get_expr_vector_at_coord(&index_map, self, None)
+                VectorInfo::get_expr_vector_at_coord(index_map, self, None)
             )
         }
     }
