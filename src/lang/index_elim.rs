@@ -62,15 +62,88 @@ impl Display for TransformedExpr {
 pub type InputArrayDim = (ExprRefId, DimIndex);
 
 pub struct TransformedProgram {
-    pub output_expr: TransformedExpr,
+    pub output_expr: ExprRefId,
     pub expr_map: HashMap<ExprRefId, TransformedExpr>,
     pub input_map: HashMap<ExprRefId, ArrayTransform>,
     pub array_shapes: HashMap<ArrayName, Shape>,
 }
 
 impl TransformedProgram {
+    /// get a topological sort of expr refs, where exprs that are read
+    /// are earlier in the order than their readers
+    pub fn get_expr_order(&self) -> Vec<ExprRefId> {
+        let mut dependency_map: HashMap<ExprRefId, Vec<ExprRefId>> =
+            HashMap::from_iter(self.expr_map.keys().map(|id| (*id, vec![])));
+
+        let mut counter_map: HashMap<ExprRefId, usize> =
+            HashMap::from_iter(self.expr_map.keys().map(|id| (*id, 0)));
+
+        for (id, expr) in self.expr_map.iter() {
+            let read_ids = self.get_reads(expr);
+            for read_id in read_ids.iter() {
+                dependency_map.get_mut(read_id).unwrap().push(*id);
+                let counter = counter_map.get_mut(id).unwrap();
+                *counter += 1;
+            }
+        }
+
+        let mut order: Vec<ExprRefId> = Vec::new();
+        while order.len() < self.expr_map.len() {
+            let mut scheduled: Vec<ExprRefId> = Vec::new();
+            for (id, count) in counter_map.iter() {
+                if *count == 0 {
+                    scheduled.push(*id);
+                }
+            }
+
+            for id in scheduled {
+                order.push(id);
+                counter_map.remove(&id);
+                for parent_id in dependency_map.get(&id).unwrap().iter() {
+                    let counter = counter_map.get_mut(parent_id).unwrap();
+                    *counter -= 1;
+                }
+            }
+        }
+
+        order
+    }
+
+    pub fn get_reads(&self, expr: &TransformedExpr) -> Vec<ExprRefId> {
+        match expr {
+            TransformedExpr::ReduceNode(_, _, body) => {
+                self.get_reads(body)
+            },
+
+            TransformedExpr::Op(_, expr1, expr2) => {
+                let mut reads1 = self.get_reads(expr1);
+                let reads2 = self.get_reads(expr2);
+                reads1.extend(reads2);
+                reads1
+            },
+
+            TransformedExpr::Literal(_) => vec![],
+
+            TransformedExpr::ExprRef(id) => {
+                if self.expr_map.contains_key(id) {
+                    vec![*id]
+
+                } else {
+                    vec![]
+                }
+            }
+        }
+    }
+
+    pub fn get_expr(&self, ref_id: ExprRefId) -> &TransformedExpr {
+        self.expr_map.get(&ref_id).unwrap()
+    }
+
     pub fn compute_dim_equiv_classes(&self) -> HashMap<InputArrayDim, usize> {
-        let (dim_eqs, _) = self.compute_dim_equalities(&self.output_expr);
+        // TODO fix this
+        let (dim_eqs, _) =
+            self.compute_dim_equalities(self.get_expr(self.output_expr));
+
         let id_map: HashMap<InputArrayDim, usize> =
             self.get_dim_set().into_iter().enumerate()
             .map(|(i, dim)| (dim, i))
@@ -110,6 +183,8 @@ impl TransformedProgram {
         dim_set
     }
 
+    /// generate equality constraints about which dimensions should be considered
+    /// the same
     fn compute_dim_equalities(&self, expr: &TransformedExpr) -> (im::Vector<(InputArrayDim, InputArrayDim)>, im::Vector<InputArrayDim>) {
         match expr {
             TransformedExpr::ReduceNode(reduced_index, _, body) => {
@@ -630,14 +705,23 @@ impl IndexElimination {
         }
 
         let unresolved_output_expr = self.transform_map.remove(&output_id).unwrap();
-        let output_expr = self.resolve_expr_refs(unresolved_output_expr);
+        let output = self.resolve_expr_refs(unresolved_output_expr);
+        let output_id = self.fresh_expr_id();
 
         let array_shapes: HashMap<ArrayName, Shape>  =
             transformed_inputs.iter().map(|(_, transform)| { 
                 (transform.array.clone(), program.get_input_shape(&transform.array).unwrap().clone())
             }).collect();
 
-        Ok(TransformedProgram { output_expr, expr_map: HashMap::new(), input_map: transformed_inputs, array_shapes })
+        let program =
+            TransformedProgram {
+                output_expr: output_id,
+                expr_map: HashMap::from([(output_id, output)]),
+                input_map: transformed_inputs,
+                array_shapes
+            };
+
+        Ok(program)
     }
 }
 
@@ -771,5 +855,23 @@ mod tests{
             }
             "
         );
+    }
+
+    #[test]
+    fn test_expr_order() {
+        let program =
+            TransformedProgram {
+                output_expr: 1,
+                expr_map: HashMap::from([
+                    (1, TransformedExpr::ExprRef(5)),
+                    (5, TransformedExpr::ExprRef(2)),
+                    (2, TransformedExpr::ExprRef(3)),
+                    (3, TransformedExpr::Literal(1)),
+                ]),
+                input_map: HashMap::new(),
+                array_shapes: HashMap::new(),
+            };
+
+        assert_eq!(program.get_expr_order(), vec![3, 2, 5, 1]);
     }
 }

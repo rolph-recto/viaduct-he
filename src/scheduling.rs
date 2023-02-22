@@ -631,7 +631,7 @@ mod tests {
         println!("{}", &init_schedule);
 
         // the initial schedule should always be valid!
-        assert!(init_schedule.is_schedule_valid(&program, &program.output_expr))
+        assert!(init_schedule.is_schedule_valid(&program, program.get_expr(program.output_expr)))
     }
 
     #[test]

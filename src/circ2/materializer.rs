@@ -53,7 +53,13 @@ impl Materializer {
         program: &TransformedProgram,
         schedule: &Schedule
     ) -> Result<ParamCircuitProgram, String> {
-        let (schedule, expr) = self.materialize_expr(&program, &program.output_expr, schedule)?;
+        let (schedule, expr) =
+            self.materialize_expr(
+                &program,
+                program.get_expr(program.output_expr),
+                schedule
+            )?;
+
         Ok(
             ParamCircuitProgram {
                 schedule, expr, registry: self.registry
@@ -740,13 +746,11 @@ impl ArrayMaterializer for DiagonalArrayMaterializer {
 
 #[cfg(test)]
 mod tests {
-    use interval::{Interval, ops::Range};
-
     use crate::{lang::{parser::ProgramParser, index_elim::IndexElimination, source::SourceProgram, BaseOffsetMap}, scheduling::ScheduleDim};
     use super::*;
 
     fn test_materializer(program: TransformedProgram, schedule: Schedule) -> ParamCircuitProgram {
-        assert!(schedule.is_schedule_valid(&program, &program.output_expr));
+        assert!(schedule.is_schedule_valid(&program, program.get_expr(program.output_expr)));
 
         let materializer =
             Materializer::new(vec![
@@ -1093,14 +1097,16 @@ mod tests {
     fn test_vectorized_reduce() {
         let program =
             TransformedProgram {
-                output_expr:
+                output_expr: 1,
+
+                expr_map: HashMap::from([
+                    (1,
                     TransformedExpr::ReduceNode(
                         1,
                         Operator::Add,
                         Box::new(TransformedExpr::ExprRef(1))
-                    ),
-
-                expr_map: HashMap::new(),
+                    ))
+                ]),
 
                 input_map: HashMap::from([
                     (1,
