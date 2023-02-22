@@ -1,5 +1,4 @@
 use crate::lang::{*, Operator::*, source::{*, IndexExpr::*, SourceExpr::*}};
-use interval::{Interval, ops::Range};
 use std::str::FromStr;
 
 grammar;
@@ -100,7 +99,7 @@ ExtentList: im::Vector<Extent> = {
     <e:Extent> => im::Vector::unit(e)
 }
 
-Extent: Extent = "(" <lb:Num> "," <ub:Num> ")" => Interval::new(lb as i64, ub as i64);
+Extent: Extent = <e:Num> => e as usize;
 
 Ident: String = <s:r"[[:alpha:]][[:word:]]*"> => String::from(s);
 Num: isize = <s:r"[0-9]+"> => isize::from_str(s).unwrap();

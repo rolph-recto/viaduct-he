@@ -1,7 +1,9 @@
 
 use std::{collections::{HashMap, HashSet}, fmt::Display, cmp::max};
 
-use crate::{lang::{*, index_elim2::{TransformedExpr, TransformedProgram}}, circ2::{IndexCoordinateMap, vector_info::VectorInfo, CircuitValue}};
+use gcollections::ops::Bounded;
+
+use crate::{lang::{*, index_elim::{TransformedExpr, TransformedProgram}}, circ2::{IndexCoordinateMap, vector_info::VectorInfo, CircuitValue}};
 
 pub type DimName = String;
 pub type ExplodedIndexStore = HashMap<DimName, usize>;
@@ -362,6 +364,12 @@ pub struct ExprSchedule {
 
 impl Display for ExprSchedule {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let shape_str =
+            self.shape.iter()
+            .map(|dim| dim.upper().to_string())
+            .collect::<Vec<String>>()
+            .join(", ");
+
         let exploded_str =
             self.exploded_dims.iter()
             .map(|x| x.to_string())
@@ -374,7 +382,7 @@ impl Display for ExprSchedule {
             .collect::<Vec<String>>()
             .join(", ");
 
-        write!(f, "{{{}}}[{}]", exploded_str, vectorized_str)
+        write!(f, "[{}], {{{}}}[{}]", shape_str, exploded_str, vectorized_str)
     }
 }
 
@@ -435,7 +443,7 @@ impl Schedule {
         let mut schedule_map: im::HashMap<ExprRefId,TransformSchedule> = im::HashMap::new();
         let dim_class_map = program.compute_dim_equiv_classes();
 
-        for (ref_id, transform) in program.inputs.iter() {
+        for (ref_id, transform) in program.input_map.iter() {
             let mut schedule_dims: im::Vector<ScheduleDim> = im::Vector::new();
             for (i, dim) in transform.dims.iter().enumerate() {
                 let class_id = dim_class_map[&(*ref_id, i)];
@@ -482,7 +490,7 @@ impl Schedule {
             TransformedExpr::ExprRef(ref_id) => {
                 if let Some(array_sched) = self.schedule_map.get(ref_id) {
                     // TODO: generalize this to more than just input transforms
-                    let transform = program.inputs.get(ref_id).unwrap();
+                    let transform = program.input_map.get(ref_id).unwrap();
                     let expr_schedule =
                         array_sched.to_expr_schedule(transform.as_shape());
                     Ok(ExprScheduleType::Specific(expr_schedule))
@@ -603,7 +611,7 @@ impl Schedule {
 
 #[cfg(test)]
 mod tests {
-    use crate::lang::{parser::ProgramParser, index_elim2::IndexElimination2};
+    use crate::lang::{parser::ProgramParser, index_elim::IndexElimination};
     use super::*;
 
     // generate an initial schedule for a program
@@ -611,27 +619,27 @@ mod tests {
         let parser = ProgramParser::new();
         let program: SourceProgram = parser.parse(src).unwrap();
 
-        let mut index_elim = IndexElimination2::new();
+        let mut index_elim = IndexElimination::new();
         let res = index_elim.run(&program);
         
         assert!(res.is_ok());
 
         let program = res.unwrap();
-        println!("{}", program.expr);
+        println!("{}", program.output_expr);
 
         let init_schedule = Schedule::gen_initial_schedule(&program);
         println!("{}", &init_schedule);
 
         // the initial schedule should always be valid!
-        assert!(init_schedule.is_schedule_valid(&program, &program.expr))
+        assert!(init_schedule.is_schedule_valid(&program, &program.output_expr))
     }
 
     #[test]
     fn test_imgblur() {
         test_schedule(
-        "input img: [(0,16),(0,16)]
-            for x: (0, 16) {
-                for y: (0, 16) {
+        "input img: [16,16]
+            for x: 16 {
+                for y: 16 {
                     img[x-1][y-1] + img[x+1][y+1]
                 }
             }"
@@ -641,16 +649,16 @@ mod tests {
     #[test]
     fn test_imgblur2() {
         test_schedule(
-        "input img: [(0,16),(0,16)]
+        "input img: [16,16]
             let res = 
-                for x: (0, 16) {
-                    for y: (0, 16) {
+                for x: 16 {
+                    for y: 16 {
                         img[x-1][y-1] + img[x+1][y+1]
                     }
                 }
             in
-            for x: (0, 16) {
-                for y: (0, 16) {
+            for x: 16 {
+                for y: 16 {
                     res[x-2][y-2] + res[x+2][y+2]
                 }
             }
@@ -661,16 +669,16 @@ mod tests {
     #[test]
     fn test_convolve() {
         test_schedule(
-        "input img: [(0,16),(0,16)]
+        "input img: [16,16]
             let conv1 = 
-                for x: (0, 15) {
-                    for y: (0, 15) {
+                for x: 15 {
+                    for y: 15 {
                         img[x][y] + img[x+1][y+1]
                     }
                 }
             in
-            for x: (0, 14) {
-                for y: (0, 14) {
+            for x: 14 {
+                for y: 14 {
                     conv1[x][y] + conv1[x+1][y+1]
                 }
             }
@@ -681,11 +689,11 @@ mod tests {
     #[test]
     fn test_matmatmul() {
         test_schedule(
-            "input A: [(0,4),(0,4)]
-            input B: [(0,4),(0,4)]
-            for i: (0,4) {
-                for j: (0,4) {
-                    sum(for k: (0,4) { A[i][k] * B[k][j] })
+            "input A: [4,4]
+            input B: [4,4]
+            for i: 4 {
+                for j: 4 {
+                    sum(for k: 4 { A[i][k] * B[k][j] })
                 }
             }"
         );
@@ -694,19 +702,19 @@ mod tests {
     #[test]
     fn test_matmatmul2() {
         test_schedule(
-            "input A1: [(0,4),(0,4)]
-            input A2: [(0,4),(0,4)]
-            input B: [(0,4),(0,4)]
+            "input A1: [4,4]
+            input A2: [4,4]
+            input B: [4,4]
             let res =
-                for i: (0,4) {
-                    for j: (0,4) {
-                        sum(for k: (0,4) { A1[i][k] * B[k][j] })
+                for i: 4 {
+                    for j: 4 {
+                        sum(for k: 4 { A1[i][k] * B[k][j] })
                     }
                 }
             in
-            for i: (0,4) {
-                for j: (0,4) {
-                    sum(for k: (0,4) { A2[i][k] * res[k][j] })
+            for i: 4 {
+                for j: 4 {
+                    sum(for k: 4 { A2[i][k] * res[k][j] })
                 }
             }
             "
@@ -717,8 +725,8 @@ mod tests {
     fn test_dotprod_pointless() {
         test_schedule(
         "
-            input A: [(0,3)]
-            input B: [(0,3)]
+            input A: [3]
+            input B: [3]
             sum(A * B)
             "
         );
@@ -728,9 +736,9 @@ mod tests {
     fn test_matvecmul() {
         test_schedule(
         "
-            input M: [(0,1),(0,1)]
-            input v: [(0,1)]
-            for i: (0,1) {
+            input M: [2,2]
+            input v: [2]
+            for i: 2 {
                 sum(M[i] * v)
             }
             "

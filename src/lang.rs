@@ -12,7 +12,6 @@ lalrpop_mod!(pub parser);
 pub mod extent_analysis;
 pub mod source;
 pub mod index_elim;
-pub mod index_elim2;
 pub mod index_free;
 pub mod typechecker;
 
@@ -20,7 +19,7 @@ pub use self::source::*;
 pub use self::index_free::*;
 
 pub type DimSize = usize;
-pub type Extent = Interval<i64>;
+pub type Extent = usize;
 pub type Shape = im::Vector<Extent>;
 
 pub type IndexName = String;
@@ -164,12 +163,9 @@ impl ArrayTransform {
     pub fn as_shape(&self) -> Shape {
         self.dims.iter().map(|dim| {
             match dim {
-                DimContent::FilledDim { dim, extent, stride } => {
-                    Interval::new(0 as i64, *extent as i64)
-                },
-
+                DimContent::FilledDim { dim: _, extent, stride: _ } |
                 DimContent::EmptyDim { extent } => {
-                    Interval::new(0 as i64, *extent as i64)
+                    *extent
                 }
             }
         }).collect()

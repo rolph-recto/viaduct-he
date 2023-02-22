@@ -95,8 +95,8 @@ mod tests {
         let prog1 = parser.parse("42").unwrap();
         let prog2 = parser.parse("42 + 56").unwrap();
         let prog3 = parser.parse("
-            input img: [(0,16),(0,16)]
-            for x: (0,16) { img[x] }
+            input img: [16,16]
+            for x: 16 { img[x] }
         ").unwrap();
 
         assert!(typechecker.run(&prog1).is_ok());
@@ -111,18 +111,18 @@ mod tests {
 
         let prog1 = parser.parse("sum(42)").unwrap();
         let prog2 = parser.parse("
-            input img: [(0,16),(0,16)]
-            for x: (0,16) {
-                for y: (0, 16) {
-                    for z: (0, 16) { img[x][y][z] }
+            input img: [16,16]
+            for x: 16 {
+                for y: 16 {
+                    for z: 16 { img[x][y][z] }
                 }
             }
         ").unwrap();
         let prog3 = parser.parse("
-            input img: [(0,16),(0,16)]
+            input img: [16,16]
             let next = img + img in
-            for x: (0,16) {
-                for y: (0, 16) {
+            for x: 16 {
+                for y: 16 {
                     img[x][y] + next
                 }
             }

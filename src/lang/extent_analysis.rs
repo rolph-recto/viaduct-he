@@ -11,7 +11,7 @@ pub struct ShapeId(usize);
 
 enum ExtentConstraint {
     Equals(ConstraintVar, ConstraintVar),
-    AtLeast(ConstraintVar, Extent),
+    AtLeast(ConstraintVar, Interval<i64>),
 }
 
 type ShapeConstraint = Vec<ConstraintVar>;
@@ -76,7 +76,7 @@ impl ExtentAnalysis {
         }
     }
 
-    pub fn add_atleast_constraint(&mut self, id: ShapeId, head: usize, shape: Shape) {
+    pub fn add_atleast_constraint(&mut self, id: ShapeId, head: usize, shape: im::Vector<Interval<i64>>) {
         if let Some(vars) = self.shape_map.get(&id) {
             let suf = &vars[head..];
             if suf.len() == shape.len() {
@@ -93,8 +93,8 @@ impl ExtentAnalysis {
         }
     }
 
-    pub fn solve(&mut self) -> HashMap<ShapeId, Shape> {
-        let mut solution: HashMap<ConstraintVar, Extent> = HashMap::new();
+    pub fn solve(&mut self) -> HashMap<ShapeId, im::Vector<Interval<i64>>> {
+        let mut solution: HashMap<ConstraintVar, Interval<i64>> = HashMap::new();
         let mut quiesce = false;
 
         // find fixpoint solution to constraints;
@@ -139,9 +139,9 @@ impl ExtentAnalysis {
         }
 
         // collect solutions into 
-        let mut shape_solution: HashMap<ShapeId, Shape> = HashMap::new();
+        let mut shape_solution: HashMap<ShapeId, im::Vector<Interval<i64>>> = HashMap::new();
         for (&node, extent_vars) in self.shape_map.iter() {
-            let shape: Shape =
+            let shape: im::Vector<Interval<i64>> =
                 extent_vars.iter()
                 .map(|var| {
                     if let Some(extent) = solution.get(var) {

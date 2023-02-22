@@ -60,16 +60,6 @@ impl From<im::Vector<usize>> for Dimensions {
     }
 }
 
-impl From<Shape> for Dimensions {
-    fn from(shape: Shape) -> Self {
-        Dimensions(
-            shape.into_iter().map(|interval| {
-                (interval.upper() - interval.lower()) as usize
-            }).collect()
-        )
-    }
-}
-
 #[derive(Clone,Debug)]
 pub enum HECircuit {
     CiphertextRef(HEObjectName),

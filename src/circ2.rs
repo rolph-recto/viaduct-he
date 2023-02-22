@@ -122,6 +122,7 @@ impl ParamCircuitExpr {
 
 type IndexCoord = im::Vector<usize>;
 
+#[derive(Debug,Clone)]
 pub struct IndexCoordinateSystem(im::Vector<(DimName,usize)>);
 
 impl IndexCoordinateSystem {
@@ -131,6 +132,10 @@ impl IndexCoordinateSystem {
                 (dim.name.clone(), dim.extent)
             }).collect()
         )
+    }
+
+    pub fn from_coord_system(coord_system: &IndexCoordinateSystem) -> IndexCoordinateSystem {
+        IndexCoordinateSystem(coord_system.0.clone())
     }
 
     pub fn coord_iter(&self) -> impl Iterator<Item=im::Vector<usize>> + Clone {
@@ -205,6 +210,10 @@ impl<T> IndexCoordinateMap<T> {
         IndexCoordinateMap { coord_system, coord_map }
     }
 
+    pub fn from_coord_system(coord_system: IndexCoordinateSystem) -> Self {
+        IndexCoordinateMap { coord_system, coord_map: HashMap::new() }
+    }
+    
     pub fn coord_iter(&self) -> impl Iterator<Item=IndexCoord> + Clone {
         self.coord_system.coord_iter()
     }
@@ -237,6 +246,20 @@ impl<T> IndexCoordinateMap<T> {
         })
     }
 
+    pub fn map<F,U>(&self, f: F) -> IndexCoordinateMap<U>
+        where F: Fn(&IndexCoord, &T) -> U
+    {
+        let mut coord_map = IndexCoordinateMap::from_coord_system(self.coord_system.clone());
+        for (coord, value_opt) in self.value_iter() {
+            if let Some(value) = value_opt {
+                let res = f(&coord, value);
+                coord_map.set(coord, res);
+            }
+        }
+
+        coord_map
+    }
+
     pub fn index_vars(&self) -> Vec<String> {
         self.coord_system.index_vars()
     }
@@ -258,29 +281,27 @@ impl<T> IndexCoordinateMap<T> {
     }
 }
 
-impl<T> Display for IndexCoordinateMap<T> where T: std::fmt::Debug {
+impl<T: Display> Display for IndexCoordinateMap<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.value_iter().try_for_each(|(coord, value)| {
-            write!(f, "{:?} => {:?}\n", coord, value)
+        self.value_iter().try_for_each(|(coord, value_opt)| {
+            if let Some(value) = value_opt {
+                write!(f, "{:?} => {}\n", coord, value)
+
+            } else {
+                write!(f, "{:?} => null\n", coord)
+            }
         })
     }
 }
 
 #[derive(Clone,Debug,PartialEq,Eq)]
 pub enum CiphertextObject {
-    Null,
     Vector(VectorInfo),
-}
-
-impl Default for CiphertextObject {
-    fn default() -> Self { CiphertextObject::Null }
 }
 
 impl Display for CiphertextObject {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CiphertextObject::Null => write!(f, "null"),
-
             CiphertextObject::Vector(v) => write!(f, "{}", v)
         }
     }
@@ -318,11 +339,11 @@ pub enum CircuitValue<T> {
     Object(T)
 }
 
-impl<T> Display for CircuitValue<T> where T: std::fmt::Debug {
+impl<T: Display> Display for CircuitValue<T> where T: Display {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             CircuitValue::CoordMap(map) => write!(f, "{}", map),
-            CircuitValue::Object(obj) => write!(f, "{:?}", obj),
+            CircuitValue::Object(obj) => write!(f, "{}", obj),
         }
     }
 }

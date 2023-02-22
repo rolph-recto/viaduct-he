@@ -8,6 +8,8 @@ use crate::{
     scheduling::{ClientPreprocessing, DimName, TransformSchedule, HasExplodedDims, ScheduleDim, ExprSchedule, VectorScheduleDim}
 };
 
+use super::{IndexCoordinateSystem, IndexCoordinateMap};
+
 // like DimContent, but with padding information
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum VectorDimContent {
@@ -197,8 +199,8 @@ impl VectorInfo {
 
     // retrieve vector at specific coordinate of a scheduled array
     pub fn get_input_vector_at_coord(
-        shape: &Shape,
         index_map: &HashMap<DimName, usize>,
+        shape: &Shape,
         schedule: &TransformSchedule,
         transform: &ArrayTransform,
         preprocessing: Option<ClientPreprocessing>,
@@ -224,6 +226,31 @@ impl VectorInfo {
             offset_map: clipped_offset_map.map(|offset| *offset as usize),
             dims: materialized_dims,
         }
+    }
+
+    pub fn get_input_vector_map(
+        coord_system: IndexCoordinateSystem,
+        shape: &Shape,
+        schedule: &TransformSchedule,
+        transform: &ArrayTransform,
+        preprocessing: Option<ClientPreprocessing>,
+    ) -> IndexCoordinateMap<VectorInfo> {
+        let mut coord_map = IndexCoordinateMap::from_coord_system(coord_system);
+
+        for index_map in coord_map.index_map_iter() {
+            let vector =
+                VectorInfo::get_input_vector_at_coord(
+                    &index_map,
+                    shape,
+                    schedule,
+                    transform,
+                    preprocessing
+                );
+
+            coord_map.set(coord_map.index_map_as_coord(index_map), vector);
+        }
+
+        coord_map
     }
 
     pub fn get_expr_vector_at_coord(
@@ -269,6 +296,23 @@ impl VectorInfo {
             offset_map: clipped_offset_map.map(|offset| *offset as usize),
             dims: materialized_dims,
         }
+    }
+
+    pub fn get_expr_vector_map(
+        coord_system: IndexCoordinateSystem,
+        expr_schedule: &ExprSchedule,
+        preprocessing: Option<ClientPreprocessing>,
+    ) -> IndexCoordinateMap<VectorInfo> {
+        let mut coord_map = IndexCoordinateMap::from_coord_system(coord_system);
+
+        for index_map in coord_map.index_map_iter() {
+            let vector =
+                VectorInfo::get_expr_vector_at_coord(&index_map, expr_schedule, preprocessing);
+
+            coord_map.set(coord_map.index_map_as_coord(index_map), vector);
+        }
+
+        coord_map
     }
 
     // derive other from self

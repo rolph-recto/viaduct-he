@@ -66,6 +66,7 @@ fn main() {
     let parser = ProgramParser::new();
     let src_program = parser.parse(&input_str).unwrap();
 
+    /*
     let index_elim = IndexElimination::new();
     let indfree_program = index_elim.run(&src_program).unwrap();
 
@@ -123,4 +124,5 @@ fn main() {
         let output = codegen.render_to_str(&lowered_prog).unwrap();
         info!("{}", output);
     }
+    */
 }

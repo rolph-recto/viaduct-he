@@ -1,44 +1,46 @@
-use std::hash::{*, Hasher};
+use std::{hash::{*, Hasher}, collections::{HashSet, hash_set}};
 
-use interval::ops::Range;
-use gcollections::ops::bounded::Bounded;
+use disjoint_sets::UnionFind;
+use gcollections::ops::Bounded;
 
 use crate::{
-    lang::{
-        *,
-        IndexExpr::*,
-        extent_analysis::{ExtentAnalysis, ShapeId},
-    },
-    circ::{ Ciphertext, Dimensions },
-    util::NameGenerator
+    lang::{*, IndexExpr::*},
 };
 
-type PadSize = (usize, usize);
 
-struct SimpleIndexingData { scale: isize, offset: isize }
-
-#[derive(Clone,Debug)]
-enum PathInfo {
-    Index { index: IndexName, extent: Extent },
-    Reduce { op: Operator }
-}
-
-#[derive(Eq,PartialEq,Clone,Copy,Debug)]
-pub enum ReducedDimType { Hidden, Reused }
-
-/// expression with associated data about lowering to an index-free representation.
+/// expression with associated data about lowering to an index-free representation
 #[derive(Clone,Debug)]
 pub enum TransformedExpr {
-    ReduceNode(ReducedDimType, usize, Operator, Box<TransformedExpr>),
+    ReduceNode(usize, Operator, Box<TransformedExpr>),
     Op(Operator, Box<TransformedExpr>, Box<TransformedExpr>),
     Literal(isize),
     ExprRef(ExprRefId),
 }
 
+impl TransformedExpr {
+    pub fn get_expr_refs(&self) -> im::HashSet<ExprRefId> {
+        match self {
+            TransformedExpr::ReduceNode(_, _, body) => {
+                body.get_expr_refs()
+            },
+
+            TransformedExpr::Op(_, expr1, expr2) => {
+                let set1 = expr1.get_expr_refs();
+                let set2 = expr2.get_expr_refs();
+                set1.union(set2)
+            },
+
+            TransformedExpr::Literal(_) => im::HashSet::new(),
+
+            TransformedExpr::ExprRef(id) => im::hashset![*id]
+        }
+    }
+}
+
 impl Display for TransformedExpr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TransformedExpr::ReduceNode(_, dim, op, body) => {
+            TransformedExpr::ReduceNode(dim, op, body) => {
                 write!(f, "reduce({}, {}, {})", dim, op, body)
             },
 
@@ -47,7 +49,7 @@ impl Display for TransformedExpr {
             },
 
             TransformedExpr::ExprRef(id) => {
-                write!(f, "expr{}", id)
+                write!(f, "expr({})", id)
             },
 
             TransformedExpr::Literal(lit) => {
@@ -57,237 +59,163 @@ impl Display for TransformedExpr {
     }
 }
 
-pub trait Transform: Display {}
+pub type InputArrayDim = (ExprRefId, DimIndex);
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum TransformedDim {
-    Input(usize),
-    Fill(Extent),
+pub struct TransformedProgram {
+    pub output_expr: TransformedExpr,
+    pub expr_map: HashMap<ExprRefId, TransformedExpr>,
+    pub input_map: HashMap<ExprRefId, ArrayTransform>,
+    pub array_shapes: HashMap<ArrayName, Shape>,
 }
 
-impl Hash for TransformedDim {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        core::mem::discriminant(self).hash(state);
-        match self {
-            TransformedDim::Input(i) => {
-                i.hash(state);
+impl TransformedProgram {
+    pub fn compute_dim_equiv_classes(&self) -> HashMap<InputArrayDim, usize> {
+        let (dim_eqs, _) = self.compute_dim_equalities(&self.output_expr);
+        let id_map: HashMap<InputArrayDim, usize> =
+            self.get_dim_set().into_iter().enumerate()
+            .map(|(i, dim)| (dim, i))
+            .collect();
+
+        let mut uf: UnionFind<usize> = UnionFind::new(id_map.keys().len());
+        for (dim1, dim2) in dim_eqs {
+            uf.union(id_map[&dim1], id_map[&dim2]);
+        }
+
+        let mut class_map: HashMap<InputArrayDim, usize> = HashMap::new();
+        for dim in id_map.keys() {
+            class_map.insert(*dim, uf.find(id_map[&dim]));
+        }
+
+        class_map
+    }
+
+    fn find_parent(&self, dim: &InputArrayDim, parent_map: &HashMap<InputArrayDim,InputArrayDim>) -> InputArrayDim {
+        let parent = &parent_map[dim];
+        if parent == dim {
+            *dim
+
+        } else {
+            self.find_parent(parent, parent_map)
+        }
+    }
+
+    fn get_dim_set(&self) -> HashSet<InputArrayDim> {
+        let mut dim_set: HashSet<InputArrayDim> = HashSet::new();
+        for (ref_id, transform) in self.input_map.iter() {
+            for dim in 0..transform.dims.len() {
+                dim_set.insert((*ref_id, dim));
+            }
+        }
+
+        dim_set
+    }
+
+    fn compute_dim_equalities(&self, expr: &TransformedExpr) -> (im::Vector<(InputArrayDim, InputArrayDim)>, im::Vector<InputArrayDim>) {
+        match expr {
+            TransformedExpr::ReduceNode(reduced_index, _, body) => {
+                let (eq_body, mut body_dims) = self.compute_dim_equalities(body);
+                assert!(body_dims.len() > 0);
+                body_dims.remove(*reduced_index);
+                (eq_body, body_dims)
             },
 
-            TransformedDim::Fill(interval) => {
-                interval.lower().hash(state);
-                interval.upper().hash(state);
+            TransformedExpr::Op(_, expr1, expr2) => {
+                let (eqs1, dims1) = self.compute_dim_equalities(expr1);
+                let (eqs2, dims2) = self.compute_dim_equalities(expr2);
+                let (len1, len2) = (dims1.len(), dims2.len());
+
+                if len1 == 0 && len2 != 0 {
+                    (eqs1 + eqs2, dims2)
+
+                } else if len1 != 0 && len2 == 0 {
+                    (eqs1 + eqs2, dims1)
+
+                } else {
+                    assert!(len1 == len2);
+                    let result_dims = dims1.clone();
+                    let new_eqs: im::Vector<(InputArrayDim, InputArrayDim)> =
+                        dims1.into_iter().zip(dims2.into_iter()).collect();
+                    (eqs1 + eqs2 + new_eqs, result_dims)
+                }
+            },
+
+            TransformedExpr::Literal(_) => (im::vector![], im::vector![]),
+
+            TransformedExpr::ExprRef(ref_id) => {
+                let input_dims: im::Vector<InputArrayDim> =
+                    self.input_map[ref_id].dims.iter().enumerate()
+                    .map(|(i, _)| (*ref_id, i))
+                    .collect();
+
+                (im::vector![], input_dims)
             }
         }
     }
 }
 
-impl Transform for TransformedDim {}
+#[derive(Clone,Debug)]
+enum PathInfo {
+    Index { index: IndexName, extent: usize },
+    Reduce { op: Operator }
+}
 
-impl Display for TransformedDim {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            TransformedDim::Input(i) => write!(f, "{}", i),
-            TransformedDim::Fill(extent) => write!(f, "fill({})", extent),
-        }
+struct PathContext {
+    path: im::Vector<PathInfo>
+}
+
+impl PathContext {
+    fn new(path: im::Vector<PathInfo>) -> Self {
+        PathContext { path }
+    }
+
+    fn get_index_extent(&self, index_var: &IndexName) -> Option<usize> {
+        self.path.iter().find_map(|path_info| {
+            match path_info {
+                PathInfo::Index { index, extent } if index == index_var => {
+                    Some(*extent)
+                },
+
+                _ => None
+            }
+        })
     }
 }
 
 #[derive(Clone, Debug)]
-pub enum IndexDim {
-    Index(IndexName),
-    Anonymous(usize),
+struct IndexingVarData {
+    index_var: IndexName,
+    stride: usize, 
 }
 
 #[derive(Clone, Debug)]
-pub enum TransformedIndexDim {
-    Index(IndexName),
-    Anonymous(usize),
-    ReducedIndex(IndexName),
-    ReducedAnonymous(usize),
-    Fill(Extent),
+struct IndexingData {
+    var_data: im::Vector<IndexingVarData>,
+    offset: isize
 }
 
-impl Transform for TransformedIndexDim {}
 
-impl Display for TransformedIndexDim {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            TransformedIndexDim::Index(index) => write!(f, "{}", index),
-            TransformedIndexDim::Anonymous(i) => write!(f, "{}", i),
-            TransformedIndexDim::ReducedIndex(index) => write!(f, "{}", index),
-            TransformedIndexDim::ReducedAnonymous(i) => write!(f, "{}", i),
-            TransformedIndexDim::Fill(extent) => write!(f, "fill({})", extent),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct TransformShape<T: Transform>(Vec<T>);
-
-impl<T: Transform> Display for TransformShape<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let strs =
-            self.0.iter()
-            .map(|x| x.to_string())
-            .collect::<Vec<String>>().join(", ");
-
-        write!(f, "[{}]", strs)
-    }
-}
-
-impl<T: Transform> Default for TransformShape<T> {
-    fn default() -> Self {
-        Self(Vec::new())
-    }
-}
-
-#[derive(Clone,Debug,Eq)]
-pub struct TransformedDimInfo {
-    dim: TransformedDim,
-    pad: PadSize,
-    extent: Extent,
-    offset: isize,
-}
-
-impl TransformedDimInfo {
-    pub fn is_input(&self) -> bool {
-        match self.dim {
-            TransformedDim::Input(_) => true,
-            TransformedDim::Fill(_) => false,
-        }
-    }
-
-    pub fn is_fill(&self) -> bool {
-        match self.dim {
-            TransformedDim::Input(_) => false,
-            TransformedDim::Fill(_) => true,
-        }
-    }
-}
-
-impl Display for TransformedDimInfo {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.pad != (0,0) {
-            write!(f, "(pad {} ({},{}))", self.dim, self.pad.0, self.pad.1)
-        } else {
-            write!(f, "{}", self.dim)
-        }
-    }
-}
-
-impl PartialEq for TransformedDimInfo {
-    fn eq(&self, other: &Self) -> bool {
-        // self.dim == other.dim && self.pad == other.pad && self.extent == other.extent
-        self.dim == other.dim && self.pad == other.pad
-    }
-}
-
-#[derive(Clone,Eq,PartialEq,Debug)]
-pub struct ArrayTransformInfo(ArrayName, Vec<TransformedDimInfo>);
-
-impl ArrayTransformInfo {
-    fn to_transformed_shape(&self) -> TransformShape<TransformedDim> {
-        TransformShape(
-            self.1.iter()
-            .map(|dim_info| dim_info.dim.clone())
-            .collect()
-        )
-    }
-
-    fn to_shape(&self) -> Shape {
-        self.1.iter().map(|dim_info| {
-            dim_info.extent.clone()
-        }).collect()
-    }
-    
-    fn to_dimensions(&self) -> Dimensions {
-        Dimensions::from(
-            self.1.iter().map(|dim_info| {
-                ((dim_info.extent.upper() - dim_info.extent.lower()) + 1) as usize
-            }).collect::<im::Vector<usize>>()
-        )
-    }
-}
-
-impl Hash for ArrayTransformInfo {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.hash(state);
-        for dim_info in self.1.iter() {
-            dim_info.dim.hash(state);
-            dim_info.pad.hash(state);
-        }
-    }
-}
-
-impl Display for ArrayTransformInfo {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let strs =
-            self.1.iter()
-            .map(|x| x.to_string())
-            .collect::<Vec<String>>().join(", ");
-
-        write!(f, "{}[{}]", self.0, strs)
-    }
-}
-
-#[derive(Debug)]
-struct TransformResult {
-    expr: TransformedExpr,
-    reduced_dim_position: Option<Vec<(ReducedDimType, usize)>>,
-    transformed_inputs: im::HashSet<ExprRefId>,
-}
-
+// index elimination pass
 pub struct IndexElimination {
-    // ID of the output expression
-    output_id: ExprRefId,
-
-    // counter for creating fresh expressions IDs
-    cur_expr_id: usize,
-
-    // map source-level bindings to their shapes 
+    // map from source-level bindings to their shapes 
     store: ArrayEnvironment,
 
-    // map from input nodes to their shape
-    input_map: HashMap<ArrayName, Shape>,
+    // map from expr ref ids to array shapes
+    transform_shape_map: HashMap<ExprRefId, ArrayTransform>,
 
-    // map from variables to their bound expressions
-    expr_binding_map: HashMap<ArrayName, SourceExpr>,
-
-    // map from expressions to their computed shapes
-    transform_info_map: HashMap<ExprRefId, ArrayTransformInfo>,
-
-    // map from expressions to transformed representation
+    // map from expr ref ids to transformed exprs
     transform_map: HashMap<ExprRefId, TransformedExpr>,
 
-    // topological sort of expressions
-    transform_list: Vec<ExprRefId>,
-
-    // map from expressions to shape IDs from extent analysis
-    shape_map: HashMap<ExprRefId, (usize, ShapeId)>,
-
-    // module to compute required padding
-    extent_analysis: ExtentAnalysis,
-
-    // module to generate fresh names for ciphertexts
-    name_generator: NameGenerator,
+    // counter for generating fresh expr ids
+    cur_expr_id: usize,
 }
-
-static OUTPUT_EXPR_NAME: &'static str = "$root";
 
 impl IndexElimination {
     pub fn new() -> Self {
         IndexElimination {
-            input_map: HashMap::new(),
-            expr_binding_map: HashMap::new(),
-            output_id: 0,
-            cur_expr_id: 1,
-            transform_info_map: HashMap::new(),
-            transform_map: HashMap::new(),
-            transform_list: Vec::new(),
-            shape_map: HashMap::new(),
             store: HashMap::new(),
-            extent_analysis: ExtentAnalysis::new(),
-            name_generator: NameGenerator::new(),
+            transform_shape_map: HashMap::new(),
+            transform_map: HashMap::new(),
+            cur_expr_id: 1,
         }
     }
 
@@ -297,93 +225,27 @@ impl IndexElimination {
         id
     }
 
-    fn index_expr_to_interval(&self, index_expr: &IndexExpr, index_store: &IndexEnvironment) -> Extent {
-        match index_expr {
-            IndexVar(var) => {
-                index_store[var]
-            },
-
-            IndexLiteral(val) => {
-                Interval::new(*val as i64, *val as i64)
-            }
-
-            IndexOp(op, expr1, expr2) => {
-                let interval1 = self.index_expr_to_interval(expr1, index_store);
-                let interval2 = self.index_expr_to_interval(expr2, index_store);
-                match op {
-                    Operator::Add => interval1 + interval2,
-                    Operator::Sub => interval1 - interval2,
-                    Operator::Mul => interval1 * interval2,
-                }
-            }
-        }
+    fn register_transformed_expr(&mut self, array_shape: ArrayTransform) -> ExprRefId {
+        let id = self.fresh_expr_id();
+        self.transform_shape_map.insert(id, array_shape);
+        id
     }
 
-    fn get_simple_indexing_data(&self, index_expr: &IndexExpr, index_var: &IndexName) -> Option<SimpleIndexingData> {
-        match index_expr {
-            IndexVar(v) => {
-                if v == index_var {
-                    Some(SimpleIndexingData { scale: 1, offset: 0 })
-                } else {
-                    None
-                }
-            },
-
-            IndexLiteral(val) => {
-                Some(SimpleIndexingData { scale: 0, offset: *val })
-            },
-
-            IndexOp(op, expr1, expr2) => {
-                let data1 = self.get_simple_indexing_data(expr1, index_var)?;
-                let data2 = self.get_simple_indexing_data(expr2, index_var)?;
-                match op {
-                    Operator::Add => {
-                        Some(SimpleIndexingData {
-                            scale: data1.scale + data2.scale,
-                            offset: data1.offset + data2.offset
-                        })
-                    },
-                    Operator::Sub => {
-                        Some(SimpleIndexingData {
-                            scale: data1.scale - data2.scale,
-                            offset: data1.offset - data2.offset
-                        })
-                    },
-                    Operator::Mul => {
-                        if data1.scale == 0 {
-                            Some(SimpleIndexingData {
-                                scale: data2.scale * data1.offset,
-                                offset: data2.offset * data1.offset
-                            })
-                        } else if data2.scale == 0 {
-                            Some(SimpleIndexingData {
-                                scale: data1.scale * data2.offset,
-                                offset: data1.offset * data2.offset
-                            })
-                        } else {
-                            None
-                        }
-                    }
-                }
-            },
-        }
-    }
-
-    fn compute_expr_extent(&self, expr: &SourceExpr) -> Shape  {
+    fn compute_extent_expr(&self, expr: &SourceExpr) -> Shape  {
         match expr {
             SourceExpr::For(_, extent, body) => {
-                let body_extent = self.compute_expr_extent(body);
+                let body_extent = self.compute_extent_expr(body);
                 im::vector![extent.clone()] + body_extent
             },
 
             SourceExpr::Reduce(_, body) => {
-                let mut body_extent = self.compute_expr_extent(body);
+                let mut body_extent = self.compute_extent_expr(body);
                 body_extent.split_off(1)
             },
 
             SourceExpr::ExprOp(_, expr1, expr2) => {
-                let extent1 = self.compute_expr_extent(expr1);
-                let extent2 = self.compute_expr_extent(expr2);
+                let extent1 = self.compute_extent_expr(expr1);
+                let extent2 = self.compute_extent_expr(expr2);
                 assert!(extent1 == extent2);
                 extent1
             },
@@ -408,835 +270,374 @@ impl IndexElimination {
         }
 
         for binding in program.let_bindings.iter() {
-            let extent = self.compute_expr_extent(&*binding.1);
+            let extent = self.compute_extent_expr(&*binding.1);
             if let Some(_) = self.store.insert(binding.0.clone(), extent) {
                 panic!("duplicate binding for {}", binding.0)
             }
         }
 
-        let output_extent = self.compute_expr_extent(&program.expr);
+        let output_extent = self.compute_extent_expr(&program.expr);
         if let Some(_) = self.store.insert(String::from(OUTPUT_EXPR_NAME), output_extent) {
             panic!("duplicate binding for {}", OUTPUT_EXPR_NAME)
         }
     }
 
-    fn register_transformed_expr(&mut self, transform: ArrayTransformInfo) -> ExprRefId {
-        let id = self.fresh_expr_id();
-        self.transform_info_map.insert(id, transform);
-        id
-    }
-
-    // transform expression to compute data about its necessary layout and computation
-    fn transform_expr(
-        &mut self,
-        expr: &SourceExpr,
-        output_shape: &TransformShape<TransformedDim>,
-        path: im::Vector<PathInfo>
-    ) -> Result<TransformResult, String> {
-        match expr {
-            SourceExpr::For(index, extent, body) => {
-                let new_path = 
-                    path +
-                    im::Vector::unit(PathInfo::Index {
-                        index: index.clone(), extent: *extent
-                    });
-
-                self.transform_expr(body, output_shape, new_path)
-            },
-
-            SourceExpr::Reduce(op, body) => {
-                let new_path = 
-                    path + im::Vector::unit(PathInfo::Reduce { op: *op });
-                let body_res = self.transform_expr(body, output_shape, new_path)?;
-                let mut reduced_dim_position = body_res.reduced_dim_position.unwrap();
-                let rest = reduced_dim_position.split_off(1);
-                let (dim_type, dim ) = *reduced_dim_position.first().unwrap();
-                let res =
-                    TransformResult {
-                        expr: TransformedExpr::ReduceNode(dim_type, dim, *op, Box::new(body_res.expr)),
-                        reduced_dim_position: Some(rest),
-                        transformed_inputs: body_res.transformed_inputs
-                    };
-                Ok(res)
-            },
-
-            SourceExpr::ExprOp(op, expr1, expr2) => {
-                let res1 = self.transform_expr(expr1, output_shape, path.clone())?;
-                let res2 = self.transform_expr(expr2, output_shape, path)?;
-                let reduced_dim_position_opt =
-                    match (&res1.reduced_dim_position, &res2.reduced_dim_position) {
-                        (None, None) => Ok(None),
-                        (None, Some(reduced_dim_position2)) => Ok(Some(reduced_dim_position2.clone())),
-                        (Some(reduced_dim_position1), None) => Ok(Some(reduced_dim_position1.clone())),
-                        (Some(reduced_dim_position1), Some(reduced_dim_position2)) => {
-                            if reduced_dim_position1 == reduced_dim_position2 {
-                                Ok(Some(reduced_dim_position1.clone()))
-                            } else {
-                                Err(
-                                    format!("op node operands do not have the same reduced dim positions: {:?} {:?}",
-                                        reduced_dim_position1,
-                                        reduced_dim_position2
-                                    )
-                                )
-                            }
-                        }
-                    }?;
-                let res =
-                    TransformResult {
-                        expr: TransformedExpr::Op(*op, Box::new(res1.expr), Box::new(res2.expr)),
-                        reduced_dim_position: reduced_dim_position_opt,
-                        transformed_inputs: res1.transformed_inputs.union(res2.transformed_inputs),
-                    };
-                Ok(res)
-            },
-
-            SourceExpr::Literal(lit) => {
-                Ok(TransformResult {
-                    expr: TransformedExpr::Literal(*lit as isize),
-                    reduced_dim_position: None,
-                    transformed_inputs: im::HashSet::new(),
+    fn process_index_expr(&self, index_expr: &IndexExpr) -> Result<IndexingData, String> {
+        match index_expr {
+            IndexVar(var) => {
+                Ok(IndexingData {
+                    var_data: im::vector![
+                        IndexingVarData { index_var: var.clone(), stride: 1 }
+                    ],
+                    offset: 0
                 })
             },
 
-            SourceExpr::Indexing(array, index_list) => {
-                // first, determine the computed shape of the array
-                // based on path info and the output shape
+            IndexLiteral(lit) => {
+                Ok(IndexingData {
+                    var_data: im::Vector::new(),
+                    offset: *lit
+                })
+            }
 
+            IndexOp(op, expr1, expr2) => {
+                let data1 = self.process_index_expr(expr1)?;
+                let data2 = self.process_index_expr(expr2)?;
+
+                match op {
+                    Operator::Add => {
+                        Ok(IndexingData {
+                            var_data: data1.var_data + data2.var_data,
+                            offset: data1.offset + data2.offset
+                        })
+                    },
+
+                    Operator::Sub => {
+                        // TODO cannot handle negative strides for now
+                        assert!(data2.var_data.is_empty());
+
+                        Ok(IndexingData {
+                            var_data: data1.var_data,
+                            offset: data1.offset - data2.offset
+                        })
+                    },
+
+                    Operator::Mul => {
+                        if data1.var_data.len() > 0 && data2.offset > 0 {
+                            let mul_var_data1: im::Vector<IndexingVarData> =
+                                data1.var_data.into_iter().map(|var| {
+                                    IndexingVarData {
+                                        index_var: var.index_var,
+                                        stride: var.stride * (data2.offset as usize),
+                                    }
+                                }).collect();
+
+                            Ok(IndexingData {
+                                var_data: mul_var_data1,
+                                offset: data1.offset * data2.offset
+                            })
+
+                        } else if data2.var_data.len() > 0 && data1.offset > 0 {
+                            let mul_var_data2: im::Vector<IndexingVarData> =
+                                data2.var_data.into_iter().map(|var| {
+                                    IndexingVarData {
+                                        index_var: var.index_var,
+                                        stride: var.stride * (data1.offset as usize),
+                                    }
+                                }).collect();
+
+                            Ok(IndexingData {
+                                var_data: mul_var_data2,
+                                offset: data1.offset * data2.offset
+                            })
+
+                        } else {
+                            Err(format!("attempting to multiply index variables: {}", index_expr))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn transform_expr(
+        &mut self,
+        expr: &SourceExpr,
+        output_transform: &ArrayTransform,
+        path_ctx: &PathContext,
+    ) -> Result<TransformedExpr,String> {
+        match expr {
+            SourceExpr::For(index, extent, body) => {
+                let new_path_ctx = 
+                    PathContext::new(
+                        &path_ctx.path +
+                        &im::Vector::unit(PathInfo::Index {
+                            index: index.clone(),
+                            extent: extent.upper() as usize
+                        })
+                    );
+
+                self.transform_expr(body, output_transform, &new_path_ctx)
+            },
+
+            SourceExpr::ExprOp(op, expr1, expr2) => {
+                let res1 = self.transform_expr(expr1, output_transform, path_ctx)?;
+                let res2 = self.transform_expr(expr2, output_transform, path_ctx)?;
+                Ok(TransformedExpr::Op(*op, Box::new(res1), Box::new(res2)))
+            },
+
+            SourceExpr::Literal(num) => {
+                Ok(TransformedExpr::Literal(*num))
+            }
+
+            SourceExpr::Reduce(op, body) => {
+                let new_path_ctx = 
+                    PathContext::new(
+                        &path_ctx.path + &im::Vector::unit(PathInfo::Reduce { op: *op })
+                    );
+                let body_res = self.transform_expr(body, output_transform, &new_path_ctx)?;
+
+                // index of reduced dim should always 0
+                // this invariant is enforced by the Indexing case
+                Ok(TransformedExpr::ReduceNode(0, *op, Box::new(body_res)))
+            },
+
+            // this should compute a new output shape for the indexed array
+            SourceExpr::Indexing(array, index_list) => {
                 let array_extent = self.store[array].clone();
                 let array_dims = array_extent.len();
 
-                // this is the part of the array that *wasn't* indexed
-                let array_tail: Vec<(Extent, usize)> =
-                    array_extent.into_iter().skip(index_list.len())
-                    .zip(index_list.len()..array_dims)
-                    .collect();
+                // process indexing sites
+                let mut index_to_output_dim_map: HashMap<IndexName, (DimIndex, usize)> = HashMap::new();
+                let mut array_offset_map = BaseOffsetMap::new(array_extent.len());
+                for (index_dim, index_expr) in index_list.iter().enumerate() {
+                    let indexing_data = self.process_index_expr(index_expr)?;
+                    array_offset_map.set(index_dim, indexing_data.offset);
+                    for var_data in indexing_data.var_data.into_iter() {
+                        if !index_to_output_dim_map.contains_key(&var_data.index_var) {
+                            let stride = var_data.stride;
+                            index_to_output_dim_map.insert(
+                                var_data.index_var,
+                                (index_dim, stride)
+                            );
 
-                // dimensions that are reduced
-                let mut reduced_dims: Vec<(IndexDim, Extent)> = Vec::new();
-                let mut reduced_dim_position: Vec<(ReducedDimType, usize)> = Vec::new();
+                        } else {
+                            return Err(format!("Index variable {} used in multiple indexing sites", &var_data.index_var))
+                        }
+                    }
+                }
 
-                // dimensions that are part of the output
-                let mut output_dims: Vec<(IndexDim, Extent)> = Vec::new();
-
-                // in-scope indices and their extents
-                let mut index_store: IndexEnvironment = HashMap::new();
-
+                // build output dims in the order of their original shape and stride
+                // (i.e. without recourse to output_shape)
+                // the created output dimensions come first,
+                // and then the "retained" output dimensions that were not indexed
                 let mut num_reductions = 0;
-
-                // output_dims are the dims that will be part of the output shape
-                // reduced_dims are the dims that will be reduced
-                for info in path.iter() {
+                let mut output_dims: Vec<DimContent> = Vec::new();
+                let mut reduced_dims: Vec<DimContent> = Vec::new();
+                for info in path_ctx.path.iter() {
                     match info {
-                        PathInfo::Index { index, extent } => {
-                            if num_reductions > 0 {
-                                reduced_dims.push((IndexDim::Index(index.clone()), extent.clone()));
+                        PathInfo::Index { index: index_var, extent } => {
+                            let dim = 
+                                match index_to_output_dim_map.get(index_var) {
+                                    Some((dim_index, stride)) => {
+                                        DimContent::FilledDim {
+                                            dim: *dim_index,
+                                            extent: *extent,
+                                            stride: *stride
+                                        }
+                                    },
+
+                                    // index var wasn't used;
+                                    // then this output dim is empty
+                                    None => {
+                                        DimContent::EmptyDim {
+                                            extent: *extent
+                                        }
+                                    }
+                                };
+
+                            if num_reductions > 0 { // dim is reduced
+                                reduced_dims.push(dim);
                                 num_reductions -= 1;
 
-                            } else {
-                                output_dims.push((IndexDim::Index(index.clone()), extent.clone()))
+                            } else { // dim is in output
+                                output_dims.push(dim);
                             }
-                            index_store.insert(index.clone(), *extent);
                         },
+
                         PathInfo::Reduce { op: _ } => {
                             num_reductions += 1;
                         },
                     }
                 }
 
-                let mut array_tail_cur_dim = 0;
+                // process reduced dims that are not introduced by a for node
+                // but rather is in array tail that is not indexed
+                let mut cur_retained_dim = index_list.len();
                 while num_reductions > 0 {
-                    let (extent, i) = array_tail.get(array_tail_cur_dim).unwrap().clone();
-                    reduced_dims.push((IndexDim::Anonymous(i), extent));
-                    num_reductions -= 1;
-                    array_tail_cur_dim += 1;
-                }
-
-                while array_tail_cur_dim < array_tail.len() {
-                    let (extent, i) = array_tail.get(array_tail_cur_dim).unwrap().clone();
-                    output_dims.push((IndexDim::Anonymous(i), extent));
-                    array_tail_cur_dim += 1;
-                }
-
-                // output index shape is like output shape,
-                // but the dimensions are now named by index
-                // invariant: every output and reduced dim appears
-                // exactly once in output index shape
-                let mut out_index_shape: TransformShape<TransformedIndexDim> = TransformShape::default();
-                let mut used_rdim = 0;
-                for (i, out_dim) in output_shape.0.iter().enumerate() {
-                    match out_dim {
-                        TransformedDim::Input(dim_index) => {
-                            out_index_shape.0.push(
-                                match &output_dims[*dim_index].0 {
-                                    IndexDim::Index(index) => {
-                                        TransformedIndexDim::Index(index.to_string())
-                                    },
-                                    IndexDim::Anonymous(i) => {
-                                        TransformedIndexDim::Anonymous(*i)
-                                    },
-                                }
-                            );
-                        },
-
-                        TransformedDim::Fill(extent) => {
-                            // reused a reduced dim as a fill
-                            if reduced_dims.len() > 0 {
-                                // TODO: have a better heuristic for picking which reduced dim to use
-                                let index_dim =
-                                    match &reduced_dims[used_rdim].0 {
-                                        IndexDim::Index(index) => {
-                                            TransformedIndexDim::Index(index.to_string())
-                                        },
-                                        IndexDim::Anonymous(i) => {
-                                            TransformedIndexDim::Anonymous(*i)
-                                        }
-                                    };
-
-                                used_rdim += 1;
-                                out_index_shape.0.push(index_dim)
-
-                            } else {
-                                out_index_shape.0.push(TransformedIndexDim::Fill(*extent))
-                            }
-                        },
-                    }
-                }
-
-                // if some reduced dims are not used, they are added to the front
-                if used_rdim < reduced_dims.len() {
-                    for rdim in reduced_dims[used_rdim..].iter() {
-                        let dim =
-                            match &rdim.0 {
-                                IndexDim::Index(index) => {
-                                    TransformedIndexDim::ReducedIndex(index.to_string())
-                                },
-                                IndexDim::Anonymous(i) => {
-                                    TransformedIndexDim::ReducedAnonymous(*i)
-                                }
-                            };
-                        out_index_shape.0.insert(0, dim);
-                    }
-                }
-
-                // compute the positions of reduced dimensions
-                for dim in reduced_dims.iter() {
-                    let index_opt =
-                        out_index_shape.0.iter().position(|x|
-                            match &dim.0 {
-                                IndexDim::Index(index) => {
-                                    match x {
-                                        TransformedIndexDim::Index(x_index) |
-                                        TransformedIndexDim::ReducedIndex(x_index) =>
-                                            index == x_index,
-
-                                        _ => false,
-                                    }
-                                },
-
-                                IndexDim::Anonymous(i) =>  {
-                                    match x {
-                                        TransformedIndexDim::Anonymous(x_i) |
-                                        TransformedIndexDim::ReducedAnonymous(x_i) =>
-                                            i == x_i,
-
-                                        _ => false,
-                                    }
-                                }
-                            }
-                        );
-
-                    if let Some(index) = index_opt { 
-                        let reduced_dim_type =
-                            match out_index_shape.0[index] {
-                                TransformedIndexDim::Index(_) => ReducedDimType::Reused,
-                                TransformedIndexDim::Anonymous(_) => ReducedDimType::Reused,
-                                TransformedIndexDim::ReducedIndex(_) => ReducedDimType::Hidden,
-                                TransformedIndexDim::ReducedAnonymous(_) => ReducedDimType::Hidden,
-                                TransformedIndexDim::Fill(_) => panic!("reduced dim cannot be a fill")
-                            };
-                        reduced_dim_position.push((reduced_dim_type, index));
-
-                    } else {
-                        let dim_id = 
-                            match &dim.0 {
-                                IndexDim::Index(index) => index.clone(),
-                                IndexDim::Anonymous(i) => i.to_string(),
-                            };
-
-                        return Err(format!("reduced indexed dimension {} not in output index shape", dim_id))
-                    }
-                }
-
-                // compute which index is in what dimension of the original shape
-                let mut index_position: HashMap<IndexName, usize> = HashMap::new();
-                for (i, index_expr) in index_list.iter().enumerate() {
-                    match index_expr.get_single_var() {
-                        Some(var) => {
-                            index_position.insert(var, i);
-                        },
-
-                        None => {
-                            return Err(String::from("only one index var allowed per indexed dimension"))
+                    reduced_dims.push(
+                        DimContent::FilledDim {
+                            dim: cur_retained_dim,
+                            extent: array_extent[cur_retained_dim].upper() as usize,
+                            stride: 1,
                         }
-                    }
-                }
-
-                // computed_shape is the final shape computed from the output index shape
-                // this should be different for complex indexing
-                let mut computed_shape: TransformShape<TransformedDim> = TransformShape::default();
-                for dim in out_index_shape.0 {
-                    match dim {
-                        TransformedIndexDim::Index(index) |
-                        TransformedIndexDim::ReducedIndex(index) => {
-                            match index_position.get(&index) {
-                                // indexed dim is in the original shape; add its position
-                                Some(i) => {
-                                    computed_shape.0.push(TransformedDim::Input(*i));
-                                },
-
-                                // index is missing from original shape; add as a fill dimension
-                                None => {
-                                    let index_extent_opt =
-                                        path.iter().find(|info| 
-                                            match info {
-                                                PathInfo::Index { index: path_index, extent: _ }
-                                                if *path_index == index => true,
-
-                                                _ => false,
-                                            }
-                                        );
-
-                                    if let Some(PathInfo::Index { index: _, extent }) = index_extent_opt {
-                                        computed_shape.0.push(TransformedDim::Fill(*extent));
-                                    } else {
-                                        return Err(format!("cannot index indexed dimension {} in output shape", index));
-                                    }
-                                }
-                            }
-                        },
-
-                        // anonymous dims are always in the original shape
-                        TransformedIndexDim::Anonymous(i) |
-                        TransformedIndexDim::ReducedAnonymous(i) => {
-                            computed_shape.0.push(TransformedDim::Input(i))
-                        },
-
-                        // fill dimension from output shape
-                        TransformedIndexDim::Fill(extent) => {
-                            computed_shape.0.push(TransformedDim::Fill(extent));
-                        },
-                    }
-                }
-
-                let dim_info: Vec<TransformedDimInfo> =
-                    computed_shape.0.into_iter().map(|dim| {
-                        let extent = 
-                            match dim {
-                                // for indexed dims, perform interval analysis
-                                TransformedDim::Input(i) => {
-                                    // input dim is indexed
-                                    // must calculate index expr interval
-                                    // to get extent
-                                    if i < index_list.len() {
-                                        let index_expr = &index_list[i];
-                                        let index_interval = self.index_expr_to_interval(index_expr, &index_store);
-                                        Interval::new(index_interval.lower(), index_interval.upper())
-                                    }
-                                    // input dim is anonymous, extent matches input dim's
-                                    else { 
-                                        array_tail[i - index_list.len()].0
-                                    }
-                                },
-
-                                // fill dims never have padding
-                                TransformedDim::Fill(extent) => extent
-                            };
-
-                        let offset: isize =
-                            match dim {
-                                TransformedDim::Input(i) => {
-                                    // only indexed dims can have offsets;
-                                    // anonymous dims always have offset 0
-                                    if i < index_list.len() {
-                                        let index_expr = &index_list[i];
-                                        let index_var = index_expr.get_single_var().unwrap();
-                                        if let Some(data) = self.get_simple_indexing_data(index_expr, &index_var) {
-                                            data.offset
-
-                                        } else {
-                                            panic!("index expr is not simple")
-                                        }
-
-                                    } else {
-                                        0
-                                    }
-                                },
-
-                                TransformedDim::Fill(_) => 0
-                            };
-
-                        Ok(TransformedDimInfo { dim, pad: (0,0), extent, offset })
-                    }).collect::<Result<Vec<TransformedDimInfo>,String>>()?;
-
-                let expr_id =
-                    self.register_transformed_expr(
-                        ArrayTransformInfo(String::from(array), dim_info)
                     );
+                    num_reductions -= 1;
+                    cur_retained_dim += 1;
+                }
 
-                let res =
-                    TransformResult {
-                        expr: TransformedExpr::ExprRef(expr_id),
-                        reduced_dim_position: Some(reduced_dim_position),
-                        transformed_inputs: im::HashSet::unit(expr_id)
+                // dims in array tail that are not reduced are added to the output
+                while cur_retained_dim < array_dims {
+                    output_dims.push(
+                        DimContent::FilledDim {
+                            dim: cur_retained_dim,
+                            extent: array_extent[cur_retained_dim].upper() as usize,
+                            stride: 1,
+                        }
+                    );
+                    cur_retained_dim += 1;
+                }
+
+                // build a shape for the indexed array given the required output shape
+                let mut indexed_output_shape =
+                    ArrayTransform {
+                        array: array.to_string(),
+                        offset_map: array_offset_map,
+                        dims: im::Vector::new()
                     };
-                Ok(res)
-            },
+
+                // first, add reduced dims in LIFO order
+                while let Some(dim) = reduced_dims.pop() {
+                    indexed_output_shape.dims.push_back(dim);
+                }
+
+                // next, add the output dimensions
+                for dim in output_transform.dims.iter() {
+                    let indexed_output_dim =
+                        match *dim {
+                            DimContent::FilledDim { dim, extent: output_extent, stride: output_stride } => {
+                                match output_dims[dim] {
+                                    DimContent::FilledDim {
+                                        dim: indexed_dim,
+                                        extent: indexed_extent,
+                                        stride: indexed_stride
+                                    } => {
+                                        let new_offset =
+                                            indexed_output_shape.offset_map.get(dim) + 
+                                            (output_transform.offset_map.get(dim) * (indexed_stride as isize));
+
+                                        indexed_output_shape.offset_map.set(indexed_dim, new_offset);
+
+                                        DimContent::FilledDim {
+                                            dim: indexed_dim,
+                                            extent: output_extent,
+                                            stride: output_stride*indexed_stride
+                                        }
+                                    },
+
+                                    // TODO: does this make sense??
+                                    DimContent::EmptyDim { extent: _ } => {
+                                        DimContent::EmptyDim { extent: output_extent }
+                                    },
+                                }
+                            },
+
+                            DimContent::EmptyDim { extent: _ } => {
+                                dim.clone()
+                            },
+                        };
+
+                    indexed_output_shape.dims.push_back(indexed_output_dim);
+                }
+
+                let expr_id = self.register_transformed_expr(indexed_output_shape);
+
+                Ok(TransformedExpr::ExprRef(expr_id))
+            }
         }
     }
 
-    fn gen_extent_constraints_expr(&mut self, expr: &TransformedExpr) -> Option<(usize, ShapeId)> {
+    // resolve expr refs of intermediate arrays
+    fn resolve_expr_refs(&self, expr: TransformedExpr) -> TransformedExpr {
         match expr {
-            TransformedExpr::ReduceNode(dim_type, _, _, body) => {
-                if let Some((head, shape)) = self.gen_extent_constraints_expr(body) {
-                    match dim_type {
-                        ReducedDimType::Hidden => Some((head+1, shape)),
-                        ReducedDimType::Reused => Some((head, shape)),
-                    }
-                } else {
-                    panic!("attempting to reduce dimension of scalar value")
-                }
-            },
-
-            TransformedExpr::Op(_, expr1, expr2) => {
-                let res_opt1 = self.gen_extent_constraints_expr(expr1);
-                let res_opt2  = self.gen_extent_constraints_expr(expr2);
-                match (res_opt1, res_opt2) {
-                    (None, None) => None,
-                    (None, Some(res2)) => Some(res2),
-                    (Some(res1), None) => Some(res1),
-                    (Some((head1, shape1)), Some((head2, shape2))) => {
-                        self.extent_analysis.add_equals_constraint(shape1, head1, shape2, head2);
-
-                        // arbitrarily return the first shape, since it should
-                        // be the same as the second shape anyway
-                        Some((head1, shape1))
-                    }
-                }
-            },
-
-            TransformedExpr::Literal(_) => None,
-
-            TransformedExpr::ExprRef(id) =>
-                self.shape_map.get(id).map(|x| *x)
-        }
-    }
-
-    /// collect constraints for extent analysis
-    fn gen_extent_constraints_prog(&mut self) {
-        // temporarily move transform_list to a tmp so we can iterate through it
-        // we need to do this because the loop mutates the self data structure,
-        // so the compiler prevents us from immutably borrowing transform_list
-        // to iterate through it.
-        // by moving transform_list to a temporary owned ref, we ensure that
-        // the mutations to self in the loop don't change it
-        let tmp_transform_list = std::mem::replace(&mut self.transform_list, Vec::new());
-        let mut eq_inputs_map: HashMap<ArrayTransformInfo, Vec<ExprRefId>> = HashMap::new();
-
-        for id in tmp_transform_list.iter() {
-            // don't process inputs; they don't have mappings in transform_map
-            if let Some(expr) = self.transform_map.get(id).map(|x| x.clone()) {
-                if let Some((head, shape_id)) = self.gen_extent_constraints_expr(&expr) {
-                    self.shape_map.insert(*id, (head, shape_id));
-
-                    let transform_info = &self.transform_info_map[&id];
-                    let required_shape: Shape =
-                        transform_info.1.iter()
-                        .map(|info| info.extent)
-                        .collect();
-
-                    self.extent_analysis.add_atleast_constraint(shape_id, head, required_shape);
-                }
-            } else {
-                let info = &self.transform_info_map[id];
-                match eq_inputs_map.get_mut(info) {
-                    Some(id_list) => {
-                        id_list.push(*id);
-                    },
-                    None => {
-                        eq_inputs_map.insert(info.clone(), vec![*id]);
-                    }
-                }
-            }
-        }
-
-        // ensure that transformed inputs considered to be equal
-        // (i.e. same array, same transposition) have the same padding
-        for (_, id_list) in eq_inputs_map.into_iter() {
-            // set the rest of the shapes equal to the first shape
-            if id_list.len() > 1 {
-                let (first_list, rest) = id_list.split_at(1);
-                let first = first_list[0];
-                let (first_head, first_shape) = self.shape_map[&first];
-                for cur_id in rest.iter() {
-                    let (cur_head, cur_shape) = self.shape_map[cur_id];
-                    self.extent_analysis.add_equals_constraint(first_shape, first_head, cur_shape, cur_head);
-                }
-            }
-        }
-
-        // restore transform_list
-        self.transform_list = tmp_transform_list;
-    }
-
-    /// apply extent solutions to determine padding
-    fn apply_extent_solution(&mut self) {
-        let extent_solution = self.extent_analysis.solve();
-        let expr_extent_map: HashMap<ExprRefId, Shape> =
-            self.shape_map.iter().map(|(id, (head, shape_id))| {
-                let mut shape = extent_solution[shape_id].clone();
-                (*id, shape.split_off(*head))
-            }).collect();
-
-        for (id, transform) in self.transform_info_map.iter_mut() {
-            let computed_shape = &expr_extent_map[id];
-            let input_shape =  self.input_map.get(&transform.0);
-
-            // update extents
-            for (i, dim_info) in transform.1.iter_mut().enumerate() {
-                let computed_extent = computed_shape[i];
-                dim_info.extent = computed_extent.clone();
-
-                // if input, compute padding as well
-                if let Some(orig_shape) = input_shape {
-                    match dim_info.dim {
-                        // for input dimensions, add padding
-                        TransformedDim::Input(orig_i) => {
-                            let orig_extent = &orig_shape[orig_i];
-                            let pad_min = (orig_extent.lower() - computed_extent.lower()) as usize;
-                            let pad_max = (computed_extent.upper() - orig_extent.upper()) as usize;
-                            dim_info.pad = (pad_min, pad_max);
-                        },
-
-                        // for fill dimensions, just overwrite the fill extent to the computed one
-                        TransformedDim::Fill(_) => {
-                            dim_info.dim = TransformedDim::Fill(computed_extent);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    fn fill_and_rotate(&self, info: &ArrayTransformInfo, expr: IndexFreeExpr) -> IndexFreeExpr {
-        // fill
-        let fill_dims: im::Vector<usize> =
-            info.1.iter().enumerate()
-            .filter(|(_, dim_info)| dim_info.is_fill())
-            .map(|(i,_)| i)
-            .collect();
-
-        let filled_expr =
-            fill_dims.iter().fold(expr, |acc, dim| {
-                IndexFreeExpr::Fill(Box::new(acc), *dim)
-            });
-
-        let need_offset = 
-            info.1.iter()
-            .any(|dim_info| dim_info.offset != 0);
-
-        let offset_expr =
-            if need_offset {
-                IndexFreeExpr::Offset(
-                    Box::new(filled_expr),
-                    info.1.iter().map(|dim_info| {
-                        dim_info.offset
-                    }).collect()
-                )
-
-            } else {
-                filled_expr
-            };
-
-        offset_expr
-    }
-
-    /// generate client transformation from transform info
-    fn lower_to_client_transform(&self, info: &ArrayTransformInfo) -> ClientTransform {
-        let input_array = ClientTransform::InputArray(info.0.clone());
-
-        let cmp_input_dims =
-            |dim1: &&TransformedDimInfo, dim2: &&TransformedDimInfo| -> std::cmp::Ordering {
-                match (&dim1.dim, &dim2.dim){
-                    (TransformedDim::Input(i1), TransformedDim::Input(i2)) => {
-                        i1.cmp(i2)
-                    },
-
-                    _ => {
-                        panic!("fill dim cannot be one of the original dims")
-                    }
-                }
-            };
-
-        let transposed_dims: Vec<&TransformedDimInfo> =
-            info.1.iter()
-            .filter(|dim_info| dim_info.is_input())
-            .collect();
-
-        let need_transpose =
-            transposed_dims.iter().enumerate().any(|(i, dim_info)| {
-                match dim_info.dim {
-                    TransformedDim::Input(idim) => i != idim,
-                    TransformedDim::Fill(_) => true,
-                }
-            });
-
-        let mut orig_dims = transposed_dims.clone();
-
-        if need_transpose {
-            orig_dims.sort_by(cmp_input_dims);
-        }
-
-        // pad
-        let need_padding =
-            orig_dims.iter().any(|dim_info| {
-                dim_info.pad.0 != 0 || dim_info.pad.1 != 0
-            });
-
-        let padded_transform =
-            if need_padding {
-                ClientTransform::Pad(
-                    Box::new(input_array),
-                    transposed_dims.iter()
-                    .map(|dim_info| dim_info.pad)
-                    .collect::<im::Vector<PadSize>>()
-                )
-
-            } else {
-                input_array
-            };
-
-        // transpose
-        let transpose_transform =
-            if need_transpose {
-                ClientTransform::Transpose(
-                    Box::new(padded_transform),
-                    transposed_dims.iter().map(|dim_info| {
-                        match dim_info.dim {
-                            TransformedDim::Input(i) => i,
-
-                            TransformedDim::Fill(_) => {
-                                panic!("fill dim should not be an original dim")
-                            }
-                        }
-                    }).collect()
-                )
-
-            } else {
-                padded_transform
-            };
-
-        // extend with new dimensions
-        let fill_dims: Vec<(usize, &TransformedDimInfo)> = 
-            info.1.iter().enumerate()
-            .filter(|(_, dim_info)| dim_info.is_fill())
-            .collect();
-
-        let expand_transform =
-            if fill_dims.is_empty() {
-                transpose_transform
-
-            } else {
-                ClientTransform::Expand(
-                    Box::new(transpose_transform),
-                    fill_dims.iter().map(|(i,_)| *i).collect()
-                )
-            };
-
-        expand_transform
-    }
-
-    fn lower_to_index_free_expr(
-        &self,
-        expr: &TransformedExpr,
-        client_object_map: &HashMap<ArrayTransformInfo, HEObjectName>,
-        indfree_expr_map: &mut HashMap<ExprRefId, IndexFreeExpr>,
-    ) -> IndexFreeExpr {
-        match expr {
-            TransformedExpr::ReduceNode(dim_type, dim, op, body) => {
-                let new_body = self.lower_to_index_free_expr(body, client_object_map, indfree_expr_map);
-                match dim_type {
-                    ReducedDimType::Hidden => {
-                        IndexFreeExpr::Reduce(*dim, *op, Box::new(new_body))
-                    },
-
-                    // if a dim is reused, zero it out
-                    ReducedDimType::Reused => {
-                        IndexFreeExpr::Zero(
-                            Box::new(
-                                IndexFreeExpr::Reduce(*dim, *op, Box::new(new_body))
-                            ),
-                            *dim
-                        )
-                    }
-                }
+            TransformedExpr::ReduceNode(i, op, body) => {
+                let new_body = self.resolve_expr_refs(*body);
+                TransformedExpr::ReduceNode(i, op, Box::new(new_body))
             },
 
             TransformedExpr::Op(op, expr1, expr2) => {
-                let new_expr1 = self.lower_to_index_free_expr(expr1, client_object_map, indfree_expr_map);
-                let new_expr2 = self.lower_to_index_free_expr(expr2, client_object_map, indfree_expr_map);
-                IndexFreeExpr::Op(*op, Box::new(new_expr1), Box::new(new_expr2))
+                let new_expr1 = self.resolve_expr_refs(*expr1);
+                let new_expr2 = self.resolve_expr_refs(*expr2);
+                TransformedExpr::Op(op, Box::new(new_expr1), Box::new(new_expr2))
             },
 
-            TransformedExpr::Literal(lit) => {
-                IndexFreeExpr::Literal(*lit)
-            },
+            TransformedExpr::Literal(_) => expr,
 
             TransformedExpr::ExprRef(id) => {
-                if self.transform_map.contains_key(id) { // let-binding
-                    indfree_expr_map.remove(id).unwrap()
+                if let Some(ref_expr) = self.transform_map.get(&id) {
+                    ref_expr.clone()
 
-                } else { // input
-                    let info = &self.transform_info_map[id];
-                    let name = &client_object_map[info];
-                    let input = IndexFreeExpr::InputArray(String::from(name));
-                    self.fill_and_rotate(info, input)
+                } else {
+                    expr
                 }
             }
         }
     }
 
-    fn lower_to_index_free_prog(&mut self) -> Result<IndexFreeProgram, String> {
-        // generate map of client ciphertexts
-        let mut transform_object_map: HashMap<ArrayTransformInfo, HEObjectName> = HashMap::new();
-        let mut indfree_expr_map: HashMap<ExprRefId, IndexFreeExpr> = HashMap::new();
-        let mut ciphertexts: HashMap<HEObjectName, Ciphertext> = HashMap::new();
+    pub fn run(&mut self, program: &SourceProgram) -> Result<TransformedProgram, String> {
+        self.compute_extent_prog(program);
 
-        for id in self.transform_list.iter() {
-            if let Some(cur_expr) = self.transform_map.get(id) { // let-binding
-                let indfree_expr = self.lower_to_index_free_expr(cur_expr, &transform_object_map, &mut indfree_expr_map);
-
-                // add fills
-                let info = &self.transform_info_map[id];
-                let final_expr = self.fill_and_rotate(info, indfree_expr);
-                indfree_expr_map.insert(*id, final_expr);
-
-            } else { // input
-                let info = &self.transform_info_map[id];
-                if !transform_object_map.contains_key(&info) {
-                    let name = self.name_generator.get_fresh_name(&format!("c_{}", info.0));
-                    transform_object_map.insert(info.clone(), name.clone());
-                    ciphertexts.insert(name, Ciphertext { dimensions: info.to_dimensions() });
-                }
-            }
-        }
-
-        // build client store
-        let client_store: HEClientStore = 
-            transform_object_map.iter().map(|(info, name)| {
-                (String::from(name), self.lower_to_client_transform(info))
-            }).collect();
-
-        let expr = indfree_expr_map.remove(&self.output_id).unwrap();
-
-        Ok(IndexFreeProgram { client_store, expr, ciphertexts })
-    }
-
-    fn transform_program(&mut self) -> Result<IndexFreeProgram, String> {
-        let output_extent =
-            self.store.get(OUTPUT_EXPR_NAME)
-            .ok_or(format!("No binding for output expression {}", OUTPUT_EXPR_NAME))?;
-
-        let output_transform: ArrayTransformInfo =
-            ArrayTransformInfo(
-                String::from(OUTPUT_EXPR_NAME),
-                output_extent.iter().enumerate().map(|(i, extent)| {
-                    TransformedDimInfo {
-                        dim: TransformedDim::Input(i),
-                        pad: (0, 0),
-                        extent: extent.clone(),
-                        offset: 0,
+        let output_extent = &self.store[OUTPUT_EXPR_NAME];
+        let output_shape = 
+            ArrayTransform {
+                array: String::from(OUTPUT_EXPR_NAME),
+                offset_map: BaseOffsetMap::new(output_extent.len()),
+                dims: output_extent.iter().enumerate().map(|(i, dim_extent)| {
+                    DimContent::FilledDim {
+                        dim: i,
+                        extent: dim_extent.upper() as usize,
+                        stride: 1
                     }
                 }).collect()
-            );
-        self.transform_info_map.insert(self.output_id, output_transform);
+            };
 
-        // backwards analysis to determine the transformations
-        // needed for indexed arrays
-        self.transform_list.push(self.output_id);
-        let mut worklist: Vec<ExprRefId> = vec![self.output_id];
-        while !worklist.is_empty() {
+        let output_id = self.fresh_expr_id();
+        self.transform_shape_map.insert(output_id, output_shape);
+
+        // backwards analysis goes from output expression and computes
+        // required shapes for indexed arrays
+        let mut transformed_inputs: HashMap<ExprRefId, ArrayTransform> = HashMap::new();
+        let mut worklist = vec![output_id];
+        while worklist.len() > 0 {
             let cur_id = worklist.pop().unwrap();
-            let transform = &self.transform_info_map[&cur_id];
-            let cur_expr_opt =
-                self.expr_binding_map.get(&transform.0).map(|x| x.clone());
-
-            // add transformed arrays to the worklist, if they are let bound
-            if let Some(cur_expr) = cur_expr_opt {
-                let cur_res =
+            let array_transform = self.transform_shape_map.remove(&cur_id).unwrap();
+            
+            if let Some(source_expr) = program.get_expr_binding(&array_transform.array) {
+                let transformed_expr = 
                     self.transform_expr(
-                        &cur_expr, 
-                        &transform.to_transformed_shape(),
-                        im::Vector::new()
+                        source_expr, 
+                        &array_transform, 
+                        &PathContext::new(im::Vector::new())
                     )?;
 
-                worklist.extend(cur_res.transformed_inputs.iter());
-                self.transform_list.extend(cur_res.transformed_inputs.iter());
-                self.transform_map.insert(cur_id, cur_res.expr);
+                let child_ids = transformed_expr.get_expr_refs();
+                self.transform_map.insert(cur_id, transformed_expr);
+                worklist.extend(child_ids.iter());
 
-            // for inputs, add directly to the shape map
-            } else if let Some(_) = self.input_map.get(&transform.0) {
-                let dims = transform.1.len();
-                let required_shape: Shape = 
-                    transform.1.iter()
-                    .map(|info| info.extent)
-                    .collect();
-
-                let shape_id = self.extent_analysis.register_shape(dims);
-                self.shape_map.insert(cur_id, (0, shape_id));
-                self.extent_analysis.add_atleast_constraint(shape_id, 0, required_shape);
-
-            } else {
-                panic!("variable {} is not bound", &transform.0)
+            } else { // array is an input
+                transformed_inputs.insert(cur_id, array_transform);
             }
         }
 
-        // since transform list stores a toposort of expressions
-        // and it was populated above starting from the output expression,
-        // we need to reverse it
-        self.transform_list.reverse();
+        let unresolved_output_expr = self.transform_map.remove(&output_id).unwrap();
+        let output_expr = self.resolve_expr_refs(unresolved_output_expr);
 
-        // generate constraints for the extent analysis
-        self.gen_extent_constraints_prog();
+        let array_shapes: HashMap<ArrayName, Shape>  =
+            transformed_inputs.iter().map(|(_, transform)| { 
+                (transform.array.clone(), program.get_input_shape(&transform.array).unwrap().clone())
+            }).collect();
 
-        // apply extent solutions to determine padding
-        self.apply_extent_solution();
-
-        // lower to index-free expression and return client-side transforms
-        self.lower_to_index_free_prog()
-    }
-
-    pub fn run(mut self, program: &SourceProgram) -> Result<IndexFreeProgram, String> {
-        program.inputs.iter().for_each(|input| {
-            if let Some(_) = self.input_map.insert(input.0.clone(), input.1.clone()) {
-                panic!("duplicate bindings for {}", &input.0)
-            }
-        });
-
-        program.let_bindings.iter().for_each(|let_binding| {
-            if let Some(_) = self.expr_binding_map.insert(let_binding.0.clone(), *let_binding.1.clone()) {
-                panic!("duplicate bindings for {}", &let_binding.0)
-            }
-        });
-        self.expr_binding_map.insert(String::from(OUTPUT_EXPR_NAME), program.expr.clone());
-
-        self.compute_extent_prog(program);
-        self.transform_program()
-    }
-}
-
-impl Default for IndexElimination {
-    fn default() -> Self {
-        IndexElimination::new()
+        Ok(TransformedProgram { output_expr, expr_map: HashMap::new(), input_map: transformed_inputs, array_shapes })
     }
 }
 
@@ -1245,28 +646,28 @@ mod tests{
     use crate::lang::parser::ProgramParser;
     use super::*;
 
-    fn test_lowering(src: &str) {
+    fn test_index_elim(src: &str) {
         let parser = ProgramParser::new();
         let program: SourceProgram = parser.parse(src).unwrap();
 
-        let index_elim = IndexElimination::new();
+        let mut index_elim = IndexElimination::new();
         let res = index_elim.run(&program);
         
         assert!(res.is_ok());
 
         let prog = res.unwrap();
-        for (name, transform) in prog.client_store.iter() {
-            println!("{} => {}", name, transform)
+        for (ref_id, transform) in prog.input_map {
+            println!("{} => {}", ref_id, transform);
         }
-        println!("{}", prog.expr);
+        println!("{}", prog.output_expr);
     }
 
     #[test]
     fn test_imgblur() {
-        test_lowering(
-        "input img: [(0,16),(0,16)]
-            for x: (0, 16) {
-                for y: (0, 16) {
+        test_index_elim(
+        "input img: [16,16]
+            for x: 16 {
+                for y: 16 {
                     img[x-1][y-1] + img[x+1][y+1]
                 }
             }"
@@ -1275,17 +676,17 @@ mod tests{
 
     #[test]
     fn test_imgblur2() {
-        test_lowering(
-        "input img: [(0,16),(0,16)]
+        test_index_elim(
+        "input img: [16,16]
             let res = 
-                for x: (0, 16) {
-                    for y: (0, 16) {
+                for x: 16 {
+                    for y: 16 {
                         img[x-1][y-1] + img[x+1][y+1]
                     }
                 }
             in
-            for x: (0, 16) {
-                for y: (0, 16) {
+            for x: 16 {
+                for y: 16 {
                     res[x-2][y-2] + res[x+2][y+2]
                 }
             }
@@ -1295,17 +696,17 @@ mod tests{
 
     #[test]
     fn test_convolve() {
-        test_lowering(
-        "input img: [(0,16),(0,16)]
+        test_index_elim(
+        "input img: [16,16]
             let conv1 = 
-                for x: (0, 15) {
-                    for y: (0, 15) {
+                for x: 15 {
+                    for y: 15 {
                         img[x][y] + img[x+1][y+1]
                     }
                 }
             in
-            for x: (0, 14) {
-                for y: (0, 14) {
+            for x: 14 {
+                for y: 14 {
                     conv1[x][y] + conv1[x+1][y+1]
                 }
             }
@@ -1315,12 +716,12 @@ mod tests{
 
     #[test]
     fn test_matmatmul() {
-        test_lowering(
-            "input A: [(0,4),(0,4)]
-            input B: [(0,4),(0,4)]
-            for i: (0,4) {
-                for j: (0,4) {
-                    sum(for k: (0,4) { A[i][k] * B[k][j] })
+        test_index_elim(
+            "input A: [4,4]
+            input B: [4,4]
+            for i: 4 {
+                for j: 4 {
+                    sum(for k: 4 { A[i][k] * B[k][j] })
                 }
             }"
         );
@@ -1328,20 +729,20 @@ mod tests{
 
     #[test]
     fn test_matmatmul2() {
-        test_lowering(
-            "input A1: [(0,4),(0,4)]
-            input A2: [(0,4),(0,4)]
-            input B: [(0,4),(0,4)]
+        test_index_elim(
+            "input A1: [4,4]
+            input A2: [4,4]
+            input B: [4,4]
             let res =
-                for i: (0,4) {
-                    for j: (0,4) {
-                        sum(for k: (0,4) { A1[i][k] * B[k][j] })
+                for i: 4 {
+                    for j: 4 {
+                        sum(for k: 4 { A1[i][k] * B[k][j] })
                     }
                 }
             in
-            for i: (0,4) {
-                for j: (0,4) {
-                    sum(for k: (0,4) { A2[i][k] * res[k][j] })
+            for i: 4 {
+                for j: 4 {
+                    sum(for k: 4 { A2[i][k] * res[k][j] })
                 }
             }
             "
@@ -1350,10 +751,10 @@ mod tests{
 
     #[test]
     fn test_dotprod_pointless() {
-        test_lowering(
+        test_index_elim(
         "
-            input A: [(0,3)]
-            input B: [(0,3)]
+            input A: [3]
+            input B: [3]
             sum(A * B)
             "
         );
@@ -1361,11 +762,11 @@ mod tests{
 
     #[test]
     fn test_matvecmul() {
-        test_lowering(
+        test_index_elim(
         "
-            input M: [(0,1),(0,1)]
-            input v: [(0,1)]
-            for i: (0,1) {
+            input M: [2,2]
+            input v: [2]
+            for i: 2 {
                 sum(M[i] * v)
             }
             "

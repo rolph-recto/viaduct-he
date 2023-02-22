@@ -259,7 +259,7 @@ impl CostEstimator {
 
 #[cfg(test)]
 mod tests{
-    use crate::{lang::{parser::ProgramParser, index_elim2::IndexElimination2, source::SourceProgram}, circ2::materializer::{Materializer, DummyArrayMaterializer}, scheduling::Schedule};
+    use crate::{lang::{parser::ProgramParser, index_elim::IndexElimination, source::SourceProgram}, circ2::materializer::{Materializer, DummyArrayMaterializer}, scheduling::Schedule};
     use super::*;
 
     // generate an initial schedule for a program
@@ -267,7 +267,7 @@ mod tests{
         let parser = ProgramParser::new();
         let program: SourceProgram = parser.parse(src).unwrap();
 
-        let mut index_elim = IndexElimination2::new();
+        let mut index_elim = IndexElimination::new();
         let res = index_elim.run(&program);
         
         assert!(res.is_ok());
@@ -290,9 +290,9 @@ mod tests{
     #[test]
     fn test_imgblur() {
         test_cost_estimator(
-        "input img: [(0,16),(0,16)]
-            for x: (0, 16) {
-                for y: (0, 16) {
+        "input img: [16,16]
+            for x: 16 {
+                for y: 16 {
                     img[x-1][y-1] + img[x+1][y+1]
                 }
             }"

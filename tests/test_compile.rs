@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use he_vectorizer::{circ::{circ_gen::HECircuitGenerator, optimizer::{HELatencyModel, ExtractorType, Optimizer}, lowering::{program::HEProgram, lowered_program::HELoweredProgram}}, lang::{index_elim::IndexElimination, parser::ProgramParser}};
 
+/*
 fn test_compile(src: &str, size: usize, opt_duration: usize, extractor: ExtractorType, noinplace: bool) {
     let parser = ProgramParser::new();
     let src_program = parser.parse(src).unwrap();
@@ -129,3 +130,4 @@ fn test_dotprod() {
 
     test_compile(src, 4096, 0, ExtractorType::Greedy, true);
 }
+*/

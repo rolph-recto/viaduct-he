@@ -3,13 +3,14 @@ use bimap::BiHashMap;
 
 use crate::{
     circ2::{
-        IndexCoordinateMap, CiphertextObject, PlaintextObject, ParamCircuitExpr,
+        IndexCoordinateSystem, IndexCoordinateMap, CiphertextObject,
+        PlaintextObject, ParamCircuitExpr,
         CircuitRegistry, ParamCircuitProgram, IndexCoord, CircuitValue,
         vector_info::VectorInfo,
     },
     lang::{
         ArrayTransform, Shape, DimContent, Operator, 
-        index_elim2::{TransformedProgram, TransformedExpr},
+        index_elim::{TransformedProgram, TransformedExpr},
     },
     scheduling::{
         TransformSchedule, ExprScheduleType, DimName, OffsetExpr, Schedule,
@@ -52,7 +53,7 @@ impl Materializer {
         program: &TransformedProgram,
         schedule: &Schedule
     ) -> Result<ParamCircuitProgram, String> {
-        let (schedule, expr) = self.materialize_expr(&program, &program.expr, schedule)?;
+        let (schedule, expr) = self.materialize_expr(&program, &program.output_expr, schedule)?;
         Ok(
             ParamCircuitProgram {
                 schedule, expr, registry: self.registry
@@ -152,7 +153,7 @@ impl Materializer {
             // TODO this is assumed to be a transformation of an input array
             TransformedExpr::ExprRef(ref_id) => {
                 let schedule = &schedule.schedule_map[ref_id];
-                let transform = &program.inputs[ref_id];
+                let transform = &program.input_map[ref_id];
                 let array_shape = &program.array_shapes[&transform.array];
 
                 for amat in self.array_materializers.iter_mut() {
@@ -256,7 +257,13 @@ impl VectorDeriver {
                 index_vars.clone().into_iter().zip(coord.clone()).collect();
 
             let vector =
-                VectorInfo::get_input_vector_at_coord(array_shape, &index_map, schedule, transform, preprocessing);
+                VectorInfo::get_input_vector_at_coord(
+                    &index_map,
+                    array_shape,
+                    schedule,
+                    transform,
+                    preprocessing
+                );
 
             let vector_id = self.register_vector(vector);
             vector_id_map.insert(coord, vector_id);
@@ -281,6 +288,7 @@ impl VectorDeriver {
             } else { // the vector is not derived
                 let vector = self.get_vector(vector_id);
                 step_map.set(coord.clone(), 0);
+                mask_map.set(coord.clone(), PlaintextObject::Const(1));
                 obj_map.set(coord, CiphertextObject::Vector(vector.clone()));
             }
         }
@@ -393,11 +401,11 @@ impl VectorDeriver {
                     }
                 });
 
-            registry.set_ct_var_value(ct_var.clone(), CircuitValue::CoordMap(obj_map));
-            registry.set_pt_var_value(pt_var.clone(), CircuitValue::CoordMap(mask_map));
-
             let masked_expr =
                 if mask_is_nonconst {
+                    registry.set_ct_var_value(ct_var.clone(), CircuitValue::CoordMap(obj_map));
+                    registry.set_pt_var_value(pt_var.clone(), CircuitValue::CoordMap(mask_map));
+
                     ParamCircuitExpr::Op(
                         Operator::Mul,
                         Box::new(ParamCircuitExpr::CiphertextVar(ct_var)),
@@ -405,6 +413,7 @@ impl VectorDeriver {
                     )
 
                 } else {
+                    registry.set_ct_var_value(ct_var.clone(), CircuitValue::CoordMap(obj_map));
                     ParamCircuitExpr::CiphertextVar(ct_var)
                 };
 
@@ -436,7 +445,13 @@ impl VectorDeriver {
         } else { // there is only a single vector
             let index_map: HashMap<DimName, usize> = HashMap::new();
             let vector =
-                VectorInfo::get_input_vector_at_coord(array_shape, &index_map, schedule, transform, preprocessing);
+                VectorInfo::get_input_vector_at_coord(
+                    &index_map,
+                    array_shape,
+                    schedule, 
+                    transform,
+                    preprocessing
+                );
 
             registry.set_ct_var_value(
                 ct_var.clone(),
@@ -463,25 +478,24 @@ impl ArrayMaterializer for DummyArrayMaterializer {
 
     fn materialize(
         &mut self,
-        array_shape: &Shape,
+        shape: &Shape,
         schedule: &TransformSchedule,
         transform: &ArrayTransform,
         registry: &mut CircuitRegistry
     ) -> ParamCircuitExpr {
         let ct_var = registry.fresh_ct_var();
-        let mut coord_map: IndexCoordinateMap<CiphertextObject> =
-            IndexCoordinateMap::new(schedule.exploded_dims.iter());
-
-        let index_vars = coord_map.index_vars();
 
         // register vectors
-        for index_map in coord_map.index_map_iter() {
-            let vector =
-                VectorInfo::get_input_vector_at_coord(array_shape, &index_map, schedule, transform, None);
-
-            let coord = coord_map.index_map_as_coord(index_map);
-            coord_map.set(coord, CiphertextObject::Vector(vector));
-        }
+        let coord_map =
+            VectorInfo::get_input_vector_map(
+                IndexCoordinateSystem::new(schedule.exploded_dims.iter()),
+                shape,
+                schedule,
+                transform,
+                schedule.preprocessing,
+            ).map(|_, vector| {
+                CiphertextObject::Vector(vector.clone())
+            });
         
         registry.set_ct_var_value(ct_var.clone(), CircuitValue::CoordMap(coord_map));
         ParamCircuitExpr::CiphertextVar(ct_var)
@@ -728,11 +742,11 @@ impl ArrayMaterializer for DiagonalArrayMaterializer {
 mod tests {
     use interval::{Interval, ops::Range};
 
-    use crate::{lang::{parser::ProgramParser, index_elim2::IndexElimination2, source::SourceProgram, BaseOffsetMap}, scheduling::ScheduleDim};
+    use crate::{lang::{parser::ProgramParser, index_elim::IndexElimination, source::SourceProgram, BaseOffsetMap}, scheduling::ScheduleDim};
     use super::*;
 
     fn test_materializer(program: TransformedProgram, schedule: Schedule) -> ParamCircuitProgram {
-        assert!(schedule.is_schedule_valid(&program, &program.expr));
+        assert!(schedule.is_schedule_valid(&program, &program.output_expr));
 
         let materializer =
             Materializer::new(vec![
@@ -754,7 +768,7 @@ mod tests {
         let parser = ProgramParser::new();
         let program: SourceProgram = parser.parse(src).unwrap();
 
-        let mut index_elim = IndexElimination2::new();
+        let mut index_elim = IndexElimination::new();
         let res = index_elim.run(&program);
         
         assert!(res.is_ok());
@@ -787,9 +801,9 @@ mod tests {
     #[test]
     fn test_imgblur() {
         test_materializer_from_src(
-        "input img: [(0,16),(0,16)]
-            for x: (0, 16) {
-                for y: (0, 16) {
+        "input img: [16,16]
+            for x: 16 {
+                for y: 16 {
                     img[x-1][y-1] + img[x+1][y+1]
                 }
             }"
@@ -799,16 +813,16 @@ mod tests {
     #[test]
     fn test_imgblur2() {
         test_materializer_from_src(
-        "input img: [(0,16),(0,16)]
+        "input img: [16,16]
             let res = 
-                for x: (0, 16) {
-                    for y: (0, 16) {
+                for x: 16 {
+                    for y: 16 {
                         img[x-1][y-1] + img[x+1][y+1]
                     }
                 }
             in
-            for x: (0, 16) {
-                for y: (0, 16) {
+            for x: 16 {
+                for y: 16 {
                     res[x-2][y-2] + res[x+2][y+2]
                 }
             }
@@ -819,16 +833,16 @@ mod tests {
     #[test]
     fn test_convolve() {
         test_materializer_from_src(
-        "input img: [(0,16),(0,16)]
+        "input img: [16,16]
             let conv1 = 
-                for x: (0, 15) {
-                    for y: (0, 15) {
+                for x: 15 {
+                    for y: 15 {
                         img[x][y] + img[x+1][y+1]
                     }
                 }
             in
-            for x: (0, 14) {
-                for y: (0, 14) {
+            for x: 14 {
+                for y: 14 {
                     conv1[x][y] + conv1[x+1][y+1]
                 }
             }
@@ -839,11 +853,11 @@ mod tests {
     #[test]
     fn test_matmatmul() {
         test_materializer_from_src(
-            "input A: [(0,4),(0,4)]
-            input B: [(0,4),(0,4)]
-            for i: (0,4) {
-                for j: (0,4) {
-                    sum(for k: (0,4) { A[i][k] * B[k][j] })
+            "input A: [4,4]
+            input B: [4,4]
+            for i: 4 {
+                for j: 4 {
+                    sum(for k: 4 { A[i][k] * B[k][j] })
                 }
             }"
         );
@@ -852,19 +866,19 @@ mod tests {
     #[test]
     fn test_matmatmul2() {
         test_materializer_from_src(
-            "input A1: [(0,4),(0,4)]
-            input A2: [(0,4),(0,4)]
-            input B: [(0,4),(0,4)]
+            "input A1: [4,4]
+            input A2: [4,4]
+            input B: [4,4]
             let res =
-                for i: (0,4) {
-                    for j: (0,4) {
-                        sum(for k: (0,4) { A1[i][k] * B[k][j] })
+                for i: 4 {
+                    for j: 4 {
+                        sum(for k: 4 { A1[i][k] * B[k][j] })
                     }
                 }
             in
-            for i: (0,4) {
-                for j: (0,4) {
-                    sum(for k: (0,4) { A2[i][k] * res[k][j] })
+            for i: 4 {
+                for j: 4 {
+                    sum(for k: 4 { A2[i][k] * res[k][j] })
                 }
             }
             "
@@ -875,8 +889,8 @@ mod tests {
     fn test_dotprod_pointless() {
         test_materializer_from_src(
         "
-            input A: [(0,3)]
-            input B: [(0,3)]
+            input A: [3]
+            input B: [3]
             sum(A * B)
             "
         );
@@ -886,9 +900,9 @@ mod tests {
     fn test_matvecmul() {
         test_materializer_from_src(
         "
-            input M: [(0,2),(0,2)]
-            input v: [(0,2)]
-            for i: (0,2) {
+            input M: [2,2]
+            input v: [2]
+            for i: 2 {
                 sum(M[i] * v)
             }
             "
@@ -898,7 +912,7 @@ mod tests {
     // convolution with masking for out-of-bounds accessesyy
     #[test]
     fn test_materialize_img_array() {
-        let shape: Shape = im::vector![Interval::new(0, 16), Interval::new(0, 16)];
+        let shape: Shape = im::vector![16, 16];
 
         let base =
             ArrayTransform {
@@ -955,7 +969,7 @@ mod tests {
     // convolution with padding for out-of-bounds accesses
     #[test]
     fn test_materialize_img_array_padding() {
-        let shape: Shape = im::vector![Interval::new(0, 16), Interval::new(0, 16)];
+        let shape: Shape = im::vector![16, 16];
 
         let base =
             ArrayTransform {
@@ -1011,7 +1025,7 @@ mod tests {
 
     #[test]
     fn test_materialize_diagonal() {
-        let shape: Shape = im::vector![Interval::new(0, 4)];
+        let shape: Shape = im::vector![4];
 
         let transform =
             ArrayTransform {
@@ -1044,7 +1058,7 @@ mod tests {
 
     #[test]
     fn test_materialize_diagonal2() {
-        let shape: Shape = im::vector![Interval::new(0, 4), Interval::new(0, 4)];
+        let shape: Shape = im::vector![4, 4,];
 
         let transform =
             ArrayTransform {
@@ -1079,14 +1093,16 @@ mod tests {
     fn test_vectorized_reduce() {
         let program =
             TransformedProgram {
-                expr:
+                output_expr:
                     TransformedExpr::ReduceNode(
                         1,
                         Operator::Add,
                         Box::new(TransformedExpr::ExprRef(1))
                     ),
 
-                inputs: HashMap::from([
+                expr_map: HashMap::new(),
+
+                input_map: HashMap::from([
                     (1,
                         ArrayTransform {
                             array: String::from("a"),
@@ -1100,7 +1116,7 @@ mod tests {
                 ]),
 
                 array_shapes: HashMap::from([
-                    (String::from("a"), im::vector![Interval::new(0, 4), Interval::new(0, 4)])
+                    (String::from("a"), im::vector![4, 4])
                 ])
             };
 
