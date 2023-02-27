@@ -182,7 +182,7 @@ impl Materializer {
             // TODO this is assumed to be a transformation of an input array
             TransformedExpr::ExprRef(indexing_id, transform) => {
                 let schedule = &schedule.schedule_map[indexing_id];
-                if self.program.is_expr(indexing_id) { // indexing an expression
+                if self.program.is_expr(&transform.array) { // indexing an expression
                     let ref_schedule_type = self.expr_schedule_map.get(&transform.array).unwrap();
                     match ref_schedule_type {
                         ExprScheduleType::Any => {
@@ -192,7 +192,7 @@ impl Materializer {
                         ExprScheduleType::Specific(ref_expr_sched) => {
                             // TODO: refactor this so we don't inline derivation logic here
                             let coord_system = IndexCoordinateSystem::new(schedule.exploded_dims.iter());
-                            let expr_circ_val = ref_expr_sched.materialize();
+                            let expr_circ_val = ref_expr_sched.materialize(&transform.array);
                             let transform_circ_val = 
                                 VectorInfo::get_input_vector_value(
                                     coord_system,
@@ -1383,6 +1383,83 @@ mod tests {
                             ScheduleDim { index: 1, stride: 1, extent: 4, name: String::from("j"), pad_left: 0, pad_right: 0 },
                         ],
                     })
+                ])
+            };
+
+        test_materializer(program, schedule);
+    }
+
+    #[test]
+    fn test_read() {
+        let program =
+            TransformedProgram {
+                expr_map: IndexMap::from([
+                    (String::from("res"),
+                    TransformedExpr::Op(
+                        Operator::Add,
+                        Box::new(
+                            TransformedExpr::ExprRef(
+                                String::from("a_1"),
+                                ArrayTransform {
+                                    array: String::from("a"),
+                                    offset_map: BaseOffsetMap::new(2),
+                                    dims: im::vector![
+                                        DimContent::FilledDim { dim: 0, extent: 4, stride: 1 },
+                                        DimContent::FilledDim { dim: 1, extent: 4, stride: 1 },
+                                    ]
+                                }
+                            )
+                        ),
+                        Box::new(TransformedExpr::Literal(3))
+                    )),
+
+                    (String::from(OUTPUT_EXPR_NAME),
+                    TransformedExpr::Op(
+                        Operator::Add,
+                        Box::new(
+                            TransformedExpr::ExprRef(
+                                String::from("res_1"),
+                                ArrayTransform {
+                                    array: String::from("res"),
+                                    offset_map: BaseOffsetMap::new(2),
+                                    dims: im::vector![
+                                        DimContent::FilledDim { dim: 0, extent: 4, stride: 1 },
+                                        DimContent::FilledDim { dim: 1, extent: 4, stride: 1 },
+                                    ]
+                                }
+                            )
+                        ),
+                        Box::new(TransformedExpr::Literal(2))
+                    )),
+                ]),
+
+                input_map: IndexMap::from([
+                    (String::from("a"), im::vector![4, 4])
+                ])
+            };
+
+        let schedule =
+            Schedule {
+                schedule_map: im::HashMap::from(vec![
+                    (String::from("a_1"),
+                    IndexingSiteSchedule {
+                        preprocessing: None,
+                        exploded_dims: im::vector![],
+                        vectorized_dims: im::vector![
+                            ScheduleDim { index: 0, stride: 1, extent: 4, name: String::from("i"), pad_left: 0, pad_right: 0 },
+                            ScheduleDim { index: 1, stride: 1, extent: 4, name: String::from("j"), pad_left: 0, pad_right: 0 },
+                        ],
+                    }),
+
+                    (String::from("res_1"),
+                    IndexingSiteSchedule {
+                        preprocessing: None,
+                        exploded_dims: im::vector![],
+                        vectorized_dims: im::vector![
+                            ScheduleDim { index: 0, stride: 1, extent: 4, name: String::from("i"), pad_left: 0, pad_right: 0 },
+                            ScheduleDim { index: 1, stride: 1, extent: 4, name: String::from("j"), pad_left: 0, pad_right: 0 },
+                        ],
+                    }),
                 ])
             };
 

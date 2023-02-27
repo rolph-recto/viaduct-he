@@ -198,6 +198,7 @@ impl IndexCoordinateSystem {
 }
 
 // map from index variable coordinates to values
+#[derive(Debug)]
 pub struct IndexCoordinateMap<T> {
     coord_system: IndexCoordinateSystem,
     coord_map: HashMap<IndexCoord, T>
@@ -206,7 +207,7 @@ pub struct IndexCoordinateMap<T> {
 impl<T> IndexCoordinateMap<T> {
     pub fn new<'a, A: Iterator<Item = &'a ScheduleDim>>(dims: A) -> Self {
         let coord_system = IndexCoordinateSystem::new(dims);
-        let mut coord_map: HashMap<IndexCoord, T> = HashMap::new();
+        let coord_map: HashMap<IndexCoord, T> = HashMap::new();
         IndexCoordinateMap { coord_system, coord_map }
     }
 
@@ -344,6 +345,8 @@ impl Display for PlaintextObject {
     }
 }
 
+/// objects that are referenced in a param circuit
+#[derive(Debug)]
 pub enum CircuitValue<T> {
     CoordMap(IndexCoordinateMap<T>),
     Single(T)
@@ -375,14 +378,15 @@ type PlaintextVarValue = CircuitValue<PlaintextObject>;
 type OffsetVarValue = CircuitValue<isize>;
 
 /// data structure that maintains values for variables in parameterized circuits
+#[derive(Debug)]
 pub struct CircuitRegistry {
-    ct_var_values: HashMap<VarName, CiphertextVarValue>,
+    pub ct_var_values: HashMap<VarName, CiphertextVarValue>,
     ct_var_id: usize,
 
-    pt_var_values: HashMap<VarName, PlaintextVarValue>,
+    pub pt_var_values: HashMap<VarName, PlaintextVarValue>,
     pt_var_id: usize,
 
-    offset_var_values: HashMap<DimName, OffsetVarValue>,
+    pub offset_var_values: HashMap<DimName, OffsetVarValue>,
     offset_var_id: usize,
 }
 
@@ -451,7 +455,26 @@ impl CircuitRegistry {
     }
 }
 
+impl Display for CircuitRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.ct_var_values.iter().try_for_each(|(ct_var, val)| {
+            write!(f, "{} => {}\n", ct_var, val)
+        })?;
+
+        self.pt_var_values.iter().try_for_each(|(pt_var, val)| {
+            write!(f, "{} => {}\n", pt_var, val)
+        })?;
+
+        self.offset_var_values.iter().try_for_each(|(offset_var, val)| {
+            write!(f, "{} => {}\n", offset_var, val)
+        })?;
+
+        Ok(())
+    }
+}
+
 /// parameterized circuit packaged with information about input ciphertexts/plaintexts used
+#[derive(Debug)]
 pub struct ParamCircuitProgram {
     pub registry: CircuitRegistry,
     pub circuit_list: Vec<(String, Vec<(DimName,Extent)>, ParamCircuitExpr)>
@@ -459,6 +482,8 @@ pub struct ParamCircuitProgram {
 
 impl Display for ParamCircuitProgram {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.registry)?;
+
         self.circuit_list.iter().try_for_each(|(name, dims, circuit)| {
             write!(f, "let {}{:?} = {}\n", name, dims, circuit)
         })

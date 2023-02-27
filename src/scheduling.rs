@@ -426,12 +426,12 @@ impl ExprSchedule {
 
     // materialize schedule into a coordinate map of vectors
     // similar to DummyArrayMaterializer
-    pub fn materialize(&self) -> CircuitValue<VectorInfo> {
+    pub fn materialize(&self, array: &ArrayName) -> CircuitValue<VectorInfo> {
         if self.exploded_dims.len() > 0 {
             let mut coord_map = IndexCoordinateMap::new(self.exploded_dims.iter());
             for index_map in coord_map.index_map_iter() {
                 let vector =
-                    VectorInfo::get_expr_vector_at_coord(index_map.clone(), self, None);
+                    VectorInfo::get_expr_vector_at_coord(array.clone(), index_map.clone(), self, None);
 
                 let coord = coord_map.index_map_as_coord(index_map);
                 coord_map.set(coord, vector);
@@ -442,7 +442,7 @@ impl ExprSchedule {
         } else {
             let index_map: HashMap<DimName, usize> = HashMap::new();
             CircuitValue::Single(
-                VectorInfo::get_expr_vector_at_coord(index_map, self, None)
+                VectorInfo::get_expr_vector_at_coord(array.clone(), index_map, self, None)
             )
         }
     }

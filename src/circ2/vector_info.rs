@@ -269,12 +269,13 @@ impl VectorInfo {
     }
 
     pub fn get_expr_vector_at_coord(
+        array: ArrayName,
         index_map: HashMap<DimName, usize>,
         expr_schedule: &ExprSchedule,
         preprocessing: Option<ClientPreprocessing>,
     ) -> Self {
         let transform =
-            ArrayTransform::from_shape(String::from("__expr__"), &expr_schedule.shape);
+            ArrayTransform::from_shape(array, &expr_schedule.shape);
 
         let offset_env = OffsetEnvironment::new(index_map);
 
@@ -313,23 +314,6 @@ impl VectorInfo {
             offset_map: clipped_offset_map.map(|offset| *offset as usize),
             dims: materialized_dims,
         }
-    }
-
-    pub fn get_expr_vector_map(
-        coord_system: IndexCoordinateSystem,
-        expr_schedule: &ExprSchedule,
-        preprocessing: Option<ClientPreprocessing>,
-    ) -> IndexCoordinateMap<VectorInfo> {
-        let mut coord_map = IndexCoordinateMap::from_coord_system(coord_system);
-
-        for index_map in coord_map.index_map_iter() {
-            let vector =
-                VectorInfo::get_expr_vector_at_coord(index_map.clone(), expr_schedule, preprocessing);
-
-            coord_map.set(coord_map.index_map_as_coord(index_map), vector);
-        }
-
-        coord_map
     }
 
     // derive other from self
