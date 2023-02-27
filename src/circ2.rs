@@ -3,8 +3,8 @@ use std::{collections::{HashSet, HashMap}, fmt::Display, ops::Range};
 
 use crate::{
     circ2::{vector_info::VectorInfo},
-    lang::{Operator, DimSize, ExprRefId, Extent, ArrayName},
-    scheduling::{OffsetExpr, ScheduleDim, ExprScheduleType, DimName, ExprSchedule}
+    lang::{Operator, DimSize, Extent, ArrayName},
+    scheduling::{OffsetExpr, ScheduleDim, DimName}
 };
 
 pub mod cost;

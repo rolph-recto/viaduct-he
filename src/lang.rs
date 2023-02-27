@@ -36,8 +36,6 @@ pub type IndexingId = String;
 pub type ArrayEnvironment = HashMap<ArrayName, Shape>;
 pub type IndexEnvironment = HashMap<IndexVar, Extent>;
 
-pub type ExprRefId = usize;
-
 #[derive(Copy,Clone,Debug)]
 pub enum Operator { Add, Sub, Mul }
 
