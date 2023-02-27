@@ -8,7 +8,7 @@ use crate::{
     scheduling::{ClientPreprocessing, DimName, IndexingSiteSchedule, HasExplodedDims, ScheduleDim, ExprSchedule, VectorScheduleDim, OffsetEnvironment}
 };
 
-use super::{IndexCoordinateSystem, IndexCoordinateMap};
+use super::{IndexCoordinateSystem, IndexCoordinateMap, CircuitValue};
 
 // like DimContent, but with padding information
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -100,10 +100,10 @@ impl VectorDimContent {
 
 #[derive(Clone,Debug,PartialEq,Eq,Hash)]
 pub struct VectorInfo {
-    array: ArrayName,
-    preprocessing: Option<ClientPreprocessing>,
-    offset_map: OffsetMap<usize>,
-    dims: im::Vector<VectorDimContent>,
+    pub array: ArrayName,
+    pub preprocessing: Option<ClientPreprocessing>,
+    pub offset_map: OffsetMap<usize>,
+    pub dims: im::Vector<VectorDimContent>,
 }
 
 impl Display for VectorInfo {
@@ -230,29 +230,42 @@ impl VectorInfo {
         }
     }
 
-    pub fn get_input_vector_map(
+    pub fn get_input_vector_value(
         coord_system: IndexCoordinateSystem,
         shape: &Shape,
         schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
         preprocessing: Option<ClientPreprocessing>,
-    ) -> IndexCoordinateMap<VectorInfo> {
-        let mut coord_map = IndexCoordinateMap::from_coord_system(coord_system);
+    ) -> CircuitValue<VectorInfo> {
+        if !coord_system.is_empty() {
+            let mut coord_map = IndexCoordinateMap::from_coord_system(coord_system);
+            for index_map in coord_map.index_map_iter() {
+                let vector =
+                    VectorInfo::get_input_vector_at_coord(
+                        index_map.clone(),
+                        shape,
+                        schedule,
+                        transform,
+                        preprocessing
+                    );
 
-        for index_map in coord_map.index_map_iter() {
+                coord_map.set(coord_map.index_map_as_coord(index_map), vector);
+            }
+
+            CircuitValue::CoordMap(coord_map)
+
+        } else {
             let vector =
                 VectorInfo::get_input_vector_at_coord(
-                    index_map.clone(),
+                    HashMap::new(),
                     shape,
                     schedule,
                     transform,
                     preprocessing
                 );
 
-            coord_map.set(coord_map.index_map_as_coord(index_map), vector);
+            CircuitValue::Single(vector)
         }
-
-        coord_map
     }
 
     pub fn get_expr_vector_at_coord(

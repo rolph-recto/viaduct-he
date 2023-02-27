@@ -3,7 +3,7 @@ use std::{collections::{HashSet, HashMap}, fmt::Display, ops::Range};
 
 use crate::{
     circ2::{vector_info::VectorInfo},
-    lang::{Operator, DimSize, ExprRefId, Extent},
+    lang::{Operator, DimSize, ExprRefId, Extent, ArrayName},
     scheduling::{OffsetExpr, ScheduleDim, ExprScheduleType, DimName, ExprSchedule}
 };
 
@@ -297,14 +297,22 @@ impl<T: Display> Display for IndexCoordinateMap<T> {
 #[derive(Clone,Debug,PartialEq,Eq)]
 pub enum CiphertextObject {
     InputVector(VectorInfo),
-
-    // VectorRef(String, IndexCoord)
+    VectorRef(ArrayName, IndexCoord)
 }
 
 impl Display for CiphertextObject {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CiphertextObject::InputVector(v) => write!(f, "{}", v)
+            CiphertextObject::InputVector(v) =>
+                write!(f, "{}", v),
+
+            CiphertextObject::VectorRef(array, coords) => {
+                let mut coord_str = String::new();
+                for coord in coords {
+                    coord_str.push_str(&coord.to_string());
+                }
+                write!(f, "{}{}", array, coord_str)
+            }
         }
     }
 }
@@ -338,14 +346,26 @@ impl Display for PlaintextObject {
 
 pub enum CircuitValue<T> {
     CoordMap(IndexCoordinateMap<T>),
-    Object(T)
+    Single(T)
+}
+
+impl<T> CircuitValue<T> {
+    pub fn map<U,F>(&self, f: F) -> CircuitValue<U> where F: Fn(&IndexCoord, &T)->U {
+        match self {
+            CircuitValue::CoordMap(coord_map) => 
+                CircuitValue::CoordMap(coord_map.map(f)),
+
+            CircuitValue::Single(obj) =>
+                CircuitValue::Single(f(&im::Vector::new(), obj))
+        }
+    }
 }
 
 impl<T: Display> Display for CircuitValue<T> where T: Display {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             CircuitValue::CoordMap(map) => write!(f, "{}", map),
-            CircuitValue::Object(obj) => write!(f, "{}", obj),
+            CircuitValue::Single(obj) => write!(f, "{}", obj),
         }
     }
 }

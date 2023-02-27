@@ -441,7 +441,7 @@ impl ExprSchedule {
 
         } else {
             let index_map: HashMap<DimName, usize> = HashMap::new();
-            CircuitValue::Object(
+            CircuitValue::Single(
                 VectorInfo::get_expr_vector_at_coord(index_map, self, None)
             )
         }
