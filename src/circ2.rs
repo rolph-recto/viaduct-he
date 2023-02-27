@@ -446,27 +446,27 @@ impl CircuitRegistry {
 
     // TODO implement
     pub fn get_ct_objects(&self) -> Vec<CiphertextObject> {
-        vec![]
+        todo!()
     }
 
     // TODO implement
     pub fn get_pt_objects(&self) -> Vec<PlaintextObject> {
-        vec![]
+        todo!()
     }
 }
 
 impl Display for CircuitRegistry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.ct_var_values.iter().try_for_each(|(ct_var, val)| {
-            write!(f, "{} => {}\n", ct_var, val)
+            write!(f, "{} => \n{}\n", ct_var, val)
         })?;
 
         self.pt_var_values.iter().try_for_each(|(pt_var, val)| {
-            write!(f, "{} => {}\n", pt_var, val)
+            write!(f, "{} => \n{}\n", pt_var, val)
         })?;
 
         self.offset_var_values.iter().try_for_each(|(offset_var, val)| {
-            write!(f, "{} => {}\n", offset_var, val)
+            write!(f, "{} => \n{}\n", offset_var, val)
         })?;
 
         Ok(())
@@ -485,9 +485,11 @@ impl Display for ParamCircuitProgram {
         write!(f, "{}", self.registry)?;
 
         self.circuit_list.iter().try_for_each(|(name, dims, circuit)| {
-            write!(f, "let {}{:?} = {}\n", name, dims, circuit)
+            let mut dims_str = String::new();
+            for dim in dims.iter() {
+                dims_str.push_str(&format!("[{}: {}]", dim.0, dim.1))
+            }
+            write!(f, "let {}{} = {}\n", name, dims_str, circuit)
         })
     }
 }
-
-

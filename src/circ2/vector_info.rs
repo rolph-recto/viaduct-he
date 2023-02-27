@@ -102,7 +102,7 @@ impl VectorDimContent {
 pub struct VectorInfo {
     pub array: ArrayName,
     pub preprocessing: Option<ClientPreprocessing>,
-    pub offset_map: OffsetMap<usize>,
+    pub offset_map: OffsetMap<isize>,
     pub dims: im::Vector<VectorDimContent>,
 }
 
@@ -213,7 +213,7 @@ impl VectorInfo {
 
         let transform_offset_map =
             schedule.get_transform_offset_map(transform)
-            .map(|offset| offset.eval(&offset_env) as usize);
+            .map(|offset| usize::try_from(offset.eval(&offset_env)).unwrap());
 
         let mut materialized_dims: im::Vector<VectorDimContent> = im::Vector::new();
         for dim in schedule.vectorized_dims.iter() {
@@ -225,7 +225,7 @@ impl VectorInfo {
         VectorInfo {
             array: transform.array.clone(),
             preprocessing,
-            offset_map: clipped_offset_map.map(|offset| *offset as usize),
+            offset_map: clipped_offset_map,
             dims: materialized_dims,
         }
     }
@@ -311,7 +311,7 @@ impl VectorInfo {
         VectorInfo {
             array: transform.array.clone(),
             preprocessing,
-            offset_map: clipped_offset_map.map(|offset| *offset as usize),
+            offset_map: clipped_offset_map,
             dims: materialized_dims,
         }
     }
@@ -361,7 +361,7 @@ impl VectorInfo {
                             let offset1 = self.offset_map[idim1];
                             let offset2 = other.offset_map[idim2];
                             let offset_equiv =
-                                offset1 % (stride1 as usize) == offset2 % (stride2 as usize);
+                                offset1 % (stride1 as isize) == offset2 % (stride2 as isize);
 
                             // the dimensions have the same size
                             let same_size = dim1.size() == dim2.size();
@@ -369,7 +369,7 @@ impl VectorInfo {
                             // all of the elements of other's dim is in self's dim
                             let in_extent =
                                 offset2 >= offset1 &&
-                                offset1 + (stride1 * extent1) >= offset2 + (stride2 * extent2);
+                                offset1 + ((stride1 * extent1) as isize) >= offset2 + ((stride2 * extent2) as isize);
 
                             // self cannot have out of bounds values
                             // TODO this is not needed!
@@ -661,7 +661,7 @@ mod tests {
             };
 
         // vec2: 0 1 2 3
-        let offset2: OffsetMap<usize> = OffsetMap::new(2);
+        let offset2: OffsetMap<isize> = OffsetMap::new(2);
         let vec2= 
             VectorInfo {
                 array: String::from("a"),
@@ -695,7 +695,7 @@ mod tests {
                 dims: im::vector![],
             };
 
-        let mut offset2: OffsetMap<usize> = OffsetMap::new(2);
+        let mut offset2: OffsetMap<isize> = OffsetMap::new(2);
         offset2.set(0, 1);
 
         let vec2= 
@@ -729,7 +729,7 @@ mod tests {
                 ],
             };
 
-        let mut offset2: OffsetMap<usize> = OffsetMap::new(2);
+        let mut offset2: OffsetMap<isize> = OffsetMap::new(2);
         offset2.set(0, 1);
 
         // vec2: x 1 2 3
@@ -820,7 +820,7 @@ mod tests {
             };
 
         // vec2: x 0 1 2
-        let offset2: OffsetMap<usize> = OffsetMap::new(2);
+        let offset2: OffsetMap<isize> = OffsetMap::new(2);
         let vec2= 
             VectorInfo {
                 array: String::from("a"),
@@ -872,7 +872,7 @@ mod tests {
                 ],
             };
 
-        let offset2: OffsetMap<usize> = OffsetMap::new(2);
+        let offset2: OffsetMap<isize> = OffsetMap::new(2);
         let vec2= 
             VectorInfo {
                 array: String::from("a"),

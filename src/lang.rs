@@ -18,7 +18,7 @@ pub mod typechecker;
 pub use self::source::*;
 pub use self::index_free::*;
 
-pub static OUTPUT_EXPR_NAME: &'static str = "$root";
+pub static OUTPUT_EXPR_NAME: &'static str = "__root__";
 
 pub type DimSize = usize;
 pub type Extent = usize;
