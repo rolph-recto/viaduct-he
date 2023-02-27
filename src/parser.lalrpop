@@ -1,4 +1,4 @@
-use crate::lang::{*, Operator::*, source::{*, IndexExpr::*, SourceExpr::*}};
+use crate::lang::{*, Operator::*, source::{*, SourceExpr::*}};
 use std::str::FromStr;
 
 grammar;
@@ -75,18 +75,18 @@ IndexExpr: IndexExpr = {
 }
 
 IndexAddSubExpr: IndexExpr = {
-    <l:IndexExpr> "+" <r:IndexMulExpr> => IndexOp(Add, Box::new(l), Box::new(r)),
-    <l:IndexExpr> "-" <r:IndexMulExpr> => IndexOp(Sub, Box::new(l), Box::new(r)),
+    <l:IndexExpr> "+" <r:IndexMulExpr> => IndexExpr::Op(Add, Box::new(l), Box::new(r)),
+    <l:IndexExpr> "-" <r:IndexMulExpr> => IndexExpr::Op(Sub, Box::new(l), Box::new(r)),
 }
 
 IndexMulExpr: IndexExpr = {
-    <l:IndexMulExpr> "*" <r:IndexTermExpr> => IndexOp(Mul, Box::new(l), Box::new(r)),
+    <l:IndexMulExpr> "*" <r:IndexTermExpr> => IndexExpr::Op(Mul, Box::new(l), Box::new(r)),
     <e:IndexTermExpr> => e,
 }
 
 IndexTermExpr: IndexExpr = {
-    <var:Ident> => IndexVar(var),
-    <n:Num> => IndexLiteral(n),
+    <var:Ident> => IndexExpr::Var(var),
+    <n:Num> => IndexExpr::Literal(n),
 }
 
 ExtentListOrEmpty: im::Vector<Extent> = {

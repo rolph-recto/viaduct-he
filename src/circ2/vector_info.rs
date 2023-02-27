@@ -5,7 +5,7 @@ use gcollections::ops::Bounded;
 use crate::{
     circ2::PlaintextObject,
     lang::{DimIndex, ArrayName, OffsetMap, Shape, ArrayTransform, DimContent},
-    scheduling::{ClientPreprocessing, DimName, TransformSchedule, HasExplodedDims, ScheduleDim, ExprSchedule, VectorScheduleDim, OffsetEnvironment}
+    scheduling::{ClientPreprocessing, DimName, IndexingSiteSchedule, HasExplodedDims, ScheduleDim, ExprSchedule, VectorScheduleDim, OffsetEnvironment}
 };
 
 use super::{IndexCoordinateSystem, IndexCoordinateMap};
@@ -201,7 +201,7 @@ impl VectorInfo {
     pub fn get_input_vector_at_coord(
         index_map: HashMap<DimName, usize>,
         shape: &Shape,
-        schedule: &TransformSchedule,
+        schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
         preprocessing: Option<ClientPreprocessing>,
     ) -> Self {
@@ -233,7 +233,7 @@ impl VectorInfo {
     pub fn get_input_vector_map(
         coord_system: IndexCoordinateSystem,
         shape: &Shape,
-        schedule: &TransformSchedule,
+        schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
         preprocessing: Option<ClientPreprocessing>,
     ) -> IndexCoordinateMap<VectorInfo> {

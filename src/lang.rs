@@ -4,13 +4,13 @@ use std::ops::Index;
 
 use gcollections::ops::Bounded;
 use interval::Interval;
-use interval::ops::Range;
 use lalrpop_util::lalrpop_mod;
 
 lalrpop_mod!(pub parser);
 
 pub mod extent_analysis;
 pub mod source;
+pub mod elaborated;
 pub mod index_elim;
 pub mod index_free;
 pub mod typechecker;
@@ -18,15 +18,23 @@ pub mod typechecker;
 pub use self::source::*;
 pub use self::index_free::*;
 
+pub static OUTPUT_EXPR_NAME: &'static str = "$root";
+
 pub type DimSize = usize;
 pub type Extent = usize;
 pub type Shape = im::Vector<Extent>;
 
-pub type IndexName = String;
+// index variable in source
+pub type IndexVar = String;
+
+// identifier for an array (either input or let-bound)
 pub type ArrayName = String;
 
+// identifier for indexing site
+pub type IndexingId = String;
+
 pub type ArrayEnvironment = HashMap<ArrayName, Shape>;
-pub type IndexEnvironment = HashMap<IndexName, Extent>;
+pub type IndexEnvironment = HashMap<IndexVar, Extent>;
 
 pub type ExprRefId = usize;
 

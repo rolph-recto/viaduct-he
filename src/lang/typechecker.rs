@@ -12,22 +12,22 @@ impl TypeChecker {
 
     pub fn run(&self, program: &SourceProgram) -> Result<usize, String> {
         let mut store: im::HashMap<&str, usize> = im::HashMap::new();
-        program.inputs.iter().try_for_each(|input|
-            match store.insert(input.0.as_ref(), input.1.len()) {
-                Some(_) => Err(format!("duplicate bindings for {}", &input.0)),
+        program.input_map.iter().try_for_each(|(array, shape)|
+            match store.insert(array, shape.len()) {
+                Some(_) => Err(format!("duplicate bindings for {}", array)),
                 None => Ok(())
             }
         )?;
         
-        program.let_bindings.iter().try_for_each(|let_node| {
-            let rhs_dims = self.run_with_stores(&let_node.1, &store)?;
-            match store.insert(let_node.0.as_ref(), rhs_dims) {
-                Some(_) => Err(format!("duplicate bindings for {}", &let_node.0)),
+        program.expr_map.iter().try_for_each(|(array, expr)| {
+            let rhs_dims = self.run_with_stores(expr, &store)?;
+            match store.insert(array, rhs_dims) {
+                Some(_) => Err(format!("duplicate bindings for {}", array)),
                 None => Ok(())
             }
         })?;
 
-        self.run_with_stores(&program.expr, &store)
+        Ok(store[OUTPUT_EXPR_NAME])
     }
 
     fn run_with_stores(&self, expr: &SourceExpr, store: &im::HashMap<&str, usize>) -> Result<usize, String> {

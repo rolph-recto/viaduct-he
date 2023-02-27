@@ -285,7 +285,7 @@ impl CostEstimator {
 
 #[cfg(test)]
 mod tests{
-    use crate::{lang::{parser::ProgramParser, index_elim::IndexElimination, source::SourceProgram}, circ2::materializer::{Materializer, DummyArrayMaterializer}, scheduling::Schedule};
+    use crate::{lang::{parser::ProgramParser, index_elim::IndexElimination, source::SourceProgram, elaborated::Elaborator}, circ2::materializer::{Materializer, DummyArrayMaterializer}, scheduling::Schedule};
     use super::*;
 
     // generate an initial schedule for a program
@@ -293,18 +293,23 @@ mod tests{
         let parser = ProgramParser::new();
         let program: SourceProgram = parser.parse(src).unwrap();
 
-        let mut index_elim = IndexElimination::new();
-        let res = index_elim.run(&program);
+        let elaborated = Elaborator::new().run(program);
+        let inline_set = elaborated.get_default_inline_set();
+        let array_group_map = elaborated.get_default_array_group_map();
+
+        let res =
+            IndexElimination::new()
+            .run(&inline_set, &array_group_map, elaborated);
         
         assert!(res.is_ok());
 
-        let program = res.unwrap();
-        let init_schedule = Schedule::gen_initial_schedule(&program);
+        let tprogram = res.unwrap();
+        let init_schedule = Schedule::gen_initial_schedule(&tprogram);
 
         let materializer =
             Materializer::new(
                 vec![Box::new(DummyArrayMaterializer {})],
-                program,
+                tprogram,
             );
 
         let res_mat = materializer.materialize(&init_schedule);

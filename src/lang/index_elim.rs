@@ -2,11 +2,13 @@ use std::{hash::{*, Hasher}, collections::{HashSet, hash_set}};
 
 use disjoint_sets::UnionFind;
 use gcollections::ops::Bounded;
+use indexmap::IndexMap;
 
 use crate::{
-    lang::{*, IndexExpr::*},
+    lang::{*,
+        elaborated::ElaboratedProgram
+    },
 };
-
 
 /// expression with associated data about lowering to an index-free representation
 #[derive(Clone,Debug)]
@@ -14,25 +16,49 @@ pub enum TransformedExpr {
     ReduceNode(usize, Operator, Box<TransformedExpr>),
     Op(Operator, Box<TransformedExpr>, Box<TransformedExpr>),
     Literal(isize),
-    ExprRef(ExprRefId),
+    ExprRef(IndexingId, ArrayTransform),
 }
 
 impl TransformedExpr {
-    pub fn get_expr_refs(&self) -> im::HashSet<ExprRefId> {
+    pub fn get_indexed_arrays(&self) -> HashSet<ArrayName> {
         match self {
             TransformedExpr::ReduceNode(_, _, body) => {
-                body.get_expr_refs()
+                body.get_indexed_arrays()
             },
 
             TransformedExpr::Op(_, expr1, expr2) => {
-                let set1 = expr1.get_expr_refs();
-                let set2 = expr2.get_expr_refs();
-                set1.union(set2)
+                let mut sites1 = expr1.get_indexed_arrays();
+                let sites2 = expr2.get_indexed_arrays();
+                sites1.extend(sites2);
+                sites1
             },
 
-            TransformedExpr::Literal(_) => im::HashSet::new(),
+            TransformedExpr::Literal(_) =>
+                HashSet::new(),
 
-            TransformedExpr::ExprRef(id) => im::hashset![*id]
+            TransformedExpr::ExprRef(_, transform) =>
+                HashSet::from([transform.array.clone()])
+        }
+    }
+
+    pub fn get_indexing_sites(&self) -> HashMap<IndexingId, ArrayTransform> {
+        match self {
+            TransformedExpr::ReduceNode(_, _, body) => {
+                body.get_indexing_sites()
+            },
+
+            TransformedExpr::Op(_, expr1, expr2) => {
+                let mut sites1 = expr1.get_indexing_sites();
+                let sites2 = expr2.get_indexing_sites();
+                sites1.extend(sites2);
+                sites1
+            },
+
+            TransformedExpr::Literal(_) =>
+                HashMap::new(),
+
+            TransformedExpr::ExprRef(indexing_id, transform) =>
+                HashMap::from([(indexing_id.clone(), transform.clone())])
         }
     }
 }
@@ -48,8 +74,8 @@ impl Display for TransformedExpr {
                 write!(f, "({} {} {})", expr1, op, expr2)
             },
 
-            TransformedExpr::ExprRef(id) => {
-                write!(f, "expr({})", id)
+            TransformedExpr::ExprRef(indexing_id, transform) => {
+                write!(f, "expr({}, {})", indexing_id, transform)
             },
 
             TransformedExpr::Literal(lit) => {
@@ -59,108 +85,34 @@ impl Display for TransformedExpr {
     }
 }
 
-pub type InputArrayDim = (ExprRefId, DimIndex);
+pub type ArrayDim = (IndexingId, DimIndex);
 
 pub struct TransformedProgram {
-    pub output_expr: ExprRefId,
-    pub expr_map: HashMap<ExprRefId, TransformedExpr>,
-    pub input_map: HashMap<ExprRefId, ArrayTransform>,
-    pub array_shapes: HashMap<ArrayName, Shape>,
+    pub input_map: IndexMap<ArrayName, Shape>,
+    pub expr_map: IndexMap<ArrayName, TransformedExpr>,
 }
 
 impl TransformedProgram {
-    /// get a topological sort of expr refs, where exprs that are read
-    /// are earlier in the order than their readers
-    pub fn get_expr_order(&self) -> Vec<ExprRefId> {
-        let mut dependency_map: HashMap<ExprRefId, Vec<ExprRefId>> =
-            HashMap::from_iter(self.expr_map.keys().map(|id| (*id, vec![])));
-
-        let mut counter_map: HashMap<ExprRefId, usize> =
-            HashMap::from_iter(self.expr_map.keys().map(|id| (*id, 0)));
-
-        for (id, expr) in self.expr_map.iter() {
-            let read_ids = self.get_reads(expr);
-            for read_id in read_ids.iter() {
-                dependency_map.get_mut(read_id).unwrap().push(*id);
-                let counter = counter_map.get_mut(id).unwrap();
-                *counter += 1;
-            }
-        }
-
-        let mut order: Vec<ExprRefId> = Vec::new();
-        while order.len() < self.expr_map.len() {
-            let mut scheduled: Vec<ExprRefId> = Vec::new();
-            for (id, count) in counter_map.iter() {
-                if *count == 0 {
-                    scheduled.push(*id);
-                }
-            }
-
-            for id in scheduled {
-                order.push(id);
-                counter_map.remove(&id);
-                for parent_id in dependency_map.get(&id).unwrap().iter() {
-                    let counter = counter_map.get_mut(parent_id).unwrap();
-                    *counter -= 1;
-                }
-            }
-        }
-
-        order
+    pub fn is_expr(&self, array: &ArrayName) -> bool {
+        self.expr_map.contains_key(array)
     }
 
-    pub fn get_reads(&self, expr: &TransformedExpr) -> Vec<ExprRefId> {
-        match expr {
-            TransformedExpr::ReduceNode(_, _, body) => {
-                self.get_reads(body)
-            },
-
-            TransformedExpr::Op(_, expr1, expr2) => {
-                let mut reads1 = self.get_reads(expr1);
-                let reads2 = self.get_reads(expr2);
-                reads1.extend(reads2);
-                reads1
-            },
-
-            TransformedExpr::Literal(_) => vec![],
-
-            TransformedExpr::ExprRef(id) => {
-                if self.expr_map.contains_key(id) {
-                    vec![*id]
-
-                } else {
-                    vec![]
-                }
-            }
-        }
-    }
-
-    pub fn get_expr(&self, ref_id: ExprRefId) -> &TransformedExpr {
-        self.expr_map.get(&ref_id).unwrap()
+    pub fn is_input(&self, array: &ArrayName) -> bool {
+        self.input_map.contains_key(array)
     }
 
     pub fn get_output_expr(&self) -> &TransformedExpr {
-        self.expr_map.get(&self.output_expr).unwrap()
+        &self.expr_map.get(OUTPUT_EXPR_NAME).unwrap()
     }
 
-    pub fn is_expr(&self, ref_id: ExprRefId) -> bool {
-        let contains = self.expr_map.contains_key(&ref_id);
-        assert!(contains == !self.input_map.contains_key(&ref_id));
-        contains
-    }
+    pub fn compute_dim_equiv_classes(&self) -> HashMap<ArrayDim, usize> {
+        let mut dim_eqs: Vec<(ArrayDim, ArrayDim)> = Vec::new();
+        for (_, expr) in self.expr_map.iter() {
+            let (eqs, _) = self.compute_dim_equalities(expr);
+            dim_eqs.extend(eqs);
+        }
 
-    pub fn is_input(&self, ref_id: ExprRefId) -> bool {
-        let contains = self.input_map.contains_key(&ref_id);
-        assert!(contains == !self.expr_map.contains_key(&ref_id));
-        contains
-    }
-
-    pub fn compute_dim_equiv_classes(&self) -> HashMap<InputArrayDim, usize> {
-        // TODO fix this
-        let (dim_eqs, _) =
-            self.compute_dim_equalities(self.get_expr(self.output_expr));
-
-        let id_map: HashMap<InputArrayDim, usize> =
+        let id_map: HashMap<ArrayDim, usize> =
             self.get_dim_set().into_iter().enumerate()
             .map(|(i, dim)| (dim, i))
             .collect();
@@ -170,38 +122,29 @@ impl TransformedProgram {
             uf.union(id_map[&dim1], id_map[&dim2]);
         }
 
-        let mut class_map: HashMap<InputArrayDim, usize> = HashMap::new();
+        let mut class_map: HashMap<ArrayDim, usize> = HashMap::new();
         for dim in id_map.keys() {
-            class_map.insert(*dim, uf.find(id_map[&dim]));
+            class_map.insert(dim.clone(), uf.find(id_map[&dim]));
         }
 
         class_map
     }
 
-    fn find_parent(&self, dim: &InputArrayDim, parent_map: &HashMap<InputArrayDim,InputArrayDim>) -> InputArrayDim {
-        let parent = &parent_map[dim];
-        if parent == dim {
-            *dim
-
-        } else {
-            self.find_parent(parent, parent_map)
-        }
-    }
-
-    fn get_dim_set(&self) -> HashSet<InputArrayDim> {
-        let mut dim_set: HashSet<InputArrayDim> = HashSet::new();
-        for (ref_id, transform) in self.input_map.iter() {
-            for dim in 0..transform.dims.len() {
-                dim_set.insert((*ref_id, dim));
+    fn get_dim_set(&self) -> HashSet<ArrayDim> {
+        let mut dim_set: HashSet<ArrayDim> = HashSet::new();
+        for (_, expr) in self.expr_map.iter() {
+            for (indexing_id, transform) in expr.get_indexing_sites() {
+                for i in 0..transform.dims.len() {
+                    dim_set.insert((indexing_id.clone(), i));
+                }
             }
         }
 
         dim_set
     }
 
-    /// generate equality constraints about which dimensions should be considered
-    /// the same
-    fn compute_dim_equalities(&self, expr: &TransformedExpr) -> (im::Vector<(InputArrayDim, InputArrayDim)>, im::Vector<InputArrayDim>) {
+    /// generate equality constraints about which dimensions should be considered the same
+    fn compute_dim_equalities(&self, expr: &TransformedExpr) -> (Vec<(ArrayDim, ArrayDim)>, Vec<ArrayDim>) {
         match expr {
             TransformedExpr::ReduceNode(reduced_index, _, body) => {
                 let (eq_body, mut body_dims) = self.compute_dim_equalities(body);
@@ -211,42 +154,59 @@ impl TransformedProgram {
             },
 
             TransformedExpr::Op(_, expr1, expr2) => {
-                let (eqs1, dims1) = self.compute_dim_equalities(expr1);
+                let (mut eqs1, dims1) = self.compute_dim_equalities(expr1);
                 let (eqs2, dims2) = self.compute_dim_equalities(expr2);
                 let (len1, len2) = (dims1.len(), dims2.len());
 
+                eqs1.extend(eqs2);
                 if len1 == 0 && len2 != 0 {
-                    (eqs1 + eqs2, dims2)
+                    (eqs1, dims2)
 
                 } else if len1 != 0 && len2 == 0 {
-                    (eqs1 + eqs2, dims1)
+                    (eqs1, dims1)
 
                 } else {
                     assert!(len1 == len2);
                     let result_dims = dims1.clone();
-                    let new_eqs: im::Vector<(InputArrayDim, InputArrayDim)> =
+                    let new_eqs: Vec<(ArrayDim, ArrayDim)> =
                         dims1.into_iter().zip(dims2.into_iter()).collect();
-                    (eqs1 + eqs2 + new_eqs, result_dims)
+                    eqs1.extend(new_eqs);
+                    (eqs1, result_dims)
                 }
             },
 
-            TransformedExpr::Literal(_) => (im::vector![], im::vector![]),
+            TransformedExpr::Literal(_) =>
+                (vec![], vec![]),
 
-            TransformedExpr::ExprRef(ref_id) => {
-                let input_dims: im::Vector<InputArrayDim> =
-                    self.input_map[ref_id].dims.iter().enumerate()
-                    .map(|(i, _)| (*ref_id, i))
+            TransformedExpr::ExprRef(indexing_id, transform) => {
+                let input_dims: Vec<ArrayDim> =
+                    (0..transform.dims.len())
+                    .map(|i| (indexing_id.clone(), i))
                     .collect();
 
-                (im::vector![], input_dims)
+                (vec![], input_dims)
             }
         }
     }
 }
 
+impl Display for TransformedProgram {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.input_map.iter().try_for_each(|(array, shape)| {
+            write!(f, "input {}: {:?}\n", array, shape)
+        })?;
+
+        self.expr_map.iter().try_for_each(|(id, expr)| {
+            write!(f, "let {} = {}\n", id, expr)
+        })?;
+
+        Ok(())
+    }
+}
+
 #[derive(Clone,Debug)]
 enum PathInfo {
-    Index { index: IndexName, extent: usize },
+    Index { index: IndexVar, extent: usize },
     Reduce { op: Operator }
 }
 
@@ -259,7 +219,7 @@ impl PathContext {
         PathContext { path }
     }
 
-    fn get_index_extent(&self, index_var: &IndexName) -> Option<usize> {
+    fn get_index_extent(&self, index_var: &IndexVar) -> Option<usize> {
         self.path.iter().find_map(|path_info| {
             match path_info {
                 PathInfo::Index { index, extent } if index == index_var => {
@@ -274,7 +234,7 @@ impl PathContext {
 
 #[derive(Clone, Debug)]
 struct IndexingVarData {
-    index_var: IndexName,
+    index_var: IndexVar,
     stride: usize, 
 }
 
@@ -289,63 +249,47 @@ struct IndexingData {
 pub struct IndexElimination {
     // map from source-level bindings to their shapes 
     store: ArrayEnvironment,
-
-    // map from expr ref ids to array shapes
-    transform_shape_map: HashMap<ExprRefId, ArrayTransform>,
-
-    // map from expr ref ids to transformed exprs
-    transform_map: HashMap<ExprRefId, TransformedExpr>,
-
-    // counter for generating fresh expr ids
-    cur_expr_id: usize,
 }
 
 impl IndexElimination {
     pub fn new() -> Self {
-        IndexElimination {
-            store: HashMap::new(),
-            transform_shape_map: HashMap::new(),
-            transform_map: HashMap::new(),
-            cur_expr_id: 1,
-        }
+        IndexElimination { store: HashMap::new() }
     }
 
-    fn fresh_expr_id(&mut self) -> usize {
-        let id = self.cur_expr_id;
-        self.cur_expr_id += 1;
-        id
-    }
-
-    fn register_transformed_expr(&mut self, array_shape: ArrayTransform) -> ExprRefId {
-        let id = self.fresh_expr_id();
-        self.transform_shape_map.insert(id, array_shape);
-        id
-    }
-
-    fn compute_extent_expr(&self, expr: &SourceExpr) -> Shape  {
+    fn compute_shape_expr(&self, program: &ElaboratedProgram, expr: &SourceExpr) -> Shape  {
         match expr {
             SourceExpr::For(_, extent, body) => {
-                let body_extent = self.compute_extent_expr(body);
+                let body_extent = self.compute_shape_expr(program, body);
                 im::vector![extent.clone()] + body_extent
             },
 
             SourceExpr::Reduce(_, body) => {
-                let mut body_extent = self.compute_extent_expr(body);
+                let mut body_extent = self.compute_shape_expr(program, body);
                 body_extent.split_off(1)
             },
 
             SourceExpr::ExprOp(_, expr1, expr2) => {
-                let extent1 = self.compute_extent_expr(expr1);
-                let extent2 = self.compute_extent_expr(expr2);
+                let extent1 = self.compute_shape_expr(program, expr1);
+                let extent2 = self.compute_shape_expr(program, expr2);
                 assert!(extent1 == extent2);
                 extent1
             },
 
-            SourceExpr::Indexing(arr, index_list) => {
-                if let Some(arr_extent) = self.store.get(arr) {
-                    arr_extent.clone().split_off(index_list.len())
+            SourceExpr::Indexing(indexing_id, index_list) => {
+                if program.is_input(indexing_id) {
+                    let array = program.rename_map.get(indexing_id).unwrap();
+                    if let Some(arr_extent) = self.store.get(array) {
+                        arr_extent.clone().split_off(index_list.len())
+                    } else {
+                        panic!("no binding for {}", array)
+                    }
+
                 } else {
-                    panic!("no binding for {}", arr)
+                    if let Some(arr_extent) = self.store.get(indexing_id) {
+                        arr_extent.clone().split_off(index_list.len())
+                    } else {
+                        panic!("no binding for {}", indexing_id)
+                    }
                 }
             },
 
@@ -353,29 +297,24 @@ impl IndexElimination {
         }
     }
 
-    fn compute_extent_prog(&mut self, program: &SourceProgram) {
-        for input in program.inputs.iter() {
-            if let Some(_) = self.store.insert(input.0.clone(), input.1.clone()) {
-                panic!("duplicate binding for {}", input.0)
+    fn compute_shape_program(&mut self, program: &ElaboratedProgram) {
+        for (array, shape) in program.input_map.iter() {
+            if let Some(_) = self.store.insert(array.clone(), shape.clone()) {
+                panic!("duplicate binding for {}", array)
             }
         }
 
-        for binding in program.let_bindings.iter() {
-            let extent = self.compute_extent_expr(&*binding.1);
-            if let Some(_) = self.store.insert(binding.0.clone(), extent) {
-                panic!("duplicate binding for {}", binding.0)
+        for (array, expr) in program.expr_map.iter() {
+            let extent = self.compute_shape_expr(program, expr);
+            if let Some(_) = self.store.insert(array.clone(), extent) {
+                panic!("duplicate binding for {}", array)
             }
-        }
-
-        let output_extent = self.compute_extent_expr(&program.expr);
-        if let Some(_) = self.store.insert(String::from(OUTPUT_EXPR_NAME), output_extent) {
-            panic!("duplicate binding for {}", OUTPUT_EXPR_NAME)
         }
     }
 
     fn process_index_expr(&self, index_expr: &IndexExpr) -> Result<IndexingData, String> {
         match index_expr {
-            IndexVar(var) => {
+            IndexExpr::Var(var) => {
                 Ok(IndexingData {
                     var_data: im::vector![
                         IndexingVarData { index_var: var.clone(), stride: 1 }
@@ -384,14 +323,14 @@ impl IndexElimination {
                 })
             },
 
-            IndexLiteral(lit) => {
+            IndexExpr::Literal(lit) => {
                 Ok(IndexingData {
                     var_data: im::Vector::new(),
                     offset: *lit
                 })
-            }
+            },
 
-            IndexOp(op, expr1, expr2) => {
+            IndexExpr::Op(op, expr1, expr2) => {
                 let data1 = self.process_index_expr(expr1)?;
                 let data2 = self.process_index_expr(expr2)?;
 
@@ -453,6 +392,15 @@ impl IndexElimination {
 
     fn transform_expr(
         &mut self,
+
+        // indexing sites to inline
+        inline_set: &HashSet<IndexingId>,
+
+        // determines how to group top-level indexing sites
+        array_group_map: &HashMap<IndexingId, ArrayName>,
+
+        program: &ElaboratedProgram,
+
         expr: &SourceExpr,
         output_transform: &ArrayTransform,
         path_ctx: &PathContext,
@@ -468,12 +416,34 @@ impl IndexElimination {
                         })
                     );
 
-                self.transform_expr(body, output_transform, &new_path_ctx)
+                self.transform_expr(
+                    inline_set,
+                    array_group_map,
+                    program,
+                    body, 
+                    output_transform, 
+                    &new_path_ctx
+                )
             },
 
             SourceExpr::ExprOp(op, expr1, expr2) => {
-                let res1 = self.transform_expr(expr1, output_transform, path_ctx)?;
-                let res2 = self.transform_expr(expr2, output_transform, path_ctx)?;
+                let res1 =
+                    self.transform_expr(
+                        inline_set,
+                        array_group_map,
+                        program,
+                        expr1, 
+                        output_transform, 
+                        path_ctx
+                    )?;
+                let res2 =
+                    self.transform_expr(
+                        inline_set,
+                        array_group_map,
+                        program,
+                        expr2, 
+                        output_transform, 
+                        path_ctx)?;
                 Ok(TransformedExpr::Op(*op, Box::new(res1), Box::new(res2)))
             },
 
@@ -486,7 +456,15 @@ impl IndexElimination {
                     PathContext::new(
                         &path_ctx.path + &im::Vector::unit(PathInfo::Reduce { op: *op })
                     );
-                let body_res = self.transform_expr(body, output_transform, &new_path_ctx)?;
+                let body_res =
+                    self.transform_expr(
+                        inline_set,
+                        array_group_map,
+                        program,
+                        body, 
+                        output_transform, 
+                        &new_path_ctx
+                    )?;
 
                 // index of reduced dim should always 0
                 // this invariant is enforced by the Indexing case
@@ -494,23 +472,33 @@ impl IndexElimination {
             },
 
             // this should compute a new output shape for the indexed array
-            SourceExpr::Indexing(array, index_list) => {
-                let array_extent = self.store[array].clone();
-                let array_dims = array_extent.len();
+            SourceExpr::Indexing(indexing_id, index_list) => {
+                let array_shape =
+                    if program.is_input(indexing_id) {
+                        program.input_map[&program.rename_map[indexing_id]].clone()
+
+                    } else {
+                        self.store[indexing_id].clone()
+                    };
+
+                let array_dims = array_shape.len();
 
                 // process indexing sites
-                let mut index_to_output_dim_map: HashMap<IndexName, (DimIndex, usize)> = HashMap::new();
-                let mut array_offset_map = BaseOffsetMap::new(array_extent.len());
+                // TODO: check if this supports constant indexing like A[1]?
+                let mut index_to_output_dim_map: HashMap<IndexVar, (DimIndex, usize)> = HashMap::new();
+                let mut array_offset_map = BaseOffsetMap::new(array_shape.len());
                 for (index_dim, index_expr) in index_list.iter().enumerate() {
                     let indexing_data = self.process_index_expr(index_expr)?;
                     array_offset_map.set(index_dim, indexing_data.offset);
                     for var_data in indexing_data.var_data.into_iter() {
                         if !index_to_output_dim_map.contains_key(&var_data.index_var) {
                             let stride = var_data.stride;
-                            index_to_output_dim_map.insert(
-                                var_data.index_var,
-                                (index_dim, stride)
-                            );
+                            if stride > 0 {
+                                index_to_output_dim_map.insert(
+                                    var_data.index_var,
+                                    (index_dim, stride)
+                                );
+                            }
 
                         } else {
                             return Err(format!("Index variable {} used in multiple indexing sites", &var_data.index_var))
@@ -569,7 +557,7 @@ impl IndexElimination {
                     reduced_dims.push(
                         DimContent::FilledDim {
                             dim: cur_retained_dim,
-                            extent: array_extent[cur_retained_dim].upper() as usize,
+                            extent: array_shape[cur_retained_dim].upper() as usize,
                             stride: 1,
                         }
                     );
@@ -582,7 +570,7 @@ impl IndexElimination {
                     output_dims.push(
                         DimContent::FilledDim {
                             dim: cur_retained_dim,
-                            extent: array_extent[cur_retained_dim].upper() as usize,
+                            extent: array_shape[cur_retained_dim].upper() as usize,
                             stride: 1,
                         }
                     );
@@ -590,16 +578,16 @@ impl IndexElimination {
                 }
 
                 // build a shape for the indexed array given the required output shape
-                let mut indexed_output_shape =
+                let mut indexed_transform =
                     ArrayTransform {
-                        array: array.to_string(),
+                        array: array_group_map.get(indexing_id).unwrap().clone(),
                         offset_map: array_offset_map,
                         dims: im::Vector::new()
                     };
 
                 // first, add reduced dims in LIFO order
                 while let Some(dim) = reduced_dims.pop() {
-                    indexed_output_shape.dims.push_back(dim);
+                    indexed_transform.dims.push_back(dim);
                 }
 
                 // next, add the output dimensions
@@ -608,16 +596,18 @@ impl IndexElimination {
                         match *dim {
                             DimContent::FilledDim { dim, extent: output_extent, stride: output_stride } => {
                                 match output_dims[dim] {
+                                    // TODO: does this make sense??
+                                    // what if the inner extent is smaller than the outer extent?
                                     DimContent::FilledDim {
                                         dim: indexed_dim,
                                         extent: indexed_extent,
                                         stride: indexed_stride
                                     } => {
                                         let new_offset =
-                                            indexed_output_shape.offset_map.get(dim) + 
+                                            indexed_transform.offset_map.get(dim) + 
                                             (output_transform.offset_map.get(dim) * (indexed_stride as isize));
 
-                                        indexed_output_shape.offset_map.set(indexed_dim, new_offset);
+                                        indexed_transform.offset_map.set(indexed_dim, new_offset);
 
                                         DimContent::FilledDim {
                                             dim: indexed_dim,
@@ -627,6 +617,7 @@ impl IndexElimination {
                                     },
 
                                     // TODO: does this make sense??
+                                    // what if the inner extent is smaller than the outer extent?
                                     DimContent::EmptyDim { extent: _ } => {
                                         DimContent::EmptyDim { extent: output_extent }
                                     },
@@ -638,128 +629,109 @@ impl IndexElimination {
                             },
                         };
 
-                    indexed_output_shape.dims.push_back(indexed_output_dim);
+                    indexed_transform.dims.push_back(indexed_output_dim);
                 }
 
-                let expr_id = self.register_transformed_expr(indexed_output_shape);
+                if inline_set.contains(indexing_id) { // inline
+                    let indexed_expr = &program.expr_map[indexing_id];
 
-                Ok(TransformedExpr::ExprRef(expr_id))
-            }
-        }
-    }
+                    let transformed_indexed_expr =
+                        self.transform_expr(
+                            inline_set,
+                            array_group_map,
+                            program,
+                            indexed_expr,
+                            &indexed_transform,
+                            &PathContext { path: im::Vector::new() }
+                        )?;
 
-    // resolve expr refs of intermediate arrays
-    fn resolve_expr_refs(&self, expr: TransformedExpr) -> TransformedExpr {
-        match expr {
-            TransformedExpr::ReduceNode(i, op, body) => {
-                let new_body = self.resolve_expr_refs(*body);
-                TransformedExpr::ReduceNode(i, op, Box::new(new_body))
-            },
+                    Ok(transformed_indexed_expr)
 
-            TransformedExpr::Op(op, expr1, expr2) => {
-                let new_expr1 = self.resolve_expr_refs(*expr1);
-                let new_expr2 = self.resolve_expr_refs(*expr2);
-                TransformedExpr::Op(op, Box::new(new_expr1), Box::new(new_expr2))
-            },
-
-            TransformedExpr::Literal(_) => expr,
-
-            TransformedExpr::ExprRef(id) => {
-                if let Some(ref_expr) = self.transform_map.get(&id) {
-                    ref_expr.clone()
-
-                } else {
-                    expr
+                } else { // don't inline
+                    Ok(
+                        TransformedExpr::ExprRef(
+                            indexing_id.clone(),
+                            indexed_transform
+                        )
+                    )
                 }
             }
         }
     }
 
-    pub fn run(&mut self, program: &SourceProgram) -> Result<TransformedProgram, String> {
-        self.compute_extent_prog(program);
+    pub fn run(
+        &mut self,
+        inline_set: &HashSet<IndexingId>,
+        array_group_map: &HashMap<IndexingId, ArrayName>,
+        program: ElaboratedProgram,
+    ) -> Result<TransformedProgram, String> {
+        self.compute_shape_program(&program);
 
-        let output_extent = &self.store[OUTPUT_EXPR_NAME];
-        let output_shape = 
-            ArrayTransform {
-                array: String::from(OUTPUT_EXPR_NAME),
-                offset_map: BaseOffsetMap::new(output_extent.len()),
-                dims: output_extent.iter().enumerate().map(|(i, dim_extent)| {
-                    DimContent::FilledDim {
-                        dim: i,
-                        extent: dim_extent.upper() as usize,
-                        stride: 1
-                    }
-                }).collect()
-            };
+        let mut expr_map: IndexMap<ArrayName, TransformedExpr> = IndexMap::new();
+        let mut worklist: Vec<String> = vec![String::from(OUTPUT_EXPR_NAME)];
 
-        let output_id = self.fresh_expr_id();
-        self.transform_shape_map.insert(output_id, output_shape);
-
-        // backwards analysis goes from output expression and computes
-        // required shapes for indexed arrays
-        let mut transformed_inputs: HashMap<ExprRefId, ArrayTransform> = HashMap::new();
-        let mut worklist = vec![output_id];
         while worklist.len() > 0 {
-            let cur_id = worklist.pop().unwrap();
-            let array_transform = self.transform_shape_map.remove(&cur_id).unwrap();
-            
-            if let Some(source_expr) = program.get_expr_binding(&array_transform.array) {
-                let transformed_expr = 
-                    self.transform_expr(
-                        source_expr, 
-                        &array_transform, 
-                        &PathContext::new(im::Vector::new())
-                    )?;
+            let cur_array_name = worklist.pop().unwrap();
+            let expr = program.expr_map.get(&cur_array_name).unwrap();
+            let shape = self.store.get(&cur_array_name).unwrap();
+            let transform = ArrayTransform::from_shape(String::from(&cur_array_name), shape);
 
-                let child_ids = transformed_expr.get_expr_refs();
-                self.transform_map.insert(cur_id, transformed_expr);
-                worklist.extend(child_ids.iter());
+            let transformed_expr =
+                self.transform_expr(
+                    inline_set,
+                    array_group_map,
+                    &program,
+                    expr, 
+                    &transform,
+                    &PathContext::new(im::Vector::new())
+                )?;
 
-            } else { // array is an input
-                transformed_inputs.insert(cur_id, array_transform);
-            }
+            let indexed_arrays: HashSet<ArrayName> =
+                transformed_expr.get_indexing_sites().into_iter()
+                .filter(|(indexing_id, _)| !program.is_input(indexing_id))
+                .map(|(_, transform)| transform.array)
+                .collect();
+
+            worklist.extend(indexed_arrays);
+            expr_map.insert(String::from(cur_array_name), transformed_expr);
         }
 
-        let unresolved_output_expr = self.transform_map.remove(&output_id).unwrap();
-        let output = self.resolve_expr_refs(unresolved_output_expr);
-        let output_id = self.fresh_expr_id();
+        // the expressions were processed backwards from the output expr,
+        // so reverse the insertion order to get the program order
+        expr_map.reverse();
 
-        let array_shapes: HashMap<ArrayName, Shape>  =
-            transformed_inputs.iter().map(|(_, transform)| { 
-                (transform.array.clone(), program.get_input_shape(&transform.array).unwrap().clone())
-            }).collect();
-
-        let program =
+        let transformed_program =
             TransformedProgram {
-                output_expr: output_id,
-                expr_map: HashMap::from([(output_id, output)]),
-                input_map: transformed_inputs,
-                array_shapes
+                input_map: program.input_map,
+                expr_map,
             };
 
-        Ok(program)
+        Ok(transformed_program)
     }
 }
 
 #[cfg(test)]
 mod tests{
-    use crate::lang::parser::ProgramParser;
+    use crate::lang::{parser::ProgramParser, elaborated::Elaborator};
     use super::*;
 
     fn test_index_elim(src: &str) {
         let parser = ProgramParser::new();
         let program: SourceProgram = parser.parse(src).unwrap();
 
-        let mut index_elim = IndexElimination::new();
-        let res = index_elim.run(&program);
+        let elaborated: ElaboratedProgram = Elaborator::new().run(program);
+        println!("{}", elaborated);
+        let inline_set = elaborated.get_default_inline_set();
+        let array_group_map = elaborated.get_default_array_group_map();
+
+        let res =
+            IndexElimination::new()
+            .run(&inline_set, &array_group_map, elaborated);
         
         assert!(res.is_ok());
 
         let prog = res.unwrap();
-        for (ref_id, transform) in prog.input_map {
-            println!("{} => {}", ref_id, transform);
-        }
-        println!("{}", prog.output_expr);
+        println!("{}", prog);
     }
 
     #[test]
@@ -871,38 +843,5 @@ mod tests{
             }
             "
         );
-    }
-
-    #[test]
-    fn test_expr_order() {
-        let program =
-            TransformedProgram {
-                output_expr: 1,
-                expr_map: HashMap::from([
-                    (1, TransformedExpr::ExprRef(5)),
-                    (5, TransformedExpr::ExprRef(2)),
-                    (2, TransformedExpr::ExprRef(3)),
-                    (3, TransformedExpr::Literal(1)),
-                ]),
-                input_map: HashMap::new(),
-                array_shapes: HashMap::new(),
-            };
-
-        assert_eq!(program.get_expr_order(), vec![3, 2, 5, 1]);
-    }
-
-    #[test]
-    fn test_expr_order2() {
-        let program =
-            TransformedProgram {
-                output_expr: 1,
-                expr_map: HashMap::from([
-                    (1, TransformedExpr::Literal(5)),
-                ]),
-                input_map: HashMap::new(),
-                array_shapes: HashMap::new(),
-            };
-
-        assert_eq!(program.get_expr_order(), vec![1]);
     }
 }

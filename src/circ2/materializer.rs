@@ -10,11 +10,11 @@ use crate::{
     },
     lang::{
         ArrayTransform, Shape, DimContent, Operator, 
-        index_elim::{TransformedProgram, TransformedExpr}, ExprRefId, Extent,
+        index_elim::{TransformedProgram, TransformedExpr}, ExprRefId, Extent, ArrayName,
     },
     scheduling::{
-        TransformSchedule, ExprScheduleType, DimName, OffsetExpr, Schedule,
-        ClientPreprocessing, VectorScheduleDim, OffsetEnvironment, ExprSchedule
+        IndexingSiteSchedule, ExprScheduleType, DimName, OffsetExpr, Schedule,
+        ClientPreprocessing, VectorScheduleDim, OffsetEnvironment,
     },
     util
 };
@@ -23,14 +23,14 @@ pub trait ArrayMaterializer {
     fn can_materialize(
         &self,
         array_shape: &Shape,
-        schedule: &TransformSchedule,
+        schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
     ) -> bool;
 
     fn materialize(
         &mut self,
         array_shape: &Shape,
-        schedule: &TransformSchedule,
+        schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
         registry: &mut CircuitRegistry
     ) -> ParamCircuitExpr;
@@ -41,9 +41,8 @@ pub struct Materializer {
     array_materializers: Vec<Box<dyn ArrayMaterializer>>,
     program: TransformedProgram,
     registry: CircuitRegistry,
-    circuit_map: HashMap<ExprRefId, ParamCircuitExpr>,
-    expr_name_map: HashMap<ExprRefId, String>,
-    expr_schedule_map: HashMap<ExprRefId, ExprScheduleType>,
+    circuit_map: HashMap<ArrayName, ParamCircuitExpr>,
+    expr_schedule_map: HashMap<ArrayName, ExprScheduleType>,
 }
 
 impl Materializer {
@@ -57,23 +56,25 @@ impl Materializer {
             registry: CircuitRegistry::new(),
             circuit_map: HashMap::new(),
             expr_schedule_map: HashMap::new(),
-            expr_name_map: HashMap::new(),
         }
     }
 
     /// packages the materialized expr with the vector registry
     pub fn materialize(mut self, schedule: &Schedule) -> Result<ParamCircuitProgram, String> {
-        let expr_ids = self.program.get_expr_order();
-
         let mut circuit_list: Vec<(String, Vec<(DimName,Extent)>, ParamCircuitExpr)> = vec![];
-        expr_ids.into_iter().try_for_each(|id| -> Result<(), String> {
-            let expr = self.program.get_expr(id).clone();
-            let (schedule, circuit) =
+
+        // need to clone expr_map here because the iteration through it is mutating
+        let expr_list: Vec<(ArrayName, TransformedExpr)> =
+            self.program.expr_map.iter()
+            .map(|(array, expr)| (array.clone(), expr.clone()))
+            .collect();
+
+        expr_list.into_iter().try_for_each(|(array, expr)| -> Result<(), String> {
+            let (expr_schedule, circuit) =
                 self.materialize_expr(&expr, schedule)?;
 
-            let name = format!("expr_{}", id);
             let dims =
-                match &schedule {
+                match &expr_schedule {
                     ExprScheduleType::Any => vec![],
 
                     ExprScheduleType::Specific(spec_sched) => {
@@ -83,13 +84,11 @@ impl Materializer {
                     }
                 };
 
-            self.circuit_map.insert(id, circuit.clone());
-            self.expr_schedule_map.insert(id, schedule);
-            self.expr_name_map.insert(id, name.clone());
-            circuit_list.push((name, dims, circuit));
+            self.circuit_map.insert(array.clone(), circuit.clone());
+            self.expr_schedule_map.insert(array.clone(), expr_schedule);
+            circuit_list.push((array.clone(), dims, circuit));
             Ok(())
         })?;
-
 
         Ok(ParamCircuitProgram { registry: self.registry, circuit_list })
     }
@@ -181,9 +180,9 @@ impl Materializer {
             },
 
             // TODO this is assumed to be a transformation of an input array
-            TransformedExpr::ExprRef(ref_id) => {
-                if self.program.is_expr(*ref_id) {
-                    let ref_schedule_type = self.expr_schedule_map.get(ref_id).unwrap();
+            TransformedExpr::ExprRef(indexing_id, transform) => {
+                if self.program.is_expr(indexing_id) {
+                    let ref_schedule_type = self.expr_schedule_map.get(indexing_id).unwrap();
                     match ref_schedule_type {
                         ExprScheduleType::Any => {
                             Err(format!("no support for expressions being literals yet"))
@@ -191,13 +190,13 @@ impl Materializer {
 
                         ExprScheduleType::Specific(ref_sched) => {
                             todo!()
+                            // ref_sched.shape
                         }
                     }
 
                 } else {
-                    let schedule = &schedule.schedule_map[ref_id];
-                    let transform = &self.program.input_map[ref_id];
-                    let array_shape = &self.program.array_shapes[&transform.array];
+                    let schedule = &schedule.schedule_map[indexing_id];
+                    let array_shape = &self.program.input_map[&transform.array];
 
                     for amat in self.array_materializers.iter_mut() {
                         if amat.can_materialize(array_shape, schedule, transform) {
@@ -208,7 +207,7 @@ impl Materializer {
                         }
                     }
 
-                    Err(format!("No array materializer can process expr ref {}", ref_id))
+                    Err(format!("No array materializer can process expr ref {}", indexing_id))
                 }
             },
         }
@@ -285,7 +284,7 @@ impl VectorDeriver {
     pub fn register_and_derive_vectors(
         &mut self,
         array_shape: &Shape,
-        schedule: &TransformSchedule,
+        schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
         preprocessing: Option<ClientPreprocessing>,
         coords: impl Iterator<Item=IndexCoord> + Clone,
@@ -407,7 +406,7 @@ impl VectorDeriver {
     pub fn gen_circuit_expr(
         &mut self,
         array_shape: &Shape,
-        schedule: &TransformSchedule,
+        schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
         registry: &mut CircuitRegistry,
         preprocessing: Option<ClientPreprocessing>,
@@ -515,7 +514,7 @@ impl ArrayMaterializer for DummyArrayMaterializer {
     fn can_materialize(
         &self,
         _array_shape: &Shape,
-        schedule: &TransformSchedule,
+        schedule: &IndexingSiteSchedule,
         _transform: &ArrayTransform,
     ) -> bool {
         schedule.preprocessing.is_none()
@@ -524,7 +523,7 @@ impl ArrayMaterializer for DummyArrayMaterializer {
     fn materialize(
         &mut self,
         shape: &Shape,
-        schedule: &TransformSchedule,
+        schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
         registry: &mut CircuitRegistry
     ) -> ParamCircuitExpr {
@@ -564,7 +563,7 @@ impl ArrayMaterializer for DefaultArrayMaterializer {
     fn can_materialize(
         &self,
         _array_shape: &Shape,
-        schedule: &TransformSchedule,
+        schedule: &IndexingSiteSchedule,
         _transform: &ArrayTransform,
     ) -> bool {
         schedule.preprocessing.is_none()
@@ -573,7 +572,7 @@ impl ArrayMaterializer for DefaultArrayMaterializer {
     fn materialize(
         &mut self,
         shape: &Shape,
-        schedule: &TransformSchedule,
+        schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
         registry: &mut CircuitRegistry
     ) -> ParamCircuitExpr {
@@ -593,7 +592,7 @@ impl ArrayMaterializer for DiagonalArrayMaterializer {
     fn can_materialize(
         &self,
         _array_shape: &Shape,
-        schedule: &TransformSchedule,
+        schedule: &IndexingSiteSchedule,
         _base: &ArrayTransform,
     ) -> bool {
         if let Some(ClientPreprocessing::Permute(dim_i, dim_j)) = schedule.preprocessing {
@@ -631,7 +630,7 @@ impl ArrayMaterializer for DiagonalArrayMaterializer {
     fn materialize(
         &mut self,
         shape: &Shape,
-        schedule: &TransformSchedule,
+        schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
         registry: &mut CircuitRegistry
     ) -> ParamCircuitExpr {
@@ -785,11 +784,13 @@ impl ArrayMaterializer for DiagonalArrayMaterializer {
 
 #[cfg(test)]
 mod tests {
-    use crate::{lang::{parser::ProgramParser, index_elim::IndexElimination, source::SourceProgram, BaseOffsetMap}, scheduling::ScheduleDim};
+    use indexmap::IndexMap;
+
+    use crate::{lang::{parser::ProgramParser, index_elim::IndexElimination, source::SourceProgram, BaseOffsetMap, elaborated::Elaborator, OUTPUT_EXPR_NAME}, scheduling::ScheduleDim};
     use super::*;
 
     fn test_materializer(program: TransformedProgram, schedule: Schedule) -> ParamCircuitProgram {
-        assert!(schedule.is_schedule_valid(&program, program.get_expr(program.output_expr)));
+        assert!(schedule.is_schedule_valid(&program));
 
         let materializer =
             Materializer::new(
@@ -813,20 +814,25 @@ mod tests {
         let parser = ProgramParser::new();
         let program: SourceProgram = parser.parse(src).unwrap();
 
-        let mut index_elim = IndexElimination::new();
-        let res = index_elim.run(&program);
+        let elaborated = Elaborator::new().run(program);
+        let inline_set = elaborated.get_default_inline_set();
+        let array_group_map = elaborated.get_default_array_group_map();
+
+        let res =
+            IndexElimination::new()
+            .run(&inline_set, &array_group_map, elaborated);
         
         assert!(res.is_ok());
 
-        let program = res.unwrap();
-        let init_schedule = Schedule::gen_initial_schedule(&program);
-        test_materializer(program, init_schedule);
+        let tprogram = res.unwrap();
+        let init_schedule = Schedule::gen_initial_schedule(&tprogram);
+        test_materializer(tprogram, init_schedule);
     }
 
     fn test_array_materializer(
         mut amat: Box<dyn ArrayMaterializer>,
         shape: Shape,
-        schedule: TransformSchedule,
+        schedule: IndexingSiteSchedule,
         transform: ArrayTransform, 
     ) -> (CircuitRegistry, ParamCircuitExpr) {
         let mut registry = CircuitRegistry::new();
@@ -972,7 +978,7 @@ mod tests {
             };
 
         let schedule = 
-            TransformSchedule {
+            IndexingSiteSchedule {
                 preprocessing: None,
                 exploded_dims: im::vector![
                     ScheduleDim { index: 0, stride: 1, extent: 3, name: String::from("i"), pad_left: 0, pad_right: 0 },
@@ -1029,7 +1035,7 @@ mod tests {
             };
 
         let schedule = 
-            TransformSchedule {
+            IndexingSiteSchedule {
                 preprocessing: None,
                 exploded_dims: im::vector![
                     ScheduleDim { index: 0, stride: 1, extent: 3, name: String::from("i"), pad_left: 0, pad_right: 0 },
@@ -1083,7 +1089,7 @@ mod tests {
             };
 
         let schedule = 
-            TransformSchedule {
+            IndexingSiteSchedule {
                 preprocessing: Some(ClientPreprocessing::Permute(0, 1)),
                 exploded_dims: im::vector![
                     ScheduleDim { index: 0, stride: 1, extent: 4, name: String::from("x"), pad_left: 0, pad_right: 0 },
@@ -1116,7 +1122,7 @@ mod tests {
             };
 
         let schedule = 
-            TransformSchedule {
+            IndexingSiteSchedule {
                 preprocessing: Some(ClientPreprocessing::Permute(0, 1)),
                 exploded_dims: im::vector![
                     ScheduleDim { index: 0, stride: 1, extent: 4, name: String::from("x"), pad_left: 0, pad_right: 0 },
@@ -1138,31 +1144,28 @@ mod tests {
     fn test_vectorized_reduce() {
         let program =
             TransformedProgram {
-                output_expr: 1,
-
-                expr_map: HashMap::from([
-                    (1,
+                expr_map: IndexMap::from([
+                    (String::from(OUTPUT_EXPR_NAME),
                     TransformedExpr::ReduceNode(
                         1,
                         Operator::Add,
-                        Box::new(TransformedExpr::ExprRef(1))
+                        Box::new(
+                            TransformedExpr::ExprRef(
+                                String::from("a1"),
+                                ArrayTransform {
+                                    array: String::from("a"),
+                                    offset_map: BaseOffsetMap::new(2),
+                                    dims: im::vector![
+                                        DimContent::FilledDim { dim: 0, extent: 4, stride: 1 },
+                                        DimContent::FilledDim { dim: 1, extent: 4, stride: 1 },
+                                    ]
+                                }
+                            )
+                        )
                     ))
                 ]),
 
-                input_map: HashMap::from([
-                    (1,
-                        ArrayTransform {
-                            array: String::from("a"),
-                            offset_map: BaseOffsetMap::new(2),
-                            dims: im::vector![
-                                DimContent::FilledDim { dim: 0, extent: 4, stride: 1 },
-                                DimContent::FilledDim { dim: 1, extent: 4, stride: 1 },
-                            ]
-                        }
-                    )
-                ]),
-
-                array_shapes: HashMap::from([
+                input_map: IndexMap::from([
                     (String::from("a"), im::vector![4, 4])
                 ])
             };
@@ -1170,7 +1173,7 @@ mod tests {
         let schedule =
             Schedule {
                 schedule_map: im::HashMap::from(vec![
-                    (1, TransformSchedule {
+                    (String::from("a1"), IndexingSiteSchedule {
                         preprocessing: None,
                         exploded_dims: im::vector![],
                         vectorized_dims: im::vector![

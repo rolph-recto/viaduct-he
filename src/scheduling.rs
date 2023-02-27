@@ -1,9 +1,17 @@
 
-use std::{collections::{HashMap, HashSet}, fmt::Display, cmp::max};
+use std::{collections::{HashMap, HashSet}, fmt::Display};
 
 use gcollections::ops::Bounded;
 
-use crate::{lang::{*, index_elim::{TransformedExpr, TransformedProgram}}, circ2::{IndexCoordinateMap, vector_info::VectorInfo, CircuitValue}};
+use crate::{
+    lang::{*,
+        index_elim::{TransformedExpr, TransformedProgram, ArrayDim}
+    },
+    circ2::{
+        IndexCoordinateMap,
+        vector_info::VectorInfo, CircuitValue
+    }
+};
 
 pub type DimName = String;
 
@@ -227,13 +235,13 @@ pub trait HasExplodedDims {
 }
 
 #[derive(Clone,Debug,PartialEq,Eq,Hash)]
-pub struct TransformSchedule {
+pub struct IndexingSiteSchedule {
     pub preprocessing: Option<ClientPreprocessing>,
     pub exploded_dims: im::Vector<ScheduleDim>,
     pub vectorized_dims: im::Vector<ScheduleDim>,
 }
 
-impl TransformSchedule {
+impl IndexingSiteSchedule {
     // compute the scheduled tiling for a given dimension
     pub fn get_tiling(&self, dim: DimIndex) -> Vec<usize> {
         let mut sdims: Vec<(usize, usize)> = Vec::new();
@@ -272,13 +280,13 @@ impl TransformSchedule {
     }
 }
 
-impl HasExplodedDims for TransformSchedule {
+impl HasExplodedDims for IndexingSiteSchedule {
     fn get_exploded_dims(&self) -> Vec<&ScheduleDim> {
         self.exploded_dims.iter().collect()
     }
 }
 
-impl Display for TransformSchedule {
+impl Display for IndexingSiteSchedule {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let exploded_str =
             self.exploded_dims.iter()
@@ -448,7 +456,7 @@ impl HasExplodedDims for ExprSchedule {
 
 #[derive(Clone,Debug,PartialEq,Eq,Hash)]
 pub struct Schedule {
-    pub schedule_map: im::HashMap<ExprRefId,TransformSchedule>
+    pub schedule_map: im::HashMap<IndexingId, IndexingSiteSchedule>
 }
 
 impl Display for Schedule {
@@ -463,32 +471,35 @@ impl Schedule {
     // generate an initial schedule 
     // the initial schedule explodes *all* dims
     pub fn gen_initial_schedule(program: &TransformedProgram) -> Self {
-        let mut schedule_map: im::HashMap<ExprRefId,TransformSchedule> = im::HashMap::new();
-        let dim_class_map = program.compute_dim_equiv_classes();
+        let mut schedule_map: im::HashMap<IndexingId,IndexingSiteSchedule> = im::HashMap::new();
+        let dim_class_map: HashMap<ArrayDim, usize> = program.compute_dim_equiv_classes();
 
-        for (ref_id, transform) in program.input_map.iter() {
-            let mut schedule_dims: im::Vector<ScheduleDim> = im::Vector::new();
-            for (i, dim) in transform.dims.iter().enumerate() {
-                let class_id = dim_class_map[&(*ref_id, i)];
-                schedule_dims.push_back(
-                    ScheduleDim {
-                        index: i,
-                        stride: 1,
-                        extent: dim.extent(),
-                        name: format!("i{}", class_id),
-                        pad_left: 0,
-                        pad_right: 0,
-                    }
-                )
+        for (_, expr) in program.expr_map.iter() {
+            for (indexing_id, transform) in expr.get_indexing_sites() {
+                let mut schedule_dims: im::Vector<ScheduleDim> = im::Vector::new();
+                for (i, dim) in transform.dims.iter().enumerate() {
+                    let class_id = dim_class_map[&(indexing_id.clone(), i)];
+                    schedule_dims.push_back(
+                        ScheduleDim {
+                            index: i,
+                            stride: 1,
+                            extent: dim.extent(),
+                            name: format!("i{}", class_id),
+                            pad_left: 0,
+                            pad_right: 0,
+                        }
+                    )
+                }
+
+                let schedule =
+                    IndexingSiteSchedule {
+                        preprocessing: None,
+                        exploded_dims: schedule_dims,
+                        vectorized_dims: im::Vector::new(),
+                    };
+
+                schedule_map.insert(indexing_id, schedule);
             }
-            let schedule =
-                TransformSchedule {
-                    preprocessing: None,
-                    exploded_dims: schedule_dims,
-                    vectorized_dims: im::Vector::new(),
-                };
-
-            schedule_map.insert(*ref_id, schedule);
         }
 
         Schedule { schedule_map }
@@ -510,16 +521,13 @@ impl Schedule {
 
             TransformedExpr::Literal(_) => Schedule::schedule_literal(),
 
-            TransformedExpr::ExprRef(ref_id) => {
-                if let Some(array_sched) = self.schedule_map.get(ref_id) {
-                    // TODO: generalize this to more than just input transforms
-                    let transform = program.input_map.get(ref_id).unwrap();
-                    let expr_schedule =
-                        array_sched.to_expr_schedule(transform.as_shape());
+            TransformedExpr::ExprRef(indexing_id, transform) => {
+                if let Some(indexing_sched) = self.schedule_map.get(indexing_id) {
+                    let expr_schedule = indexing_sched.to_expr_schedule(transform.as_shape());
                     Ok(ExprScheduleType::Specific(expr_schedule))
 
                 } else {
-                    Err(String::from("expr ref has no schedule"))
+                    Err(String::from("indexing site has no schedule"))
                 }
             },
         }
@@ -627,14 +635,16 @@ impl Schedule {
         }
     }
 
-    pub fn is_schedule_valid(&self, program: &TransformedProgram, expr: &TransformedExpr) -> bool {
-        self.compute_output_schedule(program, expr).is_ok()
+    pub fn is_schedule_valid(&self, program: &TransformedProgram) -> bool {
+        program.expr_map.iter().all(|(_, expr)| {
+            self.compute_output_schedule(program, expr).is_ok()
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::lang::{parser::ProgramParser, index_elim::IndexElimination};
+    use crate::lang::{parser::ProgramParser, index_elim::IndexElimination, elaborated::Elaborator};
     use super::*;
 
     // generate an initial schedule for a program
@@ -642,19 +652,24 @@ mod tests {
         let parser = ProgramParser::new();
         let program: SourceProgram = parser.parse(src).unwrap();
 
-        let mut index_elim = IndexElimination::new();
-        let res = index_elim.run(&program);
+        let elaborated = Elaborator::new().run(program);
+        let inline_set = elaborated.get_default_inline_set();
+        let array_group_map = elaborated.get_default_array_group_map();
+
+        let res =
+            IndexElimination::new()
+            .run(&inline_set, &array_group_map, elaborated);
         
         assert!(res.is_ok());
 
-        let program = res.unwrap();
-        println!("{}", program.output_expr);
+        let tprogram = res.unwrap();
+        println!("{}", tprogram);
 
-        let init_schedule = Schedule::gen_initial_schedule(&program);
+        let init_schedule = Schedule::gen_initial_schedule(&tprogram);
         println!("{}", &init_schedule);
 
         // the initial schedule should always be valid!
-        assert!(init_schedule.is_schedule_valid(&program, program.get_expr(program.output_expr)))
+        assert!(init_schedule.is_schedule_valid(&tprogram));
     }
 
     #[test]
