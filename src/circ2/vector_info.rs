@@ -168,16 +168,31 @@ impl VectorInfo {
                 let cur_offset = *clipped_offset_map.get(*idim);
                 clipped_offset_map.set(*idim, cur_offset + ((oob_left * new_stride) as isize));
                 
-                let new_extent = dim.extent - oob_left - oob_right;
+                let new_extent_signed = 
+                    (dim.extent as isize) - (oob_left as isize) - (oob_right as isize);
 
-                VectorDimContent::FilledDim {
-                    dim: *idim,
-                    extent: new_extent,
-                    stride: new_stride,
-                    oob_left,
-                    oob_right,
-                    pad_left: dim.pad_left,
-                    pad_right: dim.pad_right,
+                if new_extent_signed >= 0 { 
+                    VectorDimContent::FilledDim {
+                        dim: *idim,
+                        extent: new_extent_signed as usize,
+                        stride: new_stride,
+                        oob_left,
+                        oob_right,
+                        pad_left: dim.pad_left,
+                        pad_right: dim.pad_right,
+                    }
+
+                } else { // make entire dim OOB
+                    VectorDimContent::FilledDim {
+                        dim: *idim,
+                        extent: 0,
+                        stride: new_stride,
+                        oob_left: dim.extent,
+                        oob_right,
+                        pad_left: dim.pad_left,
+                        pad_right: dim.pad_right,
+                    }
+
                 }
             },
 
