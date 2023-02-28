@@ -194,7 +194,7 @@ impl ParamCircuitExpr {
 type IndexCoord = im::Vector<usize>;
 
 #[derive(Debug,Clone)]
-pub struct IndexCoordinateSystem(im::Vector<(DimName,usize)>);
+pub struct IndexCoordinateSystem(Vec<(DimName,usize)>);
 
 impl IndexCoordinateSystem {
     pub fn new<'a, A: Iterator<Item=&'a ScheduleDim>>(dims: A) -> Self {
@@ -203,6 +203,10 @@ impl IndexCoordinateSystem {
                 (dim.name.clone(), dim.extent)
             }).collect()
         )
+    }
+
+    pub fn from_dim_list(dims: Vec<(DimName, usize)>) -> IndexCoordinateSystem {
+        IndexCoordinateSystem(dims)
     }
 
     pub fn from_coord_system(coord_system: &IndexCoordinateSystem) -> IndexCoordinateSystem {
@@ -454,17 +458,17 @@ type OffsetFunctionVarValue = CircuitValue<isize>;
 #[derive(Debug)]
 pub struct CircuitRegistry {
     pub ct_var_values: HashMap<VarName, CiphertextVarValue>,
-    ct_var_id: usize,
+    pub ct_var_id: usize,
 
     pub pt_var_values: HashMap<VarName, PlaintextVarValue>,
-    pt_var_id: usize,
+    pub pt_var_id: usize,
 
     pub offset_fvar_values: HashMap<DimName, OffsetFunctionVarValue>,
-    offset_fvar_id: usize,
+    pub offset_fvar_id: usize,
 }
 
 impl CircuitRegistry {
-    fn new() -> Self {
+    pub fn new() -> Self {
         CircuitRegistry {
             ct_var_values: HashMap::new(),
             ct_var_id: 1,
@@ -517,14 +521,73 @@ impl CircuitRegistry {
         self.offset_fvar_values.get(offset_fvar).unwrap()
     }
 
-    // TODO implement
-    pub fn get_ct_objects(&self) -> Vec<CiphertextObject> {
-        todo!()
+    pub fn get_vectors(&self) -> HashSet<VectorInfo> {
+        let mut set = HashSet::new();
+        for (_, val) in self.ct_var_values.iter() {
+            match val {
+                CircuitValue::CoordMap(coord_map) => {
+                    for (_, obj) in coord_map.value_iter() {
+                        if let Some(CiphertextObject::InputVector(vector)) = obj {
+                            set.insert(vector.clone());
+                        }
+                    }
+                }
+
+                CircuitValue::Single(obj) => {
+                    if let CiphertextObject::InputVector(vector) = obj {
+                        set.insert(vector.clone());
+                    }
+                }
+            }
+        }
+
+        set
     }
 
-    // TODO implement
-    pub fn get_pt_objects(&self) -> Vec<PlaintextObject> {
-        todo!()
+    pub fn get_masks(&self) -> HashSet<MaskVector> {
+        let mut set = HashSet::new();
+        for (_, val) in self.pt_var_values.iter() {
+            match val {
+                CircuitValue::CoordMap(coord_map) => {
+                    for (_, obj) in coord_map.value_iter() {
+                        if let Some(PlaintextObject::Mask(vector)) = obj {
+                            set.insert(vector.clone());
+                        }
+                    }
+                }
+
+                CircuitValue::Single(obj) => {
+                    if let PlaintextObject::Mask(vector) = obj {
+                        set.insert(vector.clone());
+                    }
+                }
+            }
+        }
+
+        set
+    }
+
+    pub fn get_constants(&self) -> HashSet<isize> {
+        let mut set = HashSet::new();
+        for (_, val) in self.pt_var_values.iter() {
+            match val {
+                CircuitValue::CoordMap(coord_map) => {
+                    for (_, obj) in coord_map.value_iter() {
+                        if let Some(PlaintextObject::Const(constval)) = obj {
+                            set.insert(*constval);
+                        }
+                    }
+                }
+
+                CircuitValue::Single(obj) => {
+                    if let PlaintextObject::Const(constval) = obj {
+                        set.insert(*constval);
+                    }
+                }
+            }
+        }
+
+        set
     }
 }
 

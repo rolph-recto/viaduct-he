@@ -34,6 +34,7 @@ intervallum = "1.4.0"
 itertools = "0.9.0"
 lalrpop-util = { version = "0.19.8", features = ["lexer"] }
 log = "0.4.17"
+pretty = "0.11.3"
 rand = "0.8.5"
 regex = "1"
 serde = { version = "1.0.142", features = ["derive"] }
