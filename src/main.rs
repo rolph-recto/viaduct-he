@@ -12,7 +12,6 @@ use he_vectorizer::{
     circ::{
         lowering::{
             program::HEProgram,
-            lowered_program::HELoweredProgram, code_gen::CodeGenerator,
         },
         optimizer::{HEOptCircuit, ExtractorType, Optimizer, HELatencyModel, HEGraph}, HECircuitStore, circ_gen::HECircuitGenerator, self,
     },

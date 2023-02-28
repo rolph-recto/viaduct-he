@@ -1,6 +1,7 @@
 
 use std::{collections::{HashMap, HashSet}, fmt::Display};
 
+use egg::RecExpr;
 use gcollections::ops::Bounded;
 
 use crate::{
@@ -10,7 +11,7 @@ use crate::{
     circ2::{
         IndexCoordinateMap,
         vector_info::VectorInfo, CircuitValue
-    }
+    }, circ::optimizer::HEOptCircuit
 };
 
 pub type DimName = String;
@@ -81,6 +82,34 @@ impl OffsetExpr {
             OffsetExpr::Var(_) => None,
 
             OffsetExpr::FunctionVar(_, _) => None,
+        }
+    }
+
+    pub fn function_vars(&self) -> HashSet<String> {
+        match self {
+            OffsetExpr::Add(expr1, expr2) |
+            OffsetExpr::Mul(expr1, expr2) => {
+                let mut vars1 = expr1.function_vars();
+                let vars2 = expr2.function_vars();
+                vars1.extend(vars2);
+                vars1
+            },
+
+            OffsetExpr::Literal(_) | OffsetExpr::Var(_) =>
+                HashSet::new(),
+
+            OffsetExpr::FunctionVar(fvar, _) =>
+                HashSet::from([fvar.clone()])
+        }
+    }
+
+    pub fn to_opt_circuit_recur(&self, opt_expr: &mut RecExpr<HEOptCircuit>) -> egg::Id {
+        match self {
+            OffsetExpr::Add(_, _) => todo!(),
+            OffsetExpr::Mul(_, _) => todo!(),
+            OffsetExpr::Literal(_) => todo!(),
+            OffsetExpr::Var(_) => todo!(),
+            OffsetExpr::FunctionVar(_, _) => todo!(),
         }
     }
 }

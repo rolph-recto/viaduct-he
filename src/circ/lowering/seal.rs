@@ -5,134 +5,136 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 use crate::{circ::{*, lowering::program::*}, lang::HEClientStore};
+
+/*
  
-type HELoweredNodeId = String;
-type HELoweredOperand = String;
+type SEALNodeId = String;
+type SEALOperand = String;
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
 #[serde(tag = "op")]
-pub enum HELoweredInstr {
-    Add { id: HELoweredNodeId, op1: HELoweredOperand, op2: HELoweredOperand },
-    AddInplace { op1: HELoweredOperand, op2: HELoweredOperand },
-    AddPlain { id: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
-    AddPlainInplace { op1: HELoweredOperand, op2: HELoweredOperand },
-    Sub { id: HELoweredNodeId, op1: HELoweredOperand, op2: HELoweredOperand },
-    SubInplace { op1: HELoweredOperand, op2: HELoweredOperand },
-    SubPlain { id: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
-    SubPlainInplace { op1: HELoweredOperand, op2: HELoweredOperand },
-    Negate { id: HELoweredNodeId, op1: HELoweredOperand },
-    NegateInplace { op1: HELoweredOperand },
-    Mul { id: HELoweredNodeId, op1: HELoweredOperand, op2: HELoweredOperand },
-    MulInplace { op1: HELoweredOperand, op2: HELoweredOperand },
-    MulPlain { id: HELoweredOperand, op1: HELoweredOperand, op2: HELoweredOperand },
-    MulPlainInplace { op1: HELoweredOperand, op2: HELoweredOperand },
-    Rot { id: HELoweredNodeId, op1: HELoweredOperand, op2: HELoweredOperand },
-    RotInplace { op1: HELoweredOperand, op2: HELoweredOperand },
-    RelinearizeInplace { op1: HELoweredNodeId },
+pub enum SEALInstr {
+    Add { id: SEALNodeId, op1: SEALOperand, op2: SEALOperand },
+    AddInplace { op1: SEALOperand, op2: SEALOperand },
+    AddPlain { id: SEALOperand, op1: SEALOperand, op2: SEALOperand },
+    AddPlainInplace { op1: SEALOperand, op2: SEALOperand },
+    Sub { id: SEALNodeId, op1: SEALOperand, op2: SEALOperand },
+    SubInplace { op1: SEALOperand, op2: SEALOperand },
+    SubPlain { id: SEALOperand, op1: SEALOperand, op2: SEALOperand },
+    SubPlainInplace { op1: SEALOperand, op2: SEALOperand },
+    Negate { id: SEALNodeId, op1: SEALOperand },
+    NegateInplace { op1: SEALOperand },
+    Mul { id: SEALNodeId, op1: SEALOperand, op2: SEALOperand },
+    MulInplace { op1: SEALOperand, op2: SEALOperand },
+    MulPlain { id: SEALOperand, op1: SEALOperand, op2: SEALOperand },
+    MulPlainInplace { op1: SEALOperand, op2: SEALOperand },
+    Rot { id: SEALNodeId, op1: SEALOperand, op2: SEALOperand },
+    RotInplace { op1: SEALOperand, op2: SEALOperand },
+    RelinearizeInplace { op1: SEALNodeId },
 }
 
-impl HELoweredInstr {
+impl SEALInstr {
     pub fn is_inplace(&self) -> bool {
         match self {
-            HELoweredInstr::Add { id: _, op1: _, op2: _} => false,
-            HELoweredInstr::AddInplace { op1: _, op2: _} => true,
-            HELoweredInstr::AddPlain { id: _, op1: _, op2: _ } => false,
-            HELoweredInstr::AddPlainInplace { op1: _, op2: _ } => true,
-            HELoweredInstr::Sub { id: _, op1: _, op2: _} => false,
-            HELoweredInstr::SubInplace { op1: _, op2: _} => true,
-            HELoweredInstr::SubPlain { id: _, op1: _, op2: _ } => false,
-            HELoweredInstr::SubPlainInplace { op1: _, op2: _ } => true,
-            HELoweredInstr::Negate { id: _, op1: _ } => false,
-            HELoweredInstr::NegateInplace { op1: _ } => true,
-            HELoweredInstr::Mul { id: _, op1: _, op2: _ } => false,
-            HELoweredInstr::MulInplace { op1: _, op2: _ } => true,
-            HELoweredInstr::MulPlain { id: _, op1: _, op2: _ } => false,
-            HELoweredInstr::MulPlainInplace { op1: _, op2: _ } => true,
-            HELoweredInstr::Rot { id: _, op1: _, op2: _ } => false,
-            HELoweredInstr::RotInplace { op1: _, op2: _ } => true,
-            HELoweredInstr::RelinearizeInplace { op1: _ } => true
+            SEALInstr::Add { id: _, op1: _, op2: _} => false,
+            SEALInstr::AddInplace { op1: _, op2: _} => true,
+            SEALInstr::AddPlain { id: _, op1: _, op2: _ } => false,
+            SEALInstr::AddPlainInplace { op1: _, op2: _ } => true,
+            SEALInstr::Sub { id: _, op1: _, op2: _} => false,
+            SEALInstr::SubInplace { op1: _, op2: _} => true,
+            SEALInstr::SubPlain { id: _, op1: _, op2: _ } => false,
+            SEALInstr::SubPlainInplace { op1: _, op2: _ } => true,
+            SEALInstr::Negate { id: _, op1: _ } => false,
+            SEALInstr::NegateInplace { op1: _ } => true,
+            SEALInstr::Mul { id: _, op1: _, op2: _ } => false,
+            SEALInstr::MulInplace { op1: _, op2: _ } => true,
+            SEALInstr::MulPlain { id: _, op1: _, op2: _ } => false,
+            SEALInstr::MulPlainInplace { op1: _, op2: _ } => true,
+            SEALInstr::Rot { id: _, op1: _, op2: _ } => false,
+            SEALInstr::RotInplace { op1: _, op2: _ } => true,
+            SEALInstr::RelinearizeInplace { op1: _ } => true
         }
     }
 
     pub fn is_binary(&self) -> bool {
         match self {
-            HELoweredInstr::Add { id: _, op1: _, op2: _} => true,
-            HELoweredInstr::AddInplace { op1: _, op2: _} => true,
-            HELoweredInstr::AddPlain { id: _, op1: _, op2: _ } => true,
-            HELoweredInstr::AddPlainInplace { op1: _, op2: _ } => true,
-            HELoweredInstr::Sub { id: _, op1: _, op2: _} => true,
-            HELoweredInstr::SubInplace { op1: _, op2: _} => true,
-            HELoweredInstr::SubPlain { id: _, op1: _, op2: _ } => true,
-            HELoweredInstr::SubPlainInplace { op1: _, op2: _ } => true,
-            HELoweredInstr::Negate { id: _, op1: _ } => false,
-            HELoweredInstr::NegateInplace { op1: _ } => false,
-            HELoweredInstr::Mul { id: _, op1: _, op2: _ } => true,
-            HELoweredInstr::MulInplace { op1: _, op2: _ } => true,
-            HELoweredInstr::MulPlain { id: _, op1: _, op2: _ } => true,
-            HELoweredInstr::MulPlainInplace { op1: _, op2: _ } => true,
-            HELoweredInstr::Rot { id: _, op1: _, op2: _ } => true,
-            HELoweredInstr::RotInplace { op1: _, op2: _ } => true,
-            HELoweredInstr::RelinearizeInplace { op1: _ } => false
+            SEALInstr::Add { id: _, op1: _, op2: _} => true,
+            SEALInstr::AddInplace { op1: _, op2: _} => true,
+            SEALInstr::AddPlain { id: _, op1: _, op2: _ } => true,
+            SEALInstr::AddPlainInplace { op1: _, op2: _ } => true,
+            SEALInstr::Sub { id: _, op1: _, op2: _} => true,
+            SEALInstr::SubInplace { op1: _, op2: _} => true,
+            SEALInstr::SubPlain { id: _, op1: _, op2: _ } => true,
+            SEALInstr::SubPlainInplace { op1: _, op2: _ } => true,
+            SEALInstr::Negate { id: _, op1: _ } => false,
+            SEALInstr::NegateInplace { op1: _ } => false,
+            SEALInstr::Mul { id: _, op1: _, op2: _ } => true,
+            SEALInstr::MulInplace { op1: _, op2: _ } => true,
+            SEALInstr::MulPlain { id: _, op1: _, op2: _ } => true,
+            SEALInstr::MulPlainInplace { op1: _, op2: _ } => true,
+            SEALInstr::Rot { id: _, op1: _, op2: _ } => true,
+            SEALInstr::RotInplace { op1: _, op2: _ } => true,
+            SEALInstr::RelinearizeInplace { op1: _ } => false
         }
     }
 
     pub fn name(&self) -> String {
         match self {
-            HELoweredInstr::Add { id: _, op1: _, op2: _} => "add",
-            HELoweredInstr::AddInplace { op1: _, op2: _} => "add_inplace",
-            HELoweredInstr::AddPlain { id: _, op1: _, op2: _ } => "add_plain",
-            HELoweredInstr::AddPlainInplace { op1: _, op2: _ } => "add_plain_inplace",
-            HELoweredInstr::Sub { id: _, op1: _, op2: _} => "sub",
-            HELoweredInstr::SubInplace { op1: _, op2: _} => "sub_inplace",
-            HELoweredInstr::SubPlain { id: _, op1: _, op2: _ } => "sub_plain",
-            HELoweredInstr::SubPlainInplace { op1: _, op2: _ } => "sub_plain_inplace",
-            HELoweredInstr::Negate { id: _, op1: _ } => "negate",
-            HELoweredInstr::NegateInplace { op1: _ } => "negate_inplace",
-            HELoweredInstr::Mul { id: _, op1: _, op2: _ } => "multiply",
-            HELoweredInstr::MulInplace { op1: _, op2: _ } => "multiply_inplace",
-            HELoweredInstr::MulPlain { id: _, op1: _, op2: _ } => "multiply_plain",
-            HELoweredInstr::MulPlainInplace { op1: _, op2: _ } => "multiply_plain_inplace",
-            HELoweredInstr::Rot { id: _, op1: _, op2: _ } => "rotate_rows",
-            HELoweredInstr::RotInplace { op1: _, op2: _ } => "rotate_rows_inplace",
-            HELoweredInstr::RelinearizeInplace { op1: _ } => "relinearize_inplace"
+            SEALInstr::Add { id: _, op1: _, op2: _} => "add",
+            SEALInstr::AddInplace { op1: _, op2: _} => "add_inplace",
+            SEALInstr::AddPlain { id: _, op1: _, op2: _ } => "add_plain",
+            SEALInstr::AddPlainInplace { op1: _, op2: _ } => "add_plain_inplace",
+            SEALInstr::Sub { id: _, op1: _, op2: _} => "sub",
+            SEALInstr::SubInplace { op1: _, op2: _} => "sub_inplace",
+            SEALInstr::SubPlain { id: _, op1: _, op2: _ } => "sub_plain",
+            SEALInstr::SubPlainInplace { op1: _, op2: _ } => "sub_plain_inplace",
+            SEALInstr::Negate { id: _, op1: _ } => "negate",
+            SEALInstr::NegateInplace { op1: _ } => "negate_inplace",
+            SEALInstr::Mul { id: _, op1: _, op2: _ } => "multiply",
+            SEALInstr::MulInplace { op1: _, op2: _ } => "multiply_inplace",
+            SEALInstr::MulPlain { id: _, op1: _, op2: _ } => "multiply_plain",
+            SEALInstr::MulPlainInplace { op1: _, op2: _ } => "multiply_plain_inplace",
+            SEALInstr::Rot { id: _, op1: _, op2: _ } => "rotate_rows",
+            SEALInstr::RotInplace { op1: _, op2: _ } => "rotate_rows_inplace",
+            SEALInstr::RelinearizeInplace { op1: _ } => "relinearize_inplace"
         }.to_string()
     }
 
-    pub fn operands(&self) -> Vec<HELoweredOperand> {
+    pub fn operands(&self) -> Vec<SEALOperand> {
         match self {
-            HELoweredInstr::Add { id: _, op1, op2 } |
-            HELoweredInstr::AddInplace { op1, op2 } |
-            HELoweredInstr::AddPlain { id: _, op1, op2 } |
-            HELoweredInstr::AddPlainInplace { op1, op2 } |
-            HELoweredInstr::Sub { id: _, op1, op2 } |
-            HELoweredInstr::SubInplace { op1, op2 } |
-            HELoweredInstr::SubPlain { id: _, op1, op2 } |
-            HELoweredInstr::SubPlainInplace { op1, op2 } |
-            HELoweredInstr::Mul { id: _, op1, op2 } |
-            HELoweredInstr::MulInplace { op1, op2 } |
-            HELoweredInstr::MulPlain { id: _, op1, op2 } |
-            HELoweredInstr::MulPlainInplace { op1, op2 } |
-            HELoweredInstr::Rot { id: _, op1, op2 } |
-            HELoweredInstr::RotInplace { op1, op2 } =>
+            SEALInstr::Add { id: _, op1, op2 } |
+            SEALInstr::AddInplace { op1, op2 } |
+            SEALInstr::AddPlain { id: _, op1, op2 } |
+            SEALInstr::AddPlainInplace { op1, op2 } |
+            SEALInstr::Sub { id: _, op1, op2 } |
+            SEALInstr::SubInplace { op1, op2 } |
+            SEALInstr::SubPlain { id: _, op1, op2 } |
+            SEALInstr::SubPlainInplace { op1, op2 } |
+            SEALInstr::Mul { id: _, op1, op2 } |
+            SEALInstr::MulInplace { op1, op2 } |
+            SEALInstr::MulPlain { id: _, op1, op2 } |
+            SEALInstr::MulPlainInplace { op1, op2 } |
+            SEALInstr::Rot { id: _, op1, op2 } |
+            SEALInstr::RotInplace { op1, op2 } =>
                 vec![op1.to_string(),op2.to_string()],
 
-            HELoweredInstr::Negate { id: _, op1 } |
-            HELoweredInstr::NegateInplace { op1 } |
-            HELoweredInstr::RelinearizeInplace { op1 } =>
+            SEALInstr::Negate { id: _, op1 } |
+            SEALInstr::NegateInplace { op1 } |
+            SEALInstr::RelinearizeInplace { op1 } =>
                 vec![op1.to_string()]
         }
     }
 
     fn id(&self) -> String {
         match self {
-            HELoweredInstr::Add { id, op1: _, op2: _ } |
-            HELoweredInstr::AddPlain { id, op1: _, op2: _ } |
-            HELoweredInstr::Sub { id, op1: _, op2: _ } |
-            HELoweredInstr::SubPlain { id, op1: _, op2: _ } |
-            HELoweredInstr::Negate { id, op1: _ } |
-            HELoweredInstr::Mul { id, op1: _, op2: _ } |
-            HELoweredInstr::MulPlain { id, op1: _, op2: _ } |
-            HELoweredInstr::Rot { id, op1: _, op2: _ } =>
+            SEALInstr::Add { id, op1: _, op2: _ } |
+            SEALInstr::AddPlain { id, op1: _, op2: _ } |
+            SEALInstr::Sub { id, op1: _, op2: _ } |
+            SEALInstr::SubPlain { id, op1: _, op2: _ } |
+            SEALInstr::Negate { id, op1: _ } |
+            SEALInstr::Mul { id, op1: _, op2: _ } |
+            SEALInstr::MulPlain { id, op1: _, op2: _ } |
+            SEALInstr::Rot { id, op1: _, op2: _ } =>
                 id.to_string(),
 
             _ => "".to_string(),
@@ -140,7 +142,7 @@ impl HELoweredInstr {
     }
 }
 
-impl Display for HELoweredInstr {
+impl Display for SEALInstr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let operands_str = self.operands().join(", ");
         if self.is_inplace() {
@@ -157,8 +159,8 @@ pub struct HELoweredProgram {
     pub vec_size: usize,
     pub literals: Vec<(isize, String)>,
     pub constants: Vec<(Vec<isize>, String)>,
-    pub instrs: Vec<HELoweredInstr>,
-    pub output: HELoweredNodeId,
+    pub instrs: Vec<SEALInstr>,
+    pub output: SEALNodeId,
     pub client_inputs: Vec<(String, im::Vector<usize>)>,
     pub server_inputs: Vec<(String, im::Vector<usize>)>,
     pub ciphertexts: HashSet<String>,
@@ -186,7 +188,7 @@ impl HELoweredProgram {
                 sym.clone()
             },
 
-            HEOperand::ConstNum(n) => {
+            HEOperand::Literal(n) => {
                 if const_map.contains_key(n) {
                     const_map[n].clone()
 
@@ -215,11 +217,11 @@ impl HELoweredProgram {
         let uses = prog.analyze_use();
         let mut inplace_map: HashMap<NodeId, NodeId> = HashMap::new();
         let mut const_map: HashMap<isize, String> = HashMap::new();
-        let mut instrs: Vec<HELoweredInstr> = Vec::new();
+        let mut instrs: Vec<SEALInstr> = Vec::new();
 
         for instr in prog.instrs.iter() {
             match instr {
-                HEInstruction::Add { id, op1, op2 } => {
+                HEInstruction::Add(id, op1, op2)=> {
                     let lid = format!("i{}", id);
                     let lop1 = Self::lower_operand(&inplace_map, &mut const_map, op1);
                     let lop2 = Self::lower_operand(&inplace_map, &mut const_map, op2);
@@ -229,7 +231,7 @@ impl HELoweredProgram {
                                 (HERef::Node(nr1), HERef::Node(_))
                                 if !uses[id+1].contains(nr1) && !noinplace => {
                                     instrs.push(
-                                        HELoweredInstr::AddInplace { op1: lop1, op2: lop2 }
+                                        SEALInstr::AddInplace { op1: lop1, op2: lop2 }
                                     );
                                     inplace_map.insert(*id, *nr1);
                                 },
@@ -237,7 +239,7 @@ impl HELoweredProgram {
                                 (HERef::Node(_), HERef::Node(nr2))
                                 if !uses[id+1].contains(nr2) && !noinplace => {
                                     instrs.push(
-                                        HELoweredInstr::AddInplace { op1: lop2, op2: lop1 }
+                                        SEALInstr::AddInplace { op1: lop2, op2: lop1 }
                                     );
                                     inplace_map.insert(*id, *nr2);
                                 },
@@ -248,67 +250,67 @@ impl HELoweredProgram {
 
                                 (_, HERef::Plaintext(_)) => {
                                     instrs.push(
-                                        HELoweredInstr::AddPlain { id: lid, op1: lop1, op2: lop2 }
+                                        SEALInstr::AddPlain { id: lid, op1: lop1, op2: lop2 }
                                     )
                                 },
 
                                 (HERef::Plaintext(_), _) => {
                                     instrs.push(
-                                        HELoweredInstr::AddPlain { id: lid, op1: lop2, op2: lop1 }
+                                        SEALInstr::AddPlain { id: lid, op1: lop2, op2: lop1 }
                                     )
                                 },
 
                                 _ => {
                                     instrs.push(
-                                        HELoweredInstr::Add { id: lid, op1: lop1, op2: lop2 }
+                                        SEALInstr::Add { id: lid, op1: lop1, op2: lop2 }
                                     )
                                 }
                             }
                         },
 
-                        (HEOperand::Ref(r1), HEOperand::ConstNum(_)) => {
+                        (HEOperand::Ref(r1), HEOperand::Literal(_)) => {
                             match r1 {
                                 HERef::Node(nr1)
                                 if !uses[id+1].contains(nr1) && !noinplace => {
                                     instrs.push(
-                                        HELoweredInstr::AddPlainInplace { op1: lop1, op2: lop2 }
+                                        SEALInstr::AddPlainInplace { op1: lop1, op2: lop2 }
                                     );
                                     inplace_map.insert(*id, *nr1);
                                 },
 
                                 _ => {
                                     instrs.push(
-                                        HELoweredInstr::AddPlain { id: lid, op1: lop1, op2: lop2 }
+                                        SEALInstr::AddPlain { id: lid, op1: lop1, op2: lop2 }
                                     )
                                 }
                             }
                         },
 
-                        (HEOperand::ConstNum(_), HEOperand::Ref(r2)) => {
+                        (HEOperand::Literal(_), HEOperand::Ref(r2)) => {
                             match r2 {
                                 HERef::Node(nr2)
                                 if !uses[id+1].contains(nr2) && !noinplace => {
                                     instrs.push(
-                                        HELoweredInstr::AddPlainInplace { op1: lop2, op2: lop1 }
+                                        SEALInstr::AddPlainInplace { op1: lop2, op2: lop1 }
                                     );
                                     inplace_map.insert(*id, *nr2);
                                 },
 
                                 _ => {
                                     instrs.push(
-                                        HELoweredInstr::AddPlain { id: lid, op1: lop2, op2: lop1 }
+                                        SEALInstr::AddPlain { id: lid, op1: lop2, op2: lop1 }
                                     )
                                 }
                             }
                         },
 
-                        (HEOperand::ConstNum(_), HEOperand::ConstNum(_)) => {
+                        (HEOperand::Literal(_), HEOperand::Literal(_)) => {
                             panic!("attempting to add two constants---this should be constant folded")
                         }
                     }
                 },
 
-                HEInstruction::Sub { id, op1, op2 } => {
+                HEInstruction::Sub(id, op1, op2) => {
                     let lid = format!("i{}", id);
                     let lop1 = Self::lower_operand(&inplace_map, &mut const_map, op1);
                     let lop2 = Self::lower_operand(&inplace_map, &mut const_map, op2);
@@ -318,7 +320,7 @@ impl HELoweredProgram {
                                 (HERef::Node(nr1), HERef::Node(_))
                                 if !uses[id+1].contains(nr1) && !noinplace => {
                                     instrs.push(
-                                        HELoweredInstr::SubInplace { op1: lop1, op2: lop2 }
+                                        SEALInstr::SubInplace { op1: lop1, op2: lop2 }
                                     );
                                     inplace_map.insert(*id, *nr1);
                                 },
@@ -329,76 +331,76 @@ impl HELoweredProgram {
 
                                 (_, HERef::Plaintext(_)) => {
                                     instrs.push(
-                                        HELoweredInstr::SubPlain { id: lid, op1: lop1, op2: lop2 }
+                                        SEALInstr::SubPlain { id: lid, op1: lop1, op2: lop2 }
                                     )
                                 },
 
                                 (HERef::Plaintext(_), _) => {
                                     instrs.push(
-                                        HELoweredInstr::Negate { id: lid.clone(), op1: lop2 }
+                                        SEALInstr::Negate { id: lid.clone(), op1: lop2 }
                                     );
                                     instrs.push(
-                                        HELoweredInstr::AddPlainInplace { op1: lid, op2: lop1 }
+                                        SEALInstr::AddPlainInplace { op1: lid, op2: lop1 }
                                     )
                                 },
 
                                 _ => {
                                     instrs.push(
-                                        HELoweredInstr::Sub { id: lid, op1: lop1, op2: lop2 }
+                                        SEALInstr::Sub { id: lid, op1: lop1, op2: lop2 }
                                     )
                                 }
                             }
                         },
 
-                        (HEOperand::Ref(r1), HEOperand::ConstNum(_)) => {
+                        (HEOperand::Ref(r1), HEOperand::Literal(_)) => {
                             match r1 {
                                 HERef::Node(nr1)
                                 if !uses[id+1].contains(nr1) && !noinplace => {
                                     instrs.push(
-                                        HELoweredInstr::SubPlainInplace { op1: lop1, op2: lop2 }
+                                        SEALInstr::SubPlainInplace { op1: lop1, op2: lop2 }
                                     );
                                     inplace_map.insert(*id, *nr1);
                                 },
 
                                 _ => {
                                     instrs.push(
-                                        HELoweredInstr::SubPlain { id: lid, op1: lop1, op2: lop2 }
+                                        SEALInstr::SubPlain { id: lid, op1: lop1, op2: lop2 }
                                     )
                                 }
                             }
                         },
 
-                        (HEOperand::ConstNum(_), HEOperand::Ref(r2)) => {
+                        (HEOperand::Literal(_), HEOperand::Ref(r2)) => {
                             match r2 {
                                 HERef::Node(nr2)
                                 if !uses[id+1].contains(nr2) && !noinplace => {
                                     instrs.push(
-                                        HELoweredInstr::NegateInplace { op1: lop2.clone() }
+                                        SEALInstr::NegateInplace { op1: lop2.clone() }
                                     );
                                     instrs.push(
-                                        HELoweredInstr::AddPlainInplace { op1: lop2, op2: lop1 }
+                                        SEALInstr::AddPlainInplace { op1: lop2, op2: lop1 }
                                     );
                                     inplace_map.insert(*id, *nr2);
                                 },
 
                                 _ => {
                                     instrs.push(
-                                        HELoweredInstr::Negate { id: lid.clone(), op1: lop2.clone() }
+                                        SEALInstr::Negate { id: lid.clone(), op1: lop2.clone() }
                                     );
                                     instrs.push(
-                                        HELoweredInstr::AddPlainInplace { op1: lid, op2: lop1 }
+                                        SEALInstr::AddPlainInplace { op1: lid, op2: lop1 }
                                     )
                                 }
                             }
                         },
 
-                        (HEOperand::ConstNum(_), HEOperand::ConstNum(_)) => {
+                        (HEOperand::Literal(_), HEOperand::Literal(_)) => {
                             panic!("attempting to subtract two constants---this should be constant folded")
                         }
                     }
                 },
 
-                HEInstruction::Mul { id, op1, op2 } => {
+                HEInstruction::Mul(id, op1, op2) => {
                     let lid = format!("i{}", id);
                     let lop1 = Self::lower_operand(&inplace_map, &mut const_map, op1);
                     let lop2 = Self::lower_operand(&inplace_map, &mut const_map, op2);
@@ -410,7 +412,7 @@ impl HELoweredProgram {
                                 (HERef::Node(nr1), HERef::Node(_))
                                 if !uses[id+1].contains(nr1) && !noinplace => {
                                     instrs.push(
-                                        HELoweredInstr::MulInplace { op1: lop1.clone(), op2: lop2 }
+                                        SEALInstr::MulInplace { op1: lop1.clone(), op2: lop2 }
                                     );
                                     inplace_map.insert(*id, *nr1);
                                     relin_id = lop1;
@@ -420,7 +422,7 @@ impl HELoweredProgram {
                                 (HERef::Node(_), HERef::Node(nr2))
                                 if !uses[id+1].contains(nr2) && !noinplace => {
                                     instrs.push(
-                                        HELoweredInstr::MulInplace { op1: lop2.clone(), op2: lop1 }
+                                        SEALInstr::MulInplace { op1: lop2.clone(), op2: lop1 }
                                     );
                                     inplace_map.insert(*id, *nr2);
                                     relin_id = lop2;
@@ -433,19 +435,19 @@ impl HELoweredProgram {
 
                                 (_, HERef::Plaintext(_)) => {
                                     instrs.push(
-                                        HELoweredInstr::MulPlain { id: lid, op1: lop1, op2: lop2 }
+                                        SEALInstr::MulPlain { id: lid, op1: lop1, op2: lop2 }
                                     )
                                 },
 
                                 (HERef::Plaintext(_), _) => {
                                     instrs.push(
-                                        HELoweredInstr::MulPlain { id: lid, op1: lop2, op2: lop1 }
+                                        SEALInstr::MulPlain { id: lid, op1: lop2, op2: lop1 }
                                     )
                                 },
 
                                 _ => {
                                     instrs.push(
-                                        HELoweredInstr::Mul { id: lid, op1: lop1, op2: lop2 }
+                                        SEALInstr::Mul { id: lid, op1: lop1, op2: lop2 }
                                     );
                                     cipher_cipher_op = true;
                                 }
@@ -458,64 +460,64 @@ impl HELoweredProgram {
                             // a future *multiplication* that will use the result
                             if cipher_cipher_op && uses[id+1].contains(id) {
                                 instrs.push(
-                                    HELoweredInstr::RelinearizeInplace { op1: relin_id }
+                                    SEALInstr::RelinearizeInplace { op1: relin_id }
                                 )
                             }
                         },
 
-                        (HEOperand::Ref(r1), HEOperand::ConstNum(_)) => {
+                        (HEOperand::Ref(r1), HEOperand::Literal(_)) => {
                             match r1 {
                                 HERef::Node(nr1)
                                 if !uses[id+1].contains(nr1) && !noinplace => {
                                     instrs.push(
-                                        HELoweredInstr::MulPlainInplace { op1: lop1.clone(), op2: lop2 }
+                                        SEALInstr::MulPlainInplace { op1: lop1.clone(), op2: lop2 }
                                     );
                                     inplace_map.insert(*id, *nr1);
                                 },
 
                                 _ => {
                                     instrs.push(
-                                        HELoweredInstr::MulPlain { id: lid.clone(), op1: lop1, op2: lop2 }
+                                        SEALInstr::MulPlain { id: lid.clone(), op1: lop1, op2: lop2 }
                                     )
                                 }
                             }
                         },
 
-                        (HEOperand::ConstNum(_), HEOperand::Ref(r2)) => {
+                        (HEOperand::Literal(_), HEOperand::Ref(r2)) => {
                             match r2 {
                                 HERef::Node(nr2)
                                 if !uses[id+1].contains(nr2) && !noinplace => {
                                     instrs.push(
-                                        HELoweredInstr::MulPlainInplace { op1: lop2.clone(), op2: lop1 }
+                                        SEALInstr::MulPlainInplace { op1: lop2.clone(), op2: lop1 }
                                     );
                                     inplace_map.insert(*id, *nr2);
                                 },
 
                                 _ => {
                                     instrs.push(
-                                        HELoweredInstr::MulPlain { id: lid.clone(), op1: lop2, op2: lop1 }
+                                        SEALInstr::MulPlain { id: lid.clone(), op1: lop2, op2: lop1 }
                                     )
                                 }
                             }
                         },
 
-                        (HEOperand::ConstNum(_), HEOperand::ConstNum(_)) => {
+                        (HEOperand::Literal(_), HEOperand::Literal(_)) => {
                             panic!("attempting to multiply two constants---this should be constant folded")
                         }
                     }
                 },
                 
-                HEInstruction::Rot { id, op1, op2 } => {
+                HEInstruction::Rot(id, op1, op2) => {
                     let lid = format!("i{}", id);
                     let lop1 = Self::lower_operand(&inplace_map, &mut const_map, op1);
                     match (op1, op2) {
-                        (HEOperand::Ref(r1), HEOperand::ConstNum(cn2)) => {
+                        (HEOperand::Ref(r1), HEOperand::Literal(cn2)) => {
                             let lop2 = cn2.to_string();
                             match r1 {
                                 HERef::Node(nr1)
                                 if !uses[id+1].contains(nr1) && !noinplace => {
                                     instrs.push(
-                                        HELoweredInstr::RotInplace { op1: lop1, op2: lop2 }
+                                        SEALInstr::RotInplace { op1: lop1, op2: lop2 }
                                     );
                                     inplace_map.insert(*id, *nr1);
                                 },
@@ -526,7 +528,7 @@ impl HELoweredProgram {
 
                                 _ => {
                                     instrs.push(
-                                        HELoweredInstr::Rot { id: lid, op1: lop1, op2: lop2 }
+                                        SEALInstr::Rot { id: lid, op1: lop1, op2: lop2 }
                                     );
                                 }
                             }
@@ -553,24 +555,24 @@ impl HELoweredProgram {
                 }
             ).collect();
 
-        let output: HELoweredNodeId = match &instrs.last().unwrap() {
-            HELoweredInstr::Add { id, op1, op2 } => id.clone(),
-            HELoweredInstr::AddInplace { op1, op2 } => op1.clone(),
-            HELoweredInstr::AddPlain { id, op1, op2 } => id.clone(),
-            HELoweredInstr::AddPlainInplace { op1, op2 } => op1.clone(),
-            HELoweredInstr::Sub { id, op1, op2 } => id.clone(),
-            HELoweredInstr::SubInplace { op1, op2 } => op1.clone(),
-            HELoweredInstr::SubPlain { id, op1, op2 } => id.clone(),
-            HELoweredInstr::SubPlainInplace { op1, op2 } => op1.clone(),
-            HELoweredInstr::Negate { id, op1 } => id.clone(),
-            HELoweredInstr::NegateInplace { op1 } => op1.clone(),
-            HELoweredInstr::Mul { id, op1, op2 } => id.clone(),
-            HELoweredInstr::MulInplace { op1, op2 } => op1.clone(),
-            HELoweredInstr::MulPlain { id, op1, op2 } => id.clone(),
-            HELoweredInstr::MulPlainInplace { op1, op2 } => op1.clone(),
-            HELoweredInstr::Rot { id, op1, op2 } => id.clone(),
-            HELoweredInstr::RotInplace { op1, op2 } => op1.clone(),
-            HELoweredInstr::RelinearizeInplace { op1 } => op1.clone(),
+        let output: SEALNodeId = match &instrs.last().unwrap() {
+            SEALInstr::Add { id, op1, op2 } => id.clone(),
+            SEALInstr::AddInplace { op1, op2 } => op1.clone(),
+            SEALInstr::AddPlain { id, op1, op2 } => id.clone(),
+            SEALInstr::AddPlainInplace { op1, op2 } => op1.clone(),
+            SEALInstr::Sub { id, op1, op2 } => id.clone(),
+            SEALInstr::SubInplace { op1, op2 } => op1.clone(),
+            SEALInstr::SubPlain { id, op1, op2 } => id.clone(),
+            SEALInstr::SubPlainInplace { op1, op2 } => op1.clone(),
+            SEALInstr::Negate { id, op1 } => id.clone(),
+            SEALInstr::NegateInplace { op1 } => op1.clone(),
+            SEALInstr::Mul { id, op1, op2 } => id.clone(),
+            SEALInstr::MulInplace { op1, op2 } => op1.clone(),
+            SEALInstr::MulPlain { id, op1, op2 } => id.clone(),
+            SEALInstr::MulPlainInplace { op1, op2 } => op1.clone(),
+            SEALInstr::Rot { id, op1, op2 } => id.clone(),
+            SEALInstr::RotInplace { op1, op2 } => op1.clone(),
+            SEALInstr::RelinearizeInplace { op1 } => op1.clone(),
         };
         HELoweredProgram {
             vec_size, literals, constants, instrs, output,
@@ -590,3 +592,4 @@ impl HELoweredProgram {
         }
     }
 }
+*/

@@ -639,7 +639,7 @@ impl VectorDeriver {
             }
 
         } else { // introduce new offset variable, since we can't create an offset expr
-            let offset_var = registry.fresh_offset_var();
+            let offset_var = registry.fresh_offset_fvar();
             registry.set_offset_var_value(offset_var.clone(), step_val);
 
             ParamCircuitExpr::Rotate(
@@ -967,7 +967,7 @@ impl ArrayMaterializer for DiagonalArrayMaterializer {
                         )
 
                     } else {
-                        let offset_var = registry.fresh_offset_var();
+                        let offset_var = registry.fresh_offset_fvar();
                         registry.set_offset_var_value(offset_var.clone(), CircuitValue::CoordMap(step_map));
 
                         ParamCircuitExpr::Rotate(

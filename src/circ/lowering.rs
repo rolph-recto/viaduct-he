@@ -1,3 +1,3 @@
 pub mod code_gen;
-pub mod lowered_program;
+pub mod seal;
 pub mod program;

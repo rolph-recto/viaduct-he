@@ -20,6 +20,9 @@ define_language! {
         "rot" = Rot([Id; 2]),
         CiphertextRef(Symbol),
         PlaintextRef(Symbol),
+        // FunctionVar(Symbol),
+        // IndexVar(Symbol),
+        // ReduceVectors(Symbol, Id),
     }
 }
 

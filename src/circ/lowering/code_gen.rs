@@ -1,5 +1,6 @@
 use std::fs::File;
 
+/*
 use handlebars::{Handlebars, handlebars_helper, RenderError};
 
 use super::lowered_program::{HELoweredInstr, HELoweredProgram};
@@ -39,3 +40,4 @@ impl CodeGenerator<'_> {
         self.handlebars.render("template", lowered_prog)
     }
 }
+*/

@@ -1,10 +1,11 @@
+use egg::{RecExpr, Symbol};
 use itertools::Itertools;
 use std::{collections::{HashSet, HashMap}, fmt::Display, ops::Range};
 
 use crate::{
     circ2::{vector_info::VectorInfo},
     lang::{Operator, DimSize, Extent, ArrayName},
-    scheduling::{OffsetExpr, ScheduleDim, DimName}
+    scheduling::{OffsetExpr, ScheduleDim, DimName}, circ::optimizer::HEOptCircuit
 };
 
 pub mod cost;
@@ -26,6 +27,50 @@ pub enum ParamCircuitExpr {
     Op(Operator, Box<ParamCircuitExpr>, Box<ParamCircuitExpr>),
     Rotate(Box<OffsetExpr>, Box<ParamCircuitExpr>),
     ReduceVectors(DimName, DimSize, Operator, Box<ParamCircuitExpr>),
+}
+
+impl ParamCircuitExpr {
+    fn to_opt_circuit_recur(&self, opt_expr: &mut RecExpr<HEOptCircuit>) -> egg::Id {
+        match self {
+            ParamCircuitExpr::CiphertextVar(var) => {
+                opt_expr.add(HEOptCircuit::CiphertextRef(Symbol::from(var)))
+            },
+
+            ParamCircuitExpr::PlaintextVar(var) => {
+                opt_expr.add(HEOptCircuit::CiphertextRef(Symbol::from(var)))
+            },
+
+            ParamCircuitExpr::Literal(lit) => {
+                opt_expr.add(HEOptCircuit::Num(*lit))
+            },
+
+            ParamCircuitExpr::Op(op, expr1, expr2) => {
+                let id1 = expr1.to_opt_circuit_recur(opt_expr);
+                let id2 = expr2.to_opt_circuit_recur(opt_expr);
+                match op {
+                    Operator::Add => opt_expr.add(HEOptCircuit::Add([id1, id2])),
+
+                    Operator::Sub => opt_expr.add(HEOptCircuit::Sub([id1, id2])),
+
+                    Operator::Mul => opt_expr.add(HEOptCircuit::Mul([id1, id2])),
+                }
+            },
+
+            ParamCircuitExpr::Rotate(steps, body) => {
+                let steps_id = steps.to_opt_circuit_recur(opt_expr);
+                let body_id = body.to_opt_circuit_recur(opt_expr);
+                opt_expr.add(HEOptCircuit::Rot([steps_id, body_id]))
+            },
+
+            ParamCircuitExpr::ReduceVectors(_, _, _, _) => todo!(),
+        }
+    }
+
+    pub fn to_opt_circuit(&self) -> RecExpr<HEOptCircuit> {
+        let mut opt_expr: RecExpr<HEOptCircuit> = RecExpr::default();
+        self.to_opt_circuit_recur(&mut opt_expr);
+        opt_expr
+    }
 }
 
 impl Display for ParamCircuitExpr {
@@ -116,6 +161,32 @@ impl ParamCircuitExpr {
             ParamCircuitExpr::ReduceVectors(_, _, _, body) => {
                 body.plaintext_vars()
             }
+        }
+    }
+
+    pub fn offset_fvars(&self) -> HashSet<String> {
+        match self {
+            ParamCircuitExpr::CiphertextVar(_) |
+            ParamCircuitExpr::PlaintextVar(_) |
+            ParamCircuitExpr::Literal(_) =>
+                HashSet::new(),
+
+            ParamCircuitExpr::Op(_, expr1, expr2) => {
+                let mut fvars1 = expr1.offset_fvars();
+                let fvars2 = expr1.offset_fvars();
+                fvars1.extend(fvars2);
+                fvars1
+            },
+
+            ParamCircuitExpr::Rotate(offset, body) => {
+                let mut offset_fvars = offset.function_vars();
+                let body_fvar = body.offset_fvars();
+                offset_fvars.extend(body_fvar);
+                offset_fvars
+            },
+
+            ParamCircuitExpr::ReduceVectors(_, _, _, body) =>
+                body.offset_fvars()
         }
     }
 }
@@ -318,6 +389,8 @@ impl Display for CiphertextObject {
     }
 }
 
+pub type MaskVector = im::Vector<(usize, usize, usize)>;
+
 #[derive(Clone,Debug,PartialEq,Eq)]
 pub enum PlaintextObject {
     // plaintext filled with a constant value
@@ -328,7 +401,7 @@ pub enum PlaintextObject {
     // where [lower, upper) defines the interval filled with 1s;
     // values outside of this interval is 0, so when multiplied with a vector
     // elements outside of the interval will be zeroed out
-    Mask(im::Vector<(usize, usize, usize)>)
+    Mask(MaskVector),
 }
 
 impl Default for PlaintextObject {
@@ -375,7 +448,7 @@ impl<T: Display> Display for CircuitValue<T> where T: Display {
 
 type CiphertextVarValue = CircuitValue<CiphertextObject>;
 type PlaintextVarValue = CircuitValue<PlaintextObject>;
-type OffsetVarValue = CircuitValue<isize>;
+type OffsetFunctionVarValue = CircuitValue<isize>;
 
 /// data structure that maintains values for variables in parameterized circuits
 #[derive(Debug)]
@@ -386,8 +459,8 @@ pub struct CircuitRegistry {
     pub pt_var_values: HashMap<VarName, PlaintextVarValue>,
     pt_var_id: usize,
 
-    pub offset_var_values: HashMap<DimName, OffsetVarValue>,
-    offset_var_id: usize,
+    pub offset_fvar_values: HashMap<DimName, OffsetFunctionVarValue>,
+    offset_fvar_id: usize,
 }
 
 impl CircuitRegistry {
@@ -397,8 +470,8 @@ impl CircuitRegistry {
             ct_var_id: 1,
             pt_var_values: HashMap::new(),
             pt_var_id: 1,
-            offset_var_values: HashMap::new(),
-            offset_var_id: 1,
+            offset_fvar_values: HashMap::new(),
+            offset_fvar_id: 1,
         }
     }
 
@@ -414,9 +487,9 @@ impl CircuitRegistry {
         format!("pt{}", id)
     }
 
-    pub fn fresh_offset_var(&mut self) -> VarName {
-        let id = self.offset_var_id;
-        self.offset_var_id += 1;
+    pub fn fresh_offset_fvar(&mut self) -> VarName {
+        let id = self.offset_fvar_id;
+        self.offset_fvar_id += 1;
         format!("offset{}", id)
     }
 
@@ -428,20 +501,20 @@ impl CircuitRegistry {
         self.pt_var_values.insert(pt_var, value);
     }
 
-    pub fn set_offset_var_value(&mut self, offset_var: DimName, value: OffsetVarValue) {
-        self.offset_var_values.insert(offset_var, value);
+    pub fn set_offset_var_value(&mut self, offset_var: DimName, value: OffsetFunctionVarValue) {
+        self.offset_fvar_values.insert(offset_var, value);
     }
 
-    pub fn get_ct_var_value(&mut self, ct_var: &VarName) -> &CiphertextVarValue {
+    pub fn get_ct_var_value(&self, ct_var: &VarName) -> &CiphertextVarValue {
         self.ct_var_values.get(ct_var).unwrap()
     }
 
-    pub fn get_pt_var_value(&mut self, pt_var: &VarName) -> &PlaintextVarValue {
+    pub fn get_pt_var_value(&self, pt_var: &VarName) -> &PlaintextVarValue {
         self.pt_var_values.get(pt_var).unwrap()
     }
 
-    pub fn get_offset_var_value(&mut self, offset_var: &DimName) -> &OffsetVarValue {
-        self.offset_var_values.get(offset_var).unwrap()
+    pub fn get_offset_fvar_value(&self, offset_fvar: &DimName) -> &OffsetFunctionVarValue {
+        self.offset_fvar_values.get(offset_fvar).unwrap()
     }
 
     // TODO implement
@@ -465,7 +538,7 @@ impl Display for CircuitRegistry {
             write!(f, "{} => \n{}\n", pt_var, val)
         })?;
 
-        self.offset_var_values.iter().try_for_each(|(offset_var, val)| {
+        self.offset_fvar_values.iter().try_for_each(|(offset_var, val)| {
             write!(f, "{} => \n{}\n", offset_var, val)
         })?;
 

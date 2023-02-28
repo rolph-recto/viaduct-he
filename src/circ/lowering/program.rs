@@ -2,28 +2,54 @@
 /// instruction representation of HE programs
 
 use egg::*;
-use rand::Rng;
 use std::cmp::max;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
-use std::ops::RangeInclusive;
 
 use crate::circ::optimizer::HELatencyModel;
-use crate::circ::{*, optimizer, optimizer::HEOptCircuit};
+use crate::circ::{*, optimizer::HEOptCircuit};
+use crate::circ2::vector_info::VectorInfo;
+use crate::circ2::{IndexCoordinateMap, ParamCircuitProgram, ParamCircuitExpr, CircuitValue, MaskVector, CiphertextObject, PlaintextObject, CircuitRegistry};
+use crate::lang::{Operator, Extent};
+use crate::scheduling::OffsetExpr;
+use crate::util::NameGenerator;
 
-pub(crate) type NodeId = usize;
+pub type NodeId = usize;
 
 #[derive(Clone, Debug)]
-pub(crate) enum HERef {
-    Node(NodeId),
-    Ciphertext(HEObjectName),
-    Plaintext(HEObjectName),
+pub enum HEIndex {
+    Var(String),
+    Literal(isize),
+}
+
+impl fmt::Display for HEIndex {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            HEIndex::Var(var) =>
+                write!(f, "{}", var),
+
+            HEIndex::Literal(val) =>
+                write!(f, "{}", val),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
-pub(crate) enum HEOperand {
+pub enum HERef {
+    // reference to a previous instruction's output
+    Node(NodeId),
+
+    // index to a ciphertext array (variable if no indices)
+    Ciphertext(HEObjectName, Vec<HEIndex>),
+
+    // index to a plaintext array (variable if no indices)
+    Plaintext(HEObjectName, Vec<HEIndex>),
+}
+
+#[derive(Clone, Debug)]
+pub enum HEOperand {
     Ref(HERef),
-    ConstNum(isize),
+    Literal(isize),
 }
 
 impl fmt::Display for HEOperand {
@@ -32,35 +58,50 @@ impl fmt::Display for HEOperand {
             HEOperand::Ref(HERef::Node(i)) => {
                 write!(f, "i{}", i)
             },
-            HEOperand::Ref(HERef::Ciphertext(sym)) => {
-                write!(f, "{}", sym)
+
+            HEOperand::Ref(HERef::Ciphertext(sym, index_vars)) => {
+                let index_str =
+                    index_vars.iter()
+                    .map(|var| format!("[{}]", var))
+                    .collect::<Vec<String>>()
+                    .join("");
+                write!(f, "{}{}", sym, index_str)
             },
-            HEOperand::Ref(HERef::Plaintext(sym)) => {
-                write!(f, "{}", sym)
+
+            HEOperand::Ref(HERef::Plaintext(sym, index_vars)) => {
+                let index_str =
+                    index_vars.iter()
+                    .map(|var| format!("[{}]", var))
+                    .collect::<Vec<String>>()
+                    .join("");
+                write!(f, "{}{}", sym, index_str)
             },
-            HEOperand::ConstNum(n) => {
+
+            HEOperand::Literal(n) => {
                 write!(f, "{}", n)
             },
         }
     }
 }
 
-#[derive(Clone)]
-pub(crate) enum HEInstruction {
-    Add { id: NodeId, op1: HEOperand, op2: HEOperand },
-    Sub { id: NodeId, op1: HEOperand, op2: HEOperand },
-    Mul{ id: NodeId, op1: HEOperand, op2: HEOperand },
-    Rot { id: NodeId, op1: HEOperand, op2: HEOperand} ,
+#[derive(Clone, Debug)]
+pub enum HEInstruction {
+    Add(usize, HEOperand, HEOperand),
+    Sub(usize, HEOperand, HEOperand),
+    Mul(usize, HEOperand, HEOperand),
+    Rot(usize, OffsetExpr, HEOperand),
 }
 
 impl HEInstruction {
-    fn get_operands(&self) -> [&HEOperand;2] {
+    fn get_operands(&self) -> Vec<HEOperand> {
         match self {
-            HEInstruction::Add { id: _, op1, op2 } |
-            HEInstruction::Sub { id: _, op1, op2 } |
-            HEInstruction::Mul { id: _, op1, op2 } |
-            HEInstruction::Rot { id: _, op1, op2 } =>
-                [op1, op2],
+            HEInstruction::Add(_, op1, op2) |
+            HEInstruction::Sub(_, op1, op2) |
+            HEInstruction::Mul(_, op1, op2) =>
+                vec![op1.clone(), op2.clone()],
+
+            HEInstruction::Rot(_, op1, op2) =>
+                vec![op2.clone()],
         }
     }
 }
@@ -68,36 +109,351 @@ impl HEInstruction {
 impl fmt::Display for HEInstruction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            HEInstruction::Add { id: _, op1, op2 } =>
-                write!(f, "{} + {}", op1, op2),
+            HEInstruction::Add(id, op1, op2) =>
+                write!(f, "i{} = {} + {}", id, op1, op2),
 
-            HEInstruction::Sub { id: _, op1, op2 } =>
-                write!(f, "{} - {}", op1, op2),
+            HEInstruction::Sub(id, op1, op2) =>
+                write!(f, "i{} = {} - {}", id, op1, op2),
 
-            HEInstruction::Mul { id: _, op1, op2 } =>
-                write!(f, "{} * {}", op1, op2),
+            HEInstruction::Mul(id, op1, op2) =>
+                write!(f, "i{} = {} * {}", id, op1, op2),
 
-            HEInstruction::Rot { id: _, op1, op2 } =>
-                write!(f, "rot {} {}", op1, op2),
+            HEInstruction::Rot(id, op1, op2) =>
+                write!(f, "i{} = rot {} {}", id, op1, op2),
         }
     }
 }
 
-#[derive(PartialEq, Eq, Clone)]
-pub(crate) enum HEValue {
-    HEScalar(isize),
-    HEVector(Vec<isize>),
+#[derive(Clone, Debug)]
+pub enum HEStatement {
+    ForNode(String, usize, Vec<HEStatement>),
+    // Var(String, IndexCoordinateMap<HEOperand>),
+    DeclareVar(String, Vec<Extent>),
+    SetVar(String, Vec<HEIndex>, HEOperand),
+    Instruction(HEInstruction),
 }
 
-impl fmt::Display for HEValue {
+impl fmt::Display for HEStatement {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            HEValue::HEScalar(s) => write!(f, "{}", s),
-            HEValue::HEVector(v) => write!(f, "{:?}", v),
+        todo!()
+    }
+}
+
+struct InputContext {
+    vector_map: HashMap<VectorInfo, String>,
+    mask_map: HashMap<MaskVector, String>,
+    const_map: HashMap<isize, String>,
+}
+
+pub struct HEProgram {
+    pub statements: Vec<HEStatement>,
+}
+
+pub struct HELowering {
+    name_generator: NameGenerator,
+    cur_instr_id: NodeId,
+}
+
+impl HELowering {
+    pub fn new() -> Self {
+        Self {
+            name_generator: NameGenerator::new(),
+            cur_instr_id: 0,
+        }
+    }
+
+    fn fresh_instr_id(&mut self) -> NodeId {
+        let id = self.cur_instr_id;
+        self.cur_instr_id += 1;
+        id
+    }
+
+    fn resolve_ciphertext_object(obj: &CiphertextObject, input: &InputContext) -> HEOperand {
+        match obj {
+            CiphertextObject::InputVector(vector) => {
+                let vector_var = input.vector_map.get(vector).unwrap().clone();
+                HEOperand::Ref(HERef::Ciphertext(vector_var, vec![]))
+            },
+
+            CiphertextObject::VectorRef(array, coords) => {
+                let coord_index =
+                    coords.iter().map(|coord| HEIndex::Literal(*coord as isize));
+                HEOperand::Ref(HERef::Ciphertext(array.clone(), Vec::from_iter(coord_index)))
+            }
+        }
+    }
+
+    fn resolve_plaintext_object(obj: &PlaintextObject, input: &InputContext) -> HEOperand {
+        match obj {
+            PlaintextObject::Const(val) => {
+                let const_var = input.const_map.get(val).unwrap().clone();
+                HEOperand::Ref(HERef::Plaintext(const_var, vec![]))
+            },
+
+            PlaintextObject::Mask(mask) => {
+                let mask_var = input.mask_map.get(mask).unwrap().clone();
+                HEOperand::Ref(HERef::Plaintext(mask_var, vec![]))
+            }
+        }
+    }
+
+    fn resolve_offset(offset: &isize, input: &InputContext) -> HEOperand {
+        HEOperand::Literal(*offset)
+    }
+
+    // TODO finish
+    fn gen_input_context(&self, registry: &CircuitRegistry) -> InputContext {
+        InputContext {
+            vector_map: HashMap::new(),
+            mask_map: HashMap::new(),
+            const_map: HashMap::new(),
+        }
+    }
+
+    fn process_circuit_val<T>(
+        value: &CircuitValue<T>,
+        var: String,
+        input: &InputContext,
+        f: fn(&T, &InputContext) -> HEOperand,
+        statements: &mut Vec<HEStatement>,
+    ) {
+        match value {
+            CircuitValue::CoordMap(coord_map) => {
+                for (coords, obj) in coord_map.value_iter() {
+                    let operand = f(obj.unwrap(), &input);
+                    let coord_index =
+                        Vec::from_iter(
+                            coords.iter()
+                            .map(|coord| HEIndex::Literal(*coord as isize))
+                        );
+
+                    statements.push(
+                        HEStatement::SetVar(var.clone(), coord_index, operand)
+                    );
+                }
+            },
+
+            CircuitValue::Single(obj) => {
+                let operand = f(obj, &input);
+                statements.push(
+                    HEStatement::SetVar(var, vec![], operand)
+                );
+            }
+        }
+    }
+
+    pub fn gen_instrs(&mut self, program: ParamCircuitProgram) -> HEProgram {
+        let mut statements: Vec<HEStatement> = Vec::new();
+        // process inputs
+        let input = self.gen_input_context(&program.registry);
+
+        // process statements
+        for (array, dims, circuit) in program.circuit_list {
+            // preamble: allocate arrays referenced in the circuit expr
+            // TODO: allow inlining for simple expressions
+            for ct_var in circuit.ciphertext_vars() {
+                HELowering::process_circuit_val(
+                    program.registry.get_ct_var_value(&ct_var),
+                    ct_var,
+                    &input,
+                    HELowering::resolve_ciphertext_object,
+                    &mut statements,
+                );
+            }
+
+            for pt_var in circuit.plaintext_vars() {
+                HELowering::process_circuit_val(
+                    program.registry.get_pt_var_value(&pt_var),
+                    pt_var,
+                    &input,
+                    HELowering::resolve_plaintext_object,
+                    &mut statements,
+                );
+            }
+
+            for offset_fvar in circuit.offset_fvars() {
+                HELowering::process_circuit_val(
+                    program.registry.get_offset_fvar_value(&offset_fvar),
+                    offset_fvar,
+                    &input,
+                    HELowering::resolve_offset,
+                    &mut statements,
+                );
+            }
+
+            let dim_vars: Vec<String> = 
+                dims.iter().map(|(var, _)| var.clone()).collect();
+
+            let dim_extents = 
+                dims.iter().map(|(_, extent)| *extent).collect();
+
+            statements.push(
+                HEStatement::DeclareVar(array.clone(), dim_extents)
+            );
+
+            let mut body_statements: Vec<HEStatement> = Vec::new();
+            let array_id =
+                self.gen_expr_instrs_recur(
+                    circuit,
+                    &dims, 
+                    &mut HashMap::new(), 
+                    &mut body_statements,
+                );
+
+            body_statements.push(
+                HEStatement::SetVar(
+                    array,
+                    dim_vars.into_iter().map(|var| HEIndex::Var(var)).collect(),
+                    HEOperand::Ref(HERef::Node(array_id))
+                )
+            );
+
+            let mut dims_reversed = dims.clone();
+            dims_reversed.reverse();
+
+            let array_statement = 
+                dims_reversed.into_iter()
+                .fold(body_statements, |acc, (dim, extent)| {
+                    vec![HEStatement::ForNode(dim, extent, acc)]
+                }).pop().unwrap();
+
+            statements.push(array_statement);
+        }
+
+        HEProgram { statements }
+    }
+
+    pub fn gen_expr_instrs_recur(
+        &mut self,
+        expr: ParamCircuitExpr,
+        indices: &Vec<(String, usize)>,
+        operand_map: &mut HashMap<usize, HEOperand>,
+        stmts: &mut Vec<HEStatement>
+    ) -> NodeId {
+        match expr {
+            ParamCircuitExpr::CiphertextVar(var) => {
+                let index_vars =
+                    indices.iter()
+                    .map(|(var, _)| HEIndex::Var(var.clone()))
+                    .collect();
+                let id = self.fresh_instr_id();
+                let operand =
+                    HEOperand::Ref(HERef::Ciphertext(var, index_vars));
+                operand_map.insert(id, operand);
+                id
+            },
+
+            ParamCircuitExpr::PlaintextVar(var) => {
+                let index_vars =
+                    indices.iter()
+                    .map(|(var, _)| HEIndex::Var(var.clone()))
+                    .collect();
+                let id = self.fresh_instr_id();
+                let operand =
+                    HEOperand::Ref(HERef::Plaintext(var, index_vars));
+                operand_map.insert(id, operand);
+                id
+            },
+
+            ParamCircuitExpr::Literal(val) => {
+                let id = self.fresh_instr_id();
+                let operand = HEOperand::Literal(val);
+                operand_map.insert(id, operand);
+                id
+            },
+
+            ParamCircuitExpr::Op(op, expr1, expr2) => {
+                let id1 = self.gen_expr_instrs_recur(*expr1, indices, operand_map, stmts);
+                let id2 = self.gen_expr_instrs_recur(*expr2, indices, operand_map, stmts);
+
+                let operand1 = operand_map.get(&id1).unwrap().clone();
+                let operand2 = operand_map.get(&id2).unwrap().clone();
+
+                let id = self.fresh_instr_id();
+                let instr =
+                    match op {
+                        Operator::Add => HEInstruction::Add(id, operand1, operand2),
+                        Operator::Sub => HEInstruction::Sub(id, operand1, operand2),
+                        Operator::Mul => HEInstruction::Mul(id, operand1, operand2),
+                    };
+
+                stmts.push(HEStatement::Instruction(instr));
+                operand_map.insert(id, HEOperand::Ref(HERef::Node(id)));
+                id
+            },
+
+            ParamCircuitExpr::Rotate(steps, body) => {
+                let body_id = self.gen_expr_instrs_recur(*body, indices, operand_map, stmts);
+                let id = self.fresh_instr_id();
+
+                let body_operand = operand_map.get(&body_id).unwrap().clone();
+                stmts.push(
+                    HEStatement::Instruction(HEInstruction::Rot(id, *steps, body_operand))
+                );
+                operand_map.insert(id, HEOperand::Ref(HERef::Node(id)));
+
+                id
+            },
+
+            ParamCircuitExpr::ReduceVectors(dim, extent, op, body) => {
+                let mut body_indices = indices.clone();
+                body_indices.push((dim.clone(), extent));
+
+                let mut body_stmts: Vec<HEStatement> = Vec::new();
+
+                let body_id =
+                    self.gen_expr_instrs_recur(
+                        *body,
+                        &body_indices,
+                        operand_map,
+                        &mut body_stmts,
+                    );
+
+                let body_ref = HEOperand::Ref(HERef::Node(body_id));
+
+                let reduce_var = self.name_generator.get_fresh_name("reduce");
+
+                let reduce_var_ref = 
+                    HEOperand::Ref(HERef::Ciphertext(reduce_var.clone(), vec![]));
+
+                let reduce_id = self.fresh_instr_id();
+
+                let reduce_stmt = 
+                    match op {
+                        Operator::Add =>
+                            HEInstruction::Add(reduce_id, reduce_var_ref.clone(), body_ref),
+
+                        Operator::Sub =>
+                            HEInstruction::Sub(reduce_id, reduce_var_ref.clone(), body_ref),
+
+                        Operator::Mul => 
+                            HEInstruction::Mul(reduce_id, reduce_var_ref.clone(), body_ref),
+                    };
+
+                body_stmts.push(HEStatement::Instruction(reduce_stmt));
+                body_stmts.push(
+                    HEStatement::SetVar(
+                        reduce_var.clone(),
+                        vec![],
+                        HEOperand::Ref(HERef::Node(reduce_id)),
+                    )
+                );
+
+                stmts.extend([
+                    HEStatement::DeclareVar(reduce_var.clone(), vec![]),
+                    HEStatement::ForNode(dim, extent, body_stmts),
+                ]);
+                
+                let id = self.fresh_instr_id();
+                operand_map.insert(id, reduce_var_ref);
+
+                id
+            },
         }
     }
 }
 
+/*
 pub struct HEProgram {
     pub(crate) instrs: Vec<HEInstruction>,
 }
@@ -111,9 +467,9 @@ impl HEProgram {
         let get_opdepth = |dlist: &Vec<usize>, op: &HEOperand| -> usize {
             match op {
                 HEOperand::Ref(HERef::Node(r)) => dlist[*r],
-                HEOperand::Ref(HERef::Ciphertext(_)) => 0,
-                HEOperand::Ref(HERef::Plaintext(_)) => 0,
-                HEOperand::ConstNum(_) => 0,
+                HEOperand::Ref(HERef::Ciphertext(_, _)) => 0,
+                HEOperand::Ref(HERef::Plaintext(_, _)) => 0,
+                HEOperand::Literal(_) => 0,
             }
         };
 
@@ -136,7 +492,7 @@ impl HEProgram {
                         let op2_depth: usize = get_opdepth(dlist, op2);
 
                         match (op1, op2) {
-                            (HEOperand::ConstNum(_), _) | (_, HEOperand::ConstNum(_)) =>
+                            (HEOperand::Literal(_), _) | (_, HEOperand::Literal(_)) =>
                                 max(op1_depth, op2_depth),
 
                             _ => max(op1_depth, op2_depth) + 1
@@ -164,7 +520,7 @@ impl HEProgram {
             match instr {
                 HEInstruction::Add { id: _, op1, op2 } => {
                     match (op1, op2) {
-                        (HEOperand::ConstNum(_), _) | (_, HEOperand::ConstNum(_)) =>  {
+                        (HEOperand::Literal(_), _) | (_, HEOperand::Literal(_)) =>  {
                             latency += model.add_plain;
                         },
 
@@ -176,7 +532,7 @@ impl HEProgram {
 
                 HEInstruction::Sub { id: _, op1, op2 } => {
                     match (op1, op2) {
-                        (HEOperand::ConstNum(_), _) | (_, HEOperand::ConstNum(_)) =>  {
+                        (HEOperand::Literal(_), _) | (_, HEOperand::Literal(_)) =>  {
                             latency += model.add_plain;
                         },
 
@@ -188,7 +544,7 @@ impl HEProgram {
 
                 HEInstruction::Mul { id: _, op1, op2 } => {
                     match (op1, op2) {
-                        (HEOperand::ConstNum(_), _) | (_, HEOperand::ConstNum(_)) =>  {
+                        (HEOperand::Literal(_), _) | (_, HEOperand::Literal(_)) =>  {
                             latency += model.mul_plain;
                         },
 
@@ -212,7 +568,7 @@ impl HEProgram {
 
         for instr in self.instrs.iter() {
             for op in instr.get_operands() {
-                if let HEOperand::Ref(HERef::Ciphertext(sym)) = op{
+                if let HEOperand::Ref(HERef::Ciphertext(sym, index)) = op{
                     symset.insert(sym.to_string());
                 }
             }
@@ -227,7 +583,7 @@ impl HEProgram {
 
         for instr in self.instrs.iter() {
             for op in instr.get_operands() {
-                if let HEOperand::Ref(HERef::Plaintext(sym)) = op {
+                if let HEOperand::Ref(HERef::Plaintext(sym, index)) = op {
                     symset.insert(sym.to_string());
                 }
             }
@@ -237,6 +593,7 @@ impl HEProgram {
     }
 
     /// generate a random sym store for this program
+    /*
     pub(crate) fn gen_sym_store(&self, vec_size: usize, range: RangeInclusive<isize>) -> HESymStore {
         let symbols = self.get_ciphertext_symbols();
         let mut sym_store: HESymStore = HashMap::new();
@@ -253,6 +610,7 @@ impl HEProgram {
 
         sym_store
     }
+    */
 
     /// compute the required vectors at every program point
     /// this is used in the lowering pass for computing when relinearizations
@@ -310,15 +668,15 @@ impl From<&RecExpr<HEOptCircuit>> for HEProgram {
             let id = Id::from(i);
             match node {
                 HEOptCircuit::Num(n) => {
-                    node_map.insert(id, HEOperand::ConstNum(*n));
+                    node_map.insert(id, HEOperand::Literal(*n));
                 }
 
                 HEOptCircuit::CiphertextRef(sym) => {
-                    node_map.insert(id, HEOperand::Ref(HERef::Ciphertext(sym.to_string())));
+                    node_map.insert(id, HEOperand::Ref(HERef::Ciphertext(sym.to_string(), vec![])));
                 }
 
                 HEOptCircuit::PlaintextRef(sym) => {
-                    node_map.insert(id, HEOperand::Ref(HERef::Plaintext(sym.to_string())));
+                    node_map.insert(id, HEOperand::Ref(HERef::Plaintext(sym.to_string(), vec![])));
                 }
 
                 HEOptCircuit::Add([id1, id2]) => {
@@ -359,13 +717,27 @@ impl From<&RecExpr<HEOptCircuit>> for HEProgram {
     }
 }
 
-
 impl fmt::Display for HEProgram {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.instrs
             .iter()
             .enumerate()
             .try_for_each(|(i, instr)| write!(f, "let i{} = {}\n", i + 1, instr))
+    }
+}
+
+#[derive(PartialEq, Eq, Clone)]
+pub(crate) enum HEValue {
+    HEScalar(isize),
+    HEVector(Vec<isize>),
+}
+
+impl fmt::Display for HEValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            HEValue::HEScalar(s) => write!(f, "{}", s),
+            HEValue::HEVector(v) => write!(f, "{:?}", v),
+        }
     }
 }
 
@@ -465,3 +837,4 @@ impl HEProgramInterpreter {
         last_instr.and_then(|i| ref_store.remove(&i))
     }
 }
+*/
