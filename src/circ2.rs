@@ -12,7 +12,7 @@ pub mod cost;
 pub mod materializer;
 pub mod vector_info;
 
-type VarName = String;
+pub type VarName = String;
 
 #[derive(Copy,Clone,Debug,PartialEq,Eq)]
 pub enum VectorType { Ciphertext, Plaintext }
@@ -191,7 +191,7 @@ impl ParamCircuitExpr {
     }
 }
 
-type IndexCoord = im::Vector<usize>;
+pub type IndexCoord = im::Vector<usize>;
 
 #[derive(Debug,Clone)]
 pub struct IndexCoordinateSystem(Vec<(DimName,usize)>);
