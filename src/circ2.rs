@@ -605,6 +605,13 @@ impl CircuitObjectRegistry {
             }
         }
 
+        // must look for literals in circuits as well
+        for (_, circuit) in self.circuit_map.iter() {
+            if let ParamCircuitExpr::Literal(lit) = circuit {
+                set.insert(*lit);
+            }
+        }
+
         set
     }
 
