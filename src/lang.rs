@@ -37,13 +37,22 @@ pub type ArrayEnvironment = HashMap<ArrayName, Shape>;
 pub type IndexEnvironment = HashMap<IndexVar, Extent>;
 
 #[derive(Copy, Clone, Debug)]
-pub enum InputType { Client, Server }
+pub enum ArrayType { Ciphertext, Plaintext }
 
-impl Display for InputType  {
+impl ArrayType {
+    pub fn join(&self, other: &ArrayType) -> ArrayType {
+        match self {
+            ArrayType::Ciphertext => ArrayType::Ciphertext,
+            ArrayType::Plaintext => *other
+        }
+    }
+}
+
+impl Display for ArrayType  {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            InputType::Client => write!(f, "client"),
-            InputType::Server => write!(f, "server"),
+            ArrayType::Ciphertext => write!(f, "client"),
+            ArrayType::Plaintext => write!(f, "server"),
         }
     }
 }

@@ -88,7 +88,7 @@ impl Display for TransformedExpr {
 pub type ArrayDim = (IndexingId, DimIndex);
 
 pub struct TransformedProgram {
-    pub input_map: IndexMap<ArrayName, Shape>,
+    pub input_map: IndexMap<ArrayName, (Shape, ArrayType)>,
     pub expr_map: IndexMap<ArrayName, TransformedExpr>,
 }
 
@@ -244,7 +244,6 @@ struct IndexingData {
     offset: isize
 }
 
-
 // index elimination pass
 pub struct IndexElimination {
     // map from source-level bindings to their shapes 
@@ -298,7 +297,7 @@ impl IndexElimination {
     }
 
     fn compute_shape_program(&mut self, program: &ElaboratedProgram) {
-        for (array, shape) in program.input_map.iter() {
+        for (array, (shape, _)) in program.input_map.iter() {
             if let Some(_) = self.store.insert(array.clone(), shape.clone()) {
                 panic!("duplicate binding for {}", array)
             }
@@ -475,7 +474,7 @@ impl IndexElimination {
             SourceExpr::Indexing(indexing_id, index_list) => {
                 let array_shape =
                     if program.is_input(indexing_id) {
-                        program.input_map[&program.rename_map[indexing_id]].clone()
+                        program.input_map[&program.rename_map[indexing_id]].0.clone()
 
                     } else {
                         self.store[indexing_id].clone()

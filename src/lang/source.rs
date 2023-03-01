@@ -7,16 +7,16 @@ use crate::lang::*;
 #[derive(Clone,Debug)]
 pub struct SourceProgram {
     // use IndexMap instead of HashMap to preserve the program order
-    pub input_map: IndexMap<ArrayName, Shape>,
+    pub input_map: IndexMap<ArrayName, (Shape, ArrayType)>,
     pub expr_map: IndexMap<ArrayName, SourceExpr>,
 }
 
 impl SourceProgram {
     pub fn new(inputs: im::Vector<Input>, let_bindings: im::Vector<LetBinding>, output_expr: SourceExpr) -> Self {
         // compute input map and expr binding map
-        let mut input_map: IndexMap<ArrayName, Shape> = IndexMap::new();
+        let mut input_map: IndexMap<ArrayName, (Shape, ArrayType)> = IndexMap::new();
         inputs.iter().for_each(|input| {
-            if let Some(_) = input_map.insert(input.0.clone(), input.1.clone()) {
+            if let Some(_) = input_map.insert(input.0.clone(), (input.1.clone(), input.2)) {
                 panic!("duplicate bindings for {}", &input.0)
             }
         });
@@ -45,7 +45,7 @@ impl SourceProgram {
     }
 
     pub fn get_input_shape(&self, array: &ArrayName) -> Option<&Shape> {
-        self.input_map.get(array)
+        self.input_map.get(array).map(|(shape, _)| shape)
     }
 
     pub fn get_expr(&self, array: &ArrayName) -> Option<&SourceExpr> {
@@ -66,7 +66,7 @@ impl Display for SourceProgram {
 }
 
 #[derive(Clone,Debug)]
-pub struct Input(pub ArrayName, pub Shape, pub InputType);
+pub struct Input(pub ArrayName, pub Shape, pub ArrayType);
 
 impl Display for Input {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

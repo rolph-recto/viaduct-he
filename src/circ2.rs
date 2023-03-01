@@ -17,6 +17,10 @@ pub type VarName = String;
 #[derive(Copy,Clone,Debug,PartialEq,Eq)]
 pub enum VectorType { Ciphertext, Plaintext }
 
+pub trait CanCreateObjectVar<T: CircuitObject> {
+    fn obj_var(var: VarName) -> Self;
+}
+
 /// parameterized circuit expr that represents an *array* of circuit exprs
 /// these exprs are parameterized by exploded dim coordinate variables
 #[derive(Clone,Debug)]
@@ -70,36 +74,6 @@ impl ParamCircuitExpr {
         let mut opt_expr: RecExpr<HEOptCircuit> = RecExpr::default();
         self.to_opt_circuit_recur(&mut opt_expr);
         opt_expr
-    }
-}
-
-impl Display for ParamCircuitExpr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ParamCircuitExpr::CiphertextVar(name) => {
-                write!(f, "CT({})", name)
-            },
-
-            ParamCircuitExpr::PlaintextVar(name) => {
-                write!(f, "PT({})", name)
-            },
-
-            ParamCircuitExpr::Literal(lit) => {
-                write!(f, "{}", lit)
-            },
-
-            ParamCircuitExpr::Op(op, expr1, expr2) => {
-                write!(f, "({} {} {})", expr1, op, expr2)
-            },
-
-            ParamCircuitExpr::Rotate(offset, expr) => {
-                write!(f, "rot({}, {})", offset, expr)
-            },
-
-            ParamCircuitExpr::ReduceVectors(index, _, op, expr) => {
-                write!(f, "reduce({}, {}, {})", index, op, expr)
-            },
-        }
     }
 }
 
@@ -190,6 +164,49 @@ impl ParamCircuitExpr {
         }
     }
 }
+
+impl Display for ParamCircuitExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ParamCircuitExpr::CiphertextVar(name) => {
+                write!(f, "CT({})", name)
+            },
+
+            ParamCircuitExpr::PlaintextVar(name) => {
+                write!(f, "PT({})", name)
+            },
+
+            ParamCircuitExpr::Literal(lit) => {
+                write!(f, "{}", lit)
+            },
+
+            ParamCircuitExpr::Op(op, expr1, expr2) => {
+                write!(f, "({} {} {})", expr1, op, expr2)
+            },
+
+            ParamCircuitExpr::Rotate(offset, expr) => {
+                write!(f, "rot({}, {})", offset, expr)
+            },
+
+            ParamCircuitExpr::ReduceVectors(index, _, op, expr) => {
+                write!(f, "reduce({}, {}, {})", index, op, expr)
+            },
+        }
+    }
+}
+
+impl CanCreateObjectVar<CiphertextObject> for ParamCircuitExpr {
+    fn obj_var(var: VarName) -> Self {
+        ParamCircuitExpr::CiphertextVar(var)
+    }
+}
+
+impl CanCreateObjectVar<PlaintextObject> for ParamCircuitExpr {
+    fn obj_var(var: VarName) -> Self {
+        ParamCircuitExpr::PlaintextVar(var)
+    }
+}
+
 
 pub type IndexCoord = im::Vector<usize>;
 
@@ -370,10 +387,25 @@ impl<T: Display> Display for IndexCoordinateMap<T> {
     }
 }
 
+pub trait CircuitObject {
+    fn input_vector(vector: VectorInfo) -> Self;
+    fn expr_vector(array: String, coord: IndexCoord) -> Self;
+}
+
 #[derive(Clone,Debug,PartialEq,Eq)]
 pub enum CiphertextObject {
     InputVector(VectorInfo),
-    VectorRef(ArrayName, IndexCoord)
+    ExprVector(ArrayName, IndexCoord)
+}
+
+impl CircuitObject for CiphertextObject {
+    fn input_vector(vector: VectorInfo) -> Self {
+        CiphertextObject::InputVector(vector)
+    }
+
+    fn expr_vector(array: String, coord: IndexCoord) -> Self {
+        CiphertextObject::ExprVector(array, coord)
+    }
 }
 
 impl Display for CiphertextObject {
@@ -382,11 +414,13 @@ impl Display for CiphertextObject {
             CiphertextObject::InputVector(v) =>
                 write!(f, "{}", v),
 
-            CiphertextObject::VectorRef(array, coords) => {
-                let mut coord_str = String::new();
-                for coord in coords {
-                    coord_str.push_str(&coord.to_string());
-                }
+            CiphertextObject::ExprVector(array, coords) => {
+                let coord_str =
+                    coords.iter()
+                    .map(|coord| format!("[{}]", coord))
+                    .collect::<Vec<String>>()
+                    .join("");
+
                 write!(f, "{}{}", array, coord_str)
             }
         }
@@ -397,6 +431,9 @@ pub type MaskVector = im::Vector<(usize, usize, usize)>;
 
 #[derive(Clone,Debug,PartialEq,Eq)]
 pub enum PlaintextObject {
+    InputVector(VectorInfo),
+    ExprVector(ArrayName, IndexCoord),
+
     // plaintext filled with a constant value
     Const(isize),
 
@@ -408,6 +445,16 @@ pub enum PlaintextObject {
     Mask(MaskVector),
 }
 
+impl CircuitObject for PlaintextObject {
+    fn input_vector(vector: VectorInfo) -> Self {
+        PlaintextObject::InputVector(vector)
+    }
+
+    fn expr_vector(array: String, coord: IndexCoord) -> Self {
+        PlaintextObject::ExprVector(array, coord)
+    }
+}
+
 impl Default for PlaintextObject {
     fn default() -> Self { PlaintextObject::Const(1) }
 }
@@ -415,9 +462,24 @@ impl Default for PlaintextObject {
 impl Display for PlaintextObject {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PlaintextObject::Const(lit) => write!(f, "{}", lit),
+            PlaintextObject::InputVector(vector) =>
+                write!(f, "{}", vector),
 
-            PlaintextObject::Mask(mask) => write!(f, "{:?}", mask)
+            PlaintextObject::ExprVector(vector, coords) => {
+                let coords_str =
+                    coords.iter()
+                    .map(|coord| format!("[{}]", coord))
+                    .collect::<Vec<String>>()
+                    .join("");
+
+                write!(f, "{}{}", vector, coords_str)
+            }
+
+            PlaintextObject::Const(lit) =>
+                write!(f, "{}", lit),
+
+            PlaintextObject::Mask(mask) =>
+                write!(f, "{:?}", mask),
         }
     }
 }
@@ -450,20 +512,22 @@ impl<T: Display> Display for CircuitValue<T> where T: Display {
     }
 }
 
-type CiphertextVarValue = CircuitValue<CiphertextObject>;
-type PlaintextVarValue = CircuitValue<PlaintextObject>;
-type OffsetFunctionVarValue = CircuitValue<isize>;
+pub trait CanRegisterObject<'a, T: CircuitObject> {
+    fn fresh_obj_var(&mut self) -> VarName;
+    fn set_var_value(&mut self, var: VarName, val: CircuitValue<T>);
+    fn get_var_value(&'a self, var: &String) -> &'a CircuitValue<T>;
+}
 
 /// data structure that maintains values for variables in parameterized circuits
 #[derive(Debug)]
 pub struct CircuitRegistry {
-    pub ct_var_values: HashMap<VarName, CiphertextVarValue>,
+    pub ct_var_values: HashMap<VarName, CircuitValue<CiphertextObject>>,
     pub ct_var_id: usize,
 
-    pub pt_var_values: HashMap<VarName, PlaintextVarValue>,
+    pub pt_var_values: HashMap<VarName, CircuitValue<PlaintextObject>>,
     pub pt_var_id: usize,
 
-    pub offset_fvar_values: HashMap<DimName, OffsetFunctionVarValue>,
+    pub offset_fvar_values: HashMap<DimName, CircuitValue<isize>>,
     pub offset_fvar_id: usize,
 }
 
@@ -497,27 +561,27 @@ impl CircuitRegistry {
         format!("offset{}", id)
     }
 
-    pub fn set_ct_var_value(&mut self, ct_var: VarName, value: CiphertextVarValue) {
+    pub fn set_ct_var_value(&mut self, ct_var: VarName, value: CircuitValue<CiphertextObject>) {
         self.ct_var_values.insert(ct_var, value);
     }
 
-    pub fn set_pt_var_value(&mut self, pt_var: VarName, value: PlaintextVarValue) {
+    pub fn set_pt_var_value(&mut self, pt_var: VarName, value: CircuitValue<PlaintextObject>) {
         self.pt_var_values.insert(pt_var, value);
     }
 
-    pub fn set_offset_var_value(&mut self, offset_var: DimName, value: OffsetFunctionVarValue) {
+    pub fn set_offset_var_value(&mut self, offset_var: DimName, value: CircuitValue<isize>) {
         self.offset_fvar_values.insert(offset_var, value);
     }
 
-    pub fn get_ct_var_value(&self, ct_var: &VarName) -> &CiphertextVarValue {
+    pub fn get_ct_var_value(&self, ct_var: &VarName) -> &CircuitValue<CiphertextObject> {
         self.ct_var_values.get(ct_var).unwrap()
     }
 
-    pub fn get_pt_var_value(&self, pt_var: &VarName) -> &PlaintextVarValue {
+    pub fn get_pt_var_value(&self, pt_var: &VarName) -> &CircuitValue<PlaintextObject> {
         self.pt_var_values.get(pt_var).unwrap()
     }
 
-    pub fn get_offset_fvar_value(&self, offset_fvar: &DimName) -> &OffsetFunctionVarValue {
+    pub fn get_offset_fvar_value(&self, offset_fvar: &DimName) -> &CircuitValue<isize> {
         self.offset_fvar_values.get(offset_fvar).unwrap()
     }
 
@@ -588,6 +652,34 @@ impl CircuitRegistry {
         }
 
         set
+    }
+}
+
+impl<'a> CanRegisterObject<'a, CiphertextObject> for CircuitRegistry {
+    fn fresh_obj_var(&mut self) -> VarName {
+        self.fresh_ct_var()
+    }
+
+    fn set_var_value(&mut self, var: VarName, val: CircuitValue<CiphertextObject>) {
+        self.set_ct_var_value(var, val)
+    }
+
+    fn get_var_value(&'a self, var: &VarName) -> &'a CircuitValue<CiphertextObject> {
+        self.get_ct_var_value(var)
+    }
+}
+
+impl<'a> CanRegisterObject<'a, PlaintextObject> for CircuitRegistry {
+    fn fresh_obj_var(&mut self) -> VarName {
+        self.fresh_pt_var()
+    }
+
+    fn set_var_value(&mut self, var: VarName, val: CircuitValue<PlaintextObject>) {
+        self.set_pt_var_value(var, val)
+    }
+
+    fn get_var_value(&'a self, var: &VarName) -> &'a CircuitValue<PlaintextObject> {
+        self.get_pt_var_value(var)
     }
 }
 

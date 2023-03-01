@@ -243,7 +243,7 @@ impl CircuitLowering {
                 HEOperand::Ref(HERef::Ciphertext(vector_var, vec![]))
             },
 
-            CiphertextObject::VectorRef(array, coords) => {
+            CiphertextObject::ExprVector(array, coords) => {
                 let coord_index =
                     coords.iter().map(|coord| HEIndex::Literal(*coord as isize));
                 HEOperand::Ref(HERef::Ciphertext(array.clone(), Vec::from_iter(coord_index)))
@@ -277,7 +277,7 @@ impl CircuitLowering {
                             );
                         },
 
-                        CiphertextObject::VectorRef(ref_vector, ref_coord) => {
+                        CiphertextObject::ExprVector(ref_vector, ref_coord) => {
                             vector_var_set.insert(ref_vector.clone());
                             coord_val_map.insert(coord, ref_coord.clone());
                         }
@@ -322,10 +322,22 @@ impl CircuitLowering {
         match circval {
             CircuitValue::CoordMap(coord_map) => {
                 let mut vector_var_set: HashSet<String> = HashSet::new();
+                let mut coord_val_map: HashMap<IndexCoord, IndexCoord> = HashMap::new();
 
-                for (_, obj_opt) in coord_map.value_iter() {
+                for (coord, obj_opt) in coord_map.value_iter() {
                     let obj = obj_opt.unwrap();
                     match obj {
+                        PlaintextObject::InputVector(vector) => {
+                            vector_var_set.insert(
+                                input.vector_map.get(vector).unwrap().clone()
+                            );
+                        },
+
+                        PlaintextObject::ExprVector(ref_vector, ref_coord) => {
+                            vector_var_set.insert(ref_vector.clone());
+                            coord_val_map.insert(coord, ref_coord.clone());
+                        },
+
                         PlaintextObject::Mask(mask) => {
                             vector_var_set.insert(
                                 input.mask_map.get(mask).unwrap().clone()
@@ -342,7 +354,23 @@ impl CircuitLowering {
 
                 if vector_var_set.len() == 1 {
                     let vector_var = vector_var_set.into_iter().next().unwrap();
-                    Some(HEOperand::Ref(HERef::Plaintext(vector_var, vec![])))
+                    if coord_val_map.len() == 0 {
+                        Some(HEOperand::Ref(HERef::Plaintext(vector_var, vec![])))
+
+                    } else {
+                        let index_opt =
+                            Self::compute_coord_relationship(
+                                coord_map.index_vars(),
+                                coord_val_map,
+                            );
+
+                        if let Some(index) = index_opt {
+                            Some(HEOperand::Ref(HERef::Plaintext(vector_var, index)))
+
+                        } else {
+                            None
+                        }
+                    }
 
                 } else {
                     None
@@ -357,6 +385,17 @@ impl CircuitLowering {
 
     fn resolve_plaintext_object(obj: &PlaintextObject, input: &HEProgramContext) -> HEOperand {
         match obj {
+            PlaintextObject::InputVector(vector) => {
+                let vector_var = input.vector_map.get(vector).unwrap().clone();
+                HEOperand::Ref(HERef::Plaintext(vector_var, vec![]))
+            },
+
+            PlaintextObject::ExprVector(array, coords) => {
+                let coord_index =
+                    coords.iter().map(|coord| HEIndex::Literal(*coord as isize));
+                HEOperand::Ref(HERef::Plaintext(array.clone(), Vec::from_iter(coord_index)))
+            }
+
             PlaintextObject::Const(val) => {
                 let const_var = input.const_map.get(val).unwrap().clone();
                 HEOperand::Ref(HERef::Plaintext(const_var, vec![]))
@@ -365,7 +404,7 @@ impl CircuitLowering {
             PlaintextObject::Mask(mask) => {
                 let mask_var = input.mask_map.get(mask).unwrap().clone();
                 HEOperand::Ref(HERef::Plaintext(mask_var, vec![]))
-            }
+            },
         }
     }
 

@@ -12,7 +12,7 @@ impl TypeChecker {
 
     pub fn run(&self, program: &SourceProgram) -> Result<usize, String> {
         let mut store: im::HashMap<&str, usize> = im::HashMap::new();
-        program.input_map.iter().try_for_each(|(array, shape)|
+        program.input_map.iter().try_for_each(|(array, (shape, _))|
             match store.insert(array, shape.len()) {
                 Some(_) => Err(format!("duplicate bindings for {}", array)),
                 None => Ok(())
