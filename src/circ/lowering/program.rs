@@ -202,7 +202,6 @@ impl HEProgram {
                 ,RcDoc::hardline()
             )
         )
-        .append(RcDoc::hardline())
         .append(
             RcDoc::intersperse(
                 self.statements.iter().map(|s| s.to_doc()),

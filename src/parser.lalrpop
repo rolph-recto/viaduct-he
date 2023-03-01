@@ -15,9 +15,13 @@ InputList: im::Vector<Input> = {
     <i:Input> => im::Vector::unit(i)
 }
 
+InputType: InputType = {
+    "client" => InputType::Client,
+    "server" => InputType::Client,
+}
+
 Input: Input = {
-    "input" <arr:Ident> ":" "[" <e:ExtentList> "]" => Input(arr, e),
-    "input" <arr:Ident> => Input(arr, im::Vector::new()),
+    "input" <arr:Ident> ":" "[" <e:ExtentList> "]" "from" <input_type:InputType> => Input(arr, e, input_type)
 }
 
 LetBindingList: im::Vector<LetBinding> = {

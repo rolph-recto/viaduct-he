@@ -36,7 +36,19 @@ pub type IndexingId = String;
 pub type ArrayEnvironment = HashMap<ArrayName, Shape>;
 pub type IndexEnvironment = HashMap<IndexVar, Extent>;
 
-#[derive(Copy,Clone,Debug)]
+#[derive(Copy, Clone, Debug)]
+pub enum InputType { Client, Server }
+
+impl Display for InputType  {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InputType::Client => write!(f, "client"),
+            InputType::Server => write!(f, "server"),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
 pub enum Operator { Add, Sub, Mul }
 
 impl Display for Operator {

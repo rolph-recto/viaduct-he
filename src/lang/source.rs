@@ -15,7 +15,6 @@ impl SourceProgram {
     pub fn new(inputs: im::Vector<Input>, let_bindings: im::Vector<LetBinding>, output_expr: SourceExpr) -> Self {
         // compute input map and expr binding map
         let mut input_map: IndexMap<ArrayName, Shape> = IndexMap::new();
-        let mut input_order: Vec<ArrayName> = Vec::new();
         inputs.iter().for_each(|input| {
             if let Some(_) = input_map.insert(input.0.clone(), input.1.clone()) {
                 panic!("duplicate bindings for {}", &input.0)
@@ -23,7 +22,6 @@ impl SourceProgram {
         });
 
         let mut expr_map: IndexMap<ArrayName, SourceExpr> = IndexMap::new();
-        let mut expr_order: Vec<ArrayName> = Vec::new();
         let_bindings.iter().for_each(|let_binding| {
             if let Some(_) = expr_map.insert(let_binding.0.clone(), *let_binding.1.clone()) {
                 panic!("duplicate bindings for {}", &let_binding.0)
@@ -68,7 +66,7 @@ impl Display for SourceProgram {
 }
 
 #[derive(Clone,Debug)]
-pub struct Input(pub ArrayName, pub Shape);
+pub struct Input(pub ArrayName, pub Shape, pub InputType);
 
 impl Display for Input {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

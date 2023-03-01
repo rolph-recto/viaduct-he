@@ -96,7 +96,7 @@ impl Display for ParamCircuitExpr {
                 write!(f, "rot({}, {})", offset, expr)
             },
 
-            ParamCircuitExpr::ReduceVectors(index, extent, op, expr) => {
+            ParamCircuitExpr::ReduceVectors(index, _, op, expr) => {
                 write!(f, "reduce({}, {}, {})", index, op, expr)
             },
         }

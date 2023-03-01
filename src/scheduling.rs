@@ -704,7 +704,7 @@ mod tests {
     #[test]
     fn test_imgblur() {
         test_schedule(
-        "input img: [16,16]
+        "input img: [16,16] from client
             for x: 16 {
                 for y: 16 {
                     img[x-1][y-1] + img[x+1][y+1]
@@ -716,7 +716,7 @@ mod tests {
     #[test]
     fn test_imgblur2() {
         test_schedule(
-        "input img: [16,16]
+        "input img: [16,16] from client
             let res = 
                 for x: 16 {
                     for y: 16 {
@@ -736,7 +736,7 @@ mod tests {
     #[test]
     fn test_convolve() {
         test_schedule(
-        "input img: [16,16]
+        "input img: [16,16] from client
             let conv1 = 
                 for x: 15 {
                     for y: 15 {
@@ -756,8 +756,8 @@ mod tests {
     #[test]
     fn test_matmatmul() {
         test_schedule(
-            "input A: [4,4]
-            input B: [4,4]
+            "input A: [4,4] from client
+            input B: [4,4] from client
             for i: 4 {
                 for j: 4 {
                     sum(for k: 4 { A[i][k] * B[k][j] })
@@ -769,9 +769,9 @@ mod tests {
     #[test]
     fn test_matmatmul2() {
         test_schedule(
-            "input A1: [4,4]
-            input A2: [4,4]
-            input B: [4,4]
+            "input A1: [4,4] from client
+            input A2: [4,4] from client
+            input B: [4,4] from client
             let res =
                 for i: 4 {
                     for j: 4 {
@@ -792,8 +792,8 @@ mod tests {
     fn test_dotprod_pointless() {
         test_schedule(
         "
-            input A: [3]
-            input B: [3]
+            input A: [3] from client
+            input B: [3] from client
             sum(A * B)
             "
         );
@@ -803,8 +803,8 @@ mod tests {
     fn test_matvecmul() {
         test_schedule(
         "
-            input M: [2,2]
-            input v: [2]
+            input M: [2,2] from client
+            input v: [2] from client
             for i: 2 {
                 sum(M[i] * v)
             }

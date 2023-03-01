@@ -95,7 +95,7 @@ mod tests {
         let prog1 = parser.parse("42").unwrap();
         let prog2 = parser.parse("42 + 56").unwrap();
         let prog3 = parser.parse("
-            input img: [16,16]
+            input img: [16,16] from client
             for x: 16 { img[x] }
         ").unwrap();
 
@@ -111,7 +111,7 @@ mod tests {
 
         let prog1 = parser.parse("sum(42)").unwrap();
         let prog2 = parser.parse("
-            input img: [16,16]
+            input img: [16,16] from client
             for x: 16 {
                 for y: 16 {
                     for z: 16 { img[x][y][z] }
@@ -119,7 +119,7 @@ mod tests {
             }
         ").unwrap();
         let prog3 = parser.parse("
-            input img: [16,16]
+            input img: [16,16] from client
             let next = img + img in
             for x: 16 {
                 for y: 16 {

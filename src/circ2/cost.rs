@@ -324,7 +324,7 @@ mod tests{
     #[test]
     fn test_imgblur() {
         test_cost_estimator(
-        "input img: [16,16]
+        "input img: [16,16] from client
             for x: 16 {
                 for y: 16 {
                     img[x-1][y-1] + img[x+1][y+1]
