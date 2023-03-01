@@ -1,6 +1,6 @@
 use egg::{RecExpr, Symbol};
 use itertools::Itertools;
-use std::{collections::{HashSet, HashMap}, fmt::Display, ops::Range};
+use std::{collections::{HashSet, HashMap, LinkedList}, fmt::Display, ops::Range};
 
 use crate::{
     circ2::{vector_info::VectorInfo},
@@ -12,6 +12,7 @@ pub mod cost;
 pub mod materializer;
 pub mod vector_info;
 
+pub type CircuitId = usize;
 pub type VarName = String;
 
 #[derive(Copy,Clone,Debug,PartialEq,Eq)]
@@ -23,18 +24,42 @@ pub trait CanCreateObjectVar<T: CircuitObject> {
 
 /// parameterized circuit expr that represents an *array* of circuit exprs
 /// these exprs are parameterized by exploded dim coordinate variables
+/// 
+/// Note that this is not a recursive data structure; instead it uses
+/// circuit ids to allow sharing of subcircuits---i.e. circuits can be DAGs,
+/// not just trees; this eases equality saturation and lowering
 #[derive(Clone,Debug)]
 pub enum ParamCircuitExpr {
     CiphertextVar(VarName),
     PlaintextVar(VarName),
     Literal(isize),
-    Op(Operator, Box<ParamCircuitExpr>, Box<ParamCircuitExpr>),
-    Rotate(Box<OffsetExpr>, Box<ParamCircuitExpr>),
-    ReduceVectors(DimName, DimSize, Operator, Box<ParamCircuitExpr>),
+    Op(Operator, CircuitId, CircuitId),
+    Rotate(OffsetExpr, CircuitId),
+    ReduceVectors(DimName, DimSize, Operator, CircuitId),
 }
 
 impl ParamCircuitExpr {
+    pub fn circuit_refs(&self) -> Vec<CircuitId> {
+        match self {
+            ParamCircuitExpr::CiphertextVar(_) |
+            ParamCircuitExpr::PlaintextVar(_) |
+            ParamCircuitExpr::Literal(_) => 
+                vec![],
+
+            ParamCircuitExpr::Op(_, id1, id2) =>
+                vec![*id1, *id2],
+
+            ParamCircuitExpr::Rotate(_, id) =>
+                vec![*id],
+
+            ParamCircuitExpr::ReduceVectors(_, _, _, id) =>
+                vec![*id]
+        }
+    }
+
     fn to_opt_circuit_recur(&self, opt_expr: &mut RecExpr<HEOptCircuit>) -> egg::Id {
+        todo!()
+        /*
         match self {
             ParamCircuitExpr::CiphertextVar(var) => {
                 opt_expr.add(HEOptCircuit::CiphertextRef(Symbol::from(var)))
@@ -68,100 +93,13 @@ impl ParamCircuitExpr {
 
             ParamCircuitExpr::ReduceVectors(_, _, _, _) => todo!(),
         }
+        */
     }
 
     pub fn to_opt_circuit(&self) -> RecExpr<HEOptCircuit> {
         let mut opt_expr: RecExpr<HEOptCircuit> = RecExpr::default();
         self.to_opt_circuit_recur(&mut opt_expr);
         opt_expr
-    }
-}
-
-impl ParamCircuitExpr {
-    // get the ciphertext vars in the expression
-    pub fn ciphertext_vars(&self) -> HashSet<VarName> {
-        match self {
-            ParamCircuitExpr::CiphertextVar(name) => {
-                let mut res = HashSet::new();
-                res.insert(name.clone());
-                res
-            },
-
-            ParamCircuitExpr::PlaintextVar(_) => HashSet::new(),
-            
-            ParamCircuitExpr::Literal(_) => HashSet::new(),
-
-            ParamCircuitExpr::Op(_, expr1, expr2) => {
-                let mut res = HashSet::new();
-                res.extend(expr1.ciphertext_vars());
-                res.extend(expr2.ciphertext_vars());
-                res
-            },
-
-            ParamCircuitExpr::Rotate(_, body) => {
-                body.ciphertext_vars()
-            },
-
-            ParamCircuitExpr::ReduceVectors(_, _, _, body) => {
-                body.ciphertext_vars()
-            }
-        }
-    }
-
-    // get the ciphertext vars in the expression
-    pub fn plaintext_vars(&self) -> HashSet<VarName> {
-        match self {
-            ParamCircuitExpr::PlaintextVar(name) => {
-                let mut res = HashSet::new();
-                res.insert(name.clone());
-                res
-            },
-
-            ParamCircuitExpr::CiphertextVar(_) => HashSet::new(),
-            
-            ParamCircuitExpr::Literal(_) => HashSet::new(),
-
-            ParamCircuitExpr::Op(_, expr1, expr2) => {
-                let mut res = HashSet::new();
-                res.extend(expr1.plaintext_vars());
-                res.extend(expr2.plaintext_vars());
-                res
-            },
-
-            ParamCircuitExpr::Rotate(_, body) => {
-                body.plaintext_vars()
-            },
-
-            ParamCircuitExpr::ReduceVectors(_, _, _, body) => {
-                body.plaintext_vars()
-            }
-        }
-    }
-
-    pub fn offset_fvars(&self) -> HashSet<String> {
-        match self {
-            ParamCircuitExpr::CiphertextVar(_) |
-            ParamCircuitExpr::PlaintextVar(_) |
-            ParamCircuitExpr::Literal(_) =>
-                HashSet::new(),
-
-            ParamCircuitExpr::Op(_, expr1, expr2) => {
-                let mut fvars1 = expr1.offset_fvars();
-                let fvars2 = expr1.offset_fvars();
-                fvars1.extend(fvars2);
-                fvars1
-            },
-
-            ParamCircuitExpr::Rotate(offset, body) => {
-                let mut offset_fvars = offset.function_vars();
-                let body_fvar = body.offset_fvars();
-                offset_fvars.extend(body_fvar);
-                offset_fvars
-            },
-
-            ParamCircuitExpr::ReduceVectors(_, _, _, body) =>
-                body.offset_fvars()
-        }
     }
 }
 
@@ -514,13 +452,16 @@ impl<T: Display> Display for CircuitValue<T> where T: Display {
 
 pub trait CanRegisterObject<'a, T: CircuitObject> {
     fn fresh_obj_var(&mut self) -> VarName;
-    fn set_var_value(&mut self, var: VarName, val: CircuitValue<T>);
+    fn set_obj_var_value(&mut self, var: VarName, val: CircuitValue<T>);
     fn get_var_value(&'a self, var: &String) -> &'a CircuitValue<T>;
 }
 
 /// data structure that maintains values for variables in parameterized circuits
 #[derive(Debug)]
-pub struct CircuitRegistry {
+pub struct CircuitObjectRegistry {
+    pub circuit_map: HashMap<CircuitId, ParamCircuitExpr>,
+    pub cur_circuit_id: CircuitId, 
+
     pub ct_var_values: HashMap<VarName, CircuitValue<CiphertextObject>>,
     pub ct_var_id: usize,
 
@@ -531,9 +472,11 @@ pub struct CircuitRegistry {
     pub offset_fvar_id: usize,
 }
 
-impl CircuitRegistry {
+impl CircuitObjectRegistry {
     pub fn new() -> Self {
-        CircuitRegistry {
+        CircuitObjectRegistry {
+            circuit_map: HashMap::new(),
+            cur_circuit_id: 1,
             ct_var_values: HashMap::new(),
             ct_var_id: 1,
             pt_var_values: HashMap::new(),
@@ -541,6 +484,17 @@ impl CircuitRegistry {
             offset_fvar_values: HashMap::new(),
             offset_fvar_id: 1,
         }
+    }
+
+    pub fn register_circuit(&mut self, circuit: ParamCircuitExpr) -> CircuitId {
+        let id = self.cur_circuit_id;
+        self.cur_circuit_id += 1;
+        self.circuit_map.insert(id, circuit);
+        id
+    }
+
+    pub fn get_circuit(&self, id: CircuitId) -> &ParamCircuitExpr {
+        self.circuit_map.get(&id).unwrap()
     }
 
     pub fn fresh_ct_var(&mut self) -> VarName {
@@ -653,14 +607,66 @@ impl CircuitRegistry {
 
         set
     }
+
+    // get a list of expressions reachable from a circuit root
+    pub fn expr_list(&self, id: CircuitId) -> Vec<CircuitId> {
+        let mut expr_ids: Vec<CircuitId> = vec![id];
+        let mut worklist: LinkedList<CircuitId> = LinkedList::from([id]);
+
+        while !worklist.is_empty() {
+            let id = worklist.pop_front().unwrap();
+            let circuit = self.circuit_map.get(&id).unwrap();
+            for child_id in circuit.circuit_refs() {
+                if !expr_ids.contains(&child_id) {
+                    expr_ids.push(child_id);
+                    worklist.push_back(child_id);
+                }
+            }
+        }
+
+        expr_ids
+    }
+
+    pub fn circuit_ciphertext_vars(&self, id: CircuitId) -> HashSet<VarName> {
+        let mut ct_vars: HashSet<VarName> = HashSet::new();
+        for child_id in self.expr_list(id) {
+            if let ParamCircuitExpr::CiphertextVar(var) = self.get_circuit(child_id) {
+                ct_vars.insert(var.clone());
+            }
+        }
+
+        ct_vars
+    }
+
+    pub fn circuit_plaintext_vars(&self, id: CircuitId) -> HashSet<VarName> {
+        let mut pt_vars: HashSet<VarName> = HashSet::new();
+        for child_id in self.expr_list(id) {
+            if let ParamCircuitExpr::PlaintextVar(var) = self.get_circuit(child_id) {
+                pt_vars.insert(var.clone());
+            }
+        }
+
+        pt_vars
+    }
+
+    pub fn circuit_offset_fvars(&self, id: CircuitId) -> HashSet<String> {
+        let mut offset_fvars: HashSet<VarName> = HashSet::new();
+        for child_id in self.expr_list(id) {
+            if let ParamCircuitExpr::Rotate(offset, _) = self.get_circuit(child_id) {
+                offset_fvars.extend(offset.function_vars());
+            }
+        }
+
+        offset_fvars
+    }
 }
 
-impl<'a> CanRegisterObject<'a, CiphertextObject> for CircuitRegistry {
+impl<'a> CanRegisterObject<'a, CiphertextObject> for CircuitObjectRegistry {
     fn fresh_obj_var(&mut self) -> VarName {
         self.fresh_ct_var()
     }
 
-    fn set_var_value(&mut self, var: VarName, val: CircuitValue<CiphertextObject>) {
+    fn set_obj_var_value(&mut self, var: VarName, val: CircuitValue<CiphertextObject>) {
         self.set_ct_var_value(var, val)
     }
 
@@ -669,12 +675,12 @@ impl<'a> CanRegisterObject<'a, CiphertextObject> for CircuitRegistry {
     }
 }
 
-impl<'a> CanRegisterObject<'a, PlaintextObject> for CircuitRegistry {
+impl<'a> CanRegisterObject<'a, PlaintextObject> for CircuitObjectRegistry {
     fn fresh_obj_var(&mut self) -> VarName {
         self.fresh_pt_var()
     }
 
-    fn set_var_value(&mut self, var: VarName, val: CircuitValue<PlaintextObject>) {
+    fn set_obj_var_value(&mut self, var: VarName, val: CircuitValue<PlaintextObject>) {
         self.set_pt_var_value(var, val)
     }
 
@@ -683,7 +689,7 @@ impl<'a> CanRegisterObject<'a, PlaintextObject> for CircuitRegistry {
     }
 }
 
-impl Display for CircuitRegistry {
+impl Display for CircuitObjectRegistry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.ct_var_values.iter().try_for_each(|(ct_var, val)| {
             write!(f, "{} => \n{}\n", ct_var, val)
@@ -704,15 +710,15 @@ impl Display for CircuitRegistry {
 /// parameterized circuit packaged with information about input ciphertexts/plaintexts used
 #[derive(Debug)]
 pub struct ParamCircuitProgram {
-    pub registry: CircuitRegistry,
-    pub circuit_list: Vec<(String, Vec<(DimName,Extent)>, ParamCircuitExpr)>
+    pub registry: CircuitObjectRegistry,
+    pub expr_list: Vec<(String, Vec<(DimName,Extent)>, CircuitId)>
 }
 
 impl Display for ParamCircuitProgram {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.registry)?;
 
-        self.circuit_list.iter().try_for_each(|(name, dims, circuit)| {
+        self.expr_list.iter().try_for_each(|(name, dims, circuit)| {
             let mut dims_str = String::new();
             for dim in dims.iter() {
                 dims_str.push_str(&format!("[{}: {}]", dim.0, dim.1))

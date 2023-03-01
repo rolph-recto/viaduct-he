@@ -158,7 +158,10 @@ impl CostEstimator {
         */
     }
 
+    // TODO finish
     fn estimate_cost_expr(&self, expr: &ParamCircuitExpr, coord_system: &IndexCoordinateSystem) -> (VectorType, usize, CostFeatures) {
+        (VectorType::Ciphertext, coord_system.multiplicity(), CostFeatures::new())
+        /*
         match expr {
             ParamCircuitExpr::CiphertextVar(_) => {
                 (VectorType::Ciphertext, coord_system.multiplicity(), CostFeatures::new())
@@ -280,6 +283,7 @@ impl CostEstimator {
                 (body_type, out_mult, body_cost.combine(out_cost))
             },
         }
+        */
     }
 }
 

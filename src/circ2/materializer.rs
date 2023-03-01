@@ -5,7 +5,7 @@ use crate::{
     circ2::{
         IndexCoordinateSystem, IndexCoordinateMap, CiphertextObject,
         PlaintextObject, ParamCircuitExpr,
-        CircuitRegistry, ParamCircuitProgram, IndexCoord, CircuitValue,
+        CircuitObjectRegistry, ParamCircuitProgram, IndexCoord, CircuitValue,
         vector_info::VectorInfo,
     },
     lang::{
@@ -19,7 +19,7 @@ use crate::{
     util
 };
 
-use super::{CircuitObject, CanRegisterObject, CanCreateObjectVar};
+use super::{CircuitObject, CanRegisterObject, CanCreateObjectVar, CircuitId};
 
 pub trait InputArrayMaterializer {
     fn can_materialize(
@@ -36,16 +36,17 @@ pub trait InputArrayMaterializer {
         array_shape: &Shape,
         schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
-        registry: &mut CircuitRegistry
-    ) -> ParamCircuitExpr;
+        registry: &mut CircuitObjectRegistry
+    ) -> CircuitId;
 }
 
 /// materializes a schedule for an index-free program.
 pub struct Materializer {
     array_materializers: Vec<Box<dyn InputArrayMaterializer>>,
     program: TransformedProgram,
-    registry: CircuitRegistry,
-    circuit_map: HashMap<ArrayName, ParamCircuitExpr>,
+    registry: CircuitObjectRegistry,
+    circuit_map: HashMap<CircuitId, ParamCircuitExpr>,
+    expr_circuit_map: HashMap<ArrayName, CircuitId>,
     expr_schedule_map: HashMap<ArrayName, ExprScheduleType>,
     expr_array_type_map: HashMap<ArrayName, ArrayType>,
 }
@@ -58,8 +59,9 @@ impl Materializer {
         Materializer {
             array_materializers,
             program,
-            registry: CircuitRegistry::new(),
+            registry: CircuitObjectRegistry::new(),
             circuit_map: HashMap::new(),
+            expr_circuit_map: HashMap::new(),
             expr_schedule_map: HashMap::new(),
             expr_array_type_map: HashMap::new(),
         }
@@ -67,7 +69,7 @@ impl Materializer {
 
     /// packages the materialized expr with the vector registry
     pub fn materialize(mut self, schedule: &Schedule) -> Result<ParamCircuitProgram, String> {
-        let mut circuit_list: Vec<(String, Vec<(DimName,Extent)>, ParamCircuitExpr)> = vec![];
+        let mut circuit_list: Vec<(String, Vec<(DimName,Extent)>, CircuitId)> = vec![];
 
         // need to clone expr_map here because the iteration through it is mutating
         let expr_list: Vec<(ArrayName, TransformedExpr)> =
@@ -76,7 +78,7 @@ impl Materializer {
             .collect();
 
         expr_list.into_iter().try_for_each(|(array, expr)| -> Result<(), String> {
-            let (expr_schedule, array_type, circuit) =
+            let (expr_schedule, array_type, circuit_id) =
                 self.materialize_expr(&expr, schedule)?;
 
             let dims =
@@ -90,14 +92,19 @@ impl Materializer {
                     }
                 };
 
-            self.circuit_map.insert(array.clone(), circuit.clone());
+            self.expr_circuit_map.insert(array.clone(), circuit_id);
             self.expr_schedule_map.insert(array.clone(), expr_schedule);
             self.expr_array_type_map.insert(array.clone(), array_type);
-            circuit_list.push((array.clone(), dims, circuit));
+            circuit_list.push((array.clone(), dims, circuit_id));
             Ok(())
         })?;
 
-        Ok(ParamCircuitProgram { registry: self.registry, circuit_list })
+        Ok(
+            ParamCircuitProgram {
+                registry: self.registry,
+                expr_list: circuit_list,
+            }
+        )
     }
 
     fn materialize_expr_indexing_site<'a, T: CircuitObject>(
@@ -108,9 +115,9 @@ impl Materializer {
         ref_expr_sched: &ExprSchedule,
         expr_circ_val: CircuitValue<VectorInfo>,
         transform_circ_val: CircuitValue<VectorInfo>,
-    ) -> Result<(ExprScheduleType, ArrayType, ParamCircuitExpr), String>
+    ) -> Result<(ExprScheduleType, ArrayType, CircuitId), String>
         where
-        CircuitRegistry: CanRegisterObject<'a, T>,
+        CircuitObjectRegistry: CanRegisterObject<'a, T>,
         ParamCircuitExpr: CanCreateObjectVar<T>
     {
         let derivation_opt= 
@@ -121,13 +128,13 @@ impl Materializer {
 
         match derivation_opt {
             Some((obj_val, step_val, mask_val)) => {
-                let circuit_expr =
+                let circuit_id =
                     VectorDeriver::gen_circuit_expr(obj_val, step_val, mask_val, &mut self.registry);
 
                 let expr_schedule =
                     schedule.to_expr_schedule(ref_expr_sched.shape.clone());
 
-                Ok((ExprScheduleType::Specific(expr_schedule), array_type, circuit_expr))
+                Ok((ExprScheduleType::Specific(expr_schedule), array_type, circuit_id))
             },
 
             None => Err(format!("cannot derive transform at {}", indexing_id))
@@ -136,19 +143,23 @@ impl Materializer {
 
     fn materialize_expr(
         &mut self, expr: &TransformedExpr, schedule: &Schedule
-    ) -> Result<(ExprScheduleType, ArrayType, ParamCircuitExpr), String> {
+    ) -> Result<(ExprScheduleType, ArrayType, CircuitId), String> {
         match expr {
             TransformedExpr::Literal(lit) => {
                 let sched_lit = Schedule::schedule_literal()?;
-                Ok((sched_lit, ArrayType::Plaintext, ParamCircuitExpr::Literal(*lit)))
+                let circuit_id = self.registry.register_circuit(ParamCircuitExpr::Literal(*lit));
+                Ok((sched_lit, ArrayType::Plaintext, circuit_id))
             },
 
             TransformedExpr::Op(op, expr1, expr2) => {
-                let (sched1, type1, mat1) = self.materialize_expr(expr1, schedule)?;
-                let (sched2, type2, mat2) = self.materialize_expr(expr2, schedule)?;
+                let (sched1, type1, id1) = self.materialize_expr(expr1, schedule)?;
+                let (sched2, type2, id2) = self.materialize_expr(expr2, schedule)?;
                 let schedule = Schedule::schedule_op(&sched1, &sched2)?;
-                let expr = ParamCircuitExpr::Op(op.clone(), Box::new(mat1), Box::new(mat2));
-                Ok((schedule, type1.join(&type2), expr))
+
+                let expr = ParamCircuitExpr::Op(op.clone(), id1, id2);
+                let id =  self.registry.register_circuit(expr);
+
+                Ok((schedule, type1.join(&type2), id))
             },
 
             // TODO support client transforms
@@ -187,12 +198,17 @@ impl Materializer {
                         reduced_index_vars.into_iter().fold(
                             mat_body,
                             |acc, (var, extent)| {
-                                ParamCircuitExpr::ReduceVectors(
-                                    var,
-                                    extent,
-                                    op.clone(),
-                                    Box::new(acc)
-                                )
+                                let reduce_id =
+                                    self.registry.register_circuit(
+                                        ParamCircuitExpr::ReduceVectors(
+                                            var,
+                                            extent,
+                                            op.clone(),
+                                            acc
+                                        )
+                                    );
+
+                                reduce_id
                             }
                         );
 
@@ -200,16 +216,24 @@ impl Materializer {
                         reduction_list.into_iter().fold(
                             expr_vec,
                             |acc, n| {
-                                ParamCircuitExpr::Op(
-                                    Operator::Add,
-                                    Box::new(acc.clone()),
-                                    Box::new(
+                                let rot_id = 
+                                    self.registry.register_circuit(
                                         ParamCircuitExpr::Rotate(
-                                            Box::new(OffsetExpr::Literal(-(n as isize))),
-                                            Box::new(acc)
+                                            OffsetExpr::Literal(-(n as isize)),
+                                            acc
                                         )
-                                    )
-                                )
+                                    );
+
+                                let op_id = 
+                                    self.registry.register_circuit(
+                                        ParamCircuitExpr::Op(
+                                            Operator::Add,
+                                            acc,
+                                            rot_id
+                                        )
+                                    );
+
+                                op_id
                             }
                         );
 
@@ -275,7 +299,7 @@ impl Materializer {
 
                     for amat in self.array_materializers.iter_mut() {
                         if amat.can_materialize(*array_type, array_shape, schedule, transform) {
-                            let expr =
+                            let expr_id =
                                 amat.materialize(
                                     *array_type,
                                     array_shape,
@@ -286,7 +310,8 @@ impl Materializer {
 
                             let shape = transform.as_shape();
                             let expr_schedule = ExprScheduleType::Specific(schedule.to_expr_schedule(shape));
-                            return Ok((expr_schedule, *array_type, expr))
+
+                            return Ok((expr_schedule, *array_type, expr_id))
                         }
                     }
 
@@ -612,13 +637,13 @@ impl VectorDeriver {
         obj_val: CircuitValue<T>,
         step_val: CircuitValue<isize>,
         mask_val: CircuitValue<PlaintextObject>,
-        registry: &mut CircuitRegistry,
-    ) -> ParamCircuitExpr
+        registry: &mut CircuitObjectRegistry,
+    ) -> CircuitId
         where
-        CircuitRegistry: CanRegisterObject<'a, T>,
+        CircuitObjectRegistry: CanRegisterObject<'a, T>,
         ParamCircuitExpr: CanCreateObjectVar<T>
     {
-        let ct_var = registry.fresh_ct_var();
+        let obj_var = registry.fresh_obj_var();
         let mask_is_nonconst =
             match &mask_val {
                 CircuitValue::CoordMap(mask_map) => {
@@ -645,19 +670,20 @@ impl VectorDeriver {
         let masked_expr =
             if mask_is_nonconst {
                 let pt_var = registry.fresh_pt_var();
-                registry.set_var_value(ct_var.clone(), obj_val);
+                registry.set_obj_var_value(obj_var.clone(), obj_val);
                 registry.set_pt_var_value(pt_var.clone(), mask_val);
 
-                ParamCircuitExpr::Op(
-                    Operator::Mul,
-                    Box::new(ParamCircuitExpr::obj_var(ct_var)),
-                    Box::new(ParamCircuitExpr::PlaintextVar(pt_var))
-                )
+                let var_id = registry.register_circuit(ParamCircuitExpr::obj_var(obj_var));
+                let mask_id = registry.register_circuit(ParamCircuitExpr::PlaintextVar(pt_var));
+
+                ParamCircuitExpr::Op(Operator::Mul, var_id, mask_id)
 
             } else {
-                registry.set_var_value(ct_var.clone(), obj_val);
-                ParamCircuitExpr::obj_var(ct_var)
+                registry.set_obj_var_value(obj_var.clone(), obj_val);
+                ParamCircuitExpr::obj_var(obj_var)
             };
+
+        let masked_expr_id = registry.register_circuit(masked_expr.clone());
 
         let offset_expr_opt =
             match &step_val {
@@ -677,26 +703,23 @@ impl VectorDeriver {
                 },
             };
 
-        if let Some(linear_offset_expr) = offset_expr_opt {
-            if let Some(0) = linear_offset_expr.const_value() {
-                masked_expr
+        let output_expr = 
+            if let Some(linear_offset_expr) = offset_expr_opt {
+                if let Some(0) = linear_offset_expr.const_value() {
+                    masked_expr
 
-            } else {
-                ParamCircuitExpr::Rotate(
-                    Box::new(linear_offset_expr),
-                    Box::new(masked_expr)
-                )
-            }
+                } else {
+                    ParamCircuitExpr::Rotate(linear_offset_expr, masked_expr_id)
+                }
 
-        } else { // introduce new offset variable, since we can't create an offset expr
-            let offset_var = registry.fresh_offset_fvar();
-            registry.set_offset_var_value(offset_var.clone(), step_val);
+            } else { // introduce new offset variable, since we can't create an offset expr
+                let offset_var = registry.fresh_offset_fvar();
+                registry.set_offset_var_value(offset_var.clone(), step_val);
 
-            ParamCircuitExpr::Rotate(
-                Box::new(OffsetExpr::Var(offset_var)),
-                Box::new(masked_expr)
-            )
-        }
+                ParamCircuitExpr::Rotate(OffsetExpr::Var(offset_var), masked_expr_id)
+            };
+
+        registry.register_circuit(output_expr)
     }
 
     // default method for generating circuit expression for an array materializer
@@ -706,10 +729,10 @@ impl VectorDeriver {
         schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
         preprocessing: Option<ClientPreprocessing>,
-        registry: &mut CircuitRegistry,
-    ) -> ParamCircuitExpr
+        registry: &mut CircuitObjectRegistry,
+    ) -> CircuitId
         where
-        CircuitRegistry: CanRegisterObject<'a, T>,
+        CircuitObjectRegistry: CanRegisterObject<'a, T>,
         ParamCircuitExpr: CanCreateObjectVar<T>
     {
         let mut obj_map: IndexCoordinateMap<T> =
@@ -782,8 +805,8 @@ impl InputArrayMaterializer for DummyArrayMaterializer {
         shape: &Shape,
         schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
-        registry: &mut CircuitRegistry
-    ) -> ParamCircuitExpr {
+        registry: &mut CircuitObjectRegistry
+    ) -> CircuitId {
         let ct_var = registry.fresh_ct_var();
 
         // register vectors
@@ -799,7 +822,7 @@ impl InputArrayMaterializer for DummyArrayMaterializer {
             });
         
         registry.set_ct_var_value(ct_var.clone(), circuit_val);
-        ParamCircuitExpr::CiphertextVar(ct_var)
+        registry.register_circuit(ParamCircuitExpr::CiphertextVar(ct_var))
     }
 }
 
@@ -833,8 +856,8 @@ impl InputArrayMaterializer for DefaultArrayMaterializer {
         shape: &Shape,
         schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
-        registry: &mut CircuitRegistry
-    ) -> ParamCircuitExpr {
+        registry: &mut CircuitObjectRegistry
+    ) -> CircuitId {
         match array_type {
             ArrayType::Ciphertext => {
                 self.deriver.derive_vectors_and_gen_circuit_expr::<CiphertextObject>(
@@ -884,10 +907,10 @@ impl DiagonalArrayMaterializer {
         shape: &Shape,
         schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
-        registry: &mut CircuitRegistry
-    ) -> ParamCircuitExpr
+        registry: &mut CircuitObjectRegistry
+    ) -> CircuitId
         where
-        CircuitRegistry: CanRegisterObject<'a, T>,
+        CircuitObjectRegistry: CanRegisterObject<'a, T>,
         ParamCircuitExpr: CanCreateObjectVar<T>,
     {
         let mut obj_map: IndexCoordinateMap<T> =
@@ -968,29 +991,28 @@ impl DiagonalArrayMaterializer {
                 Some(OffsetExpr::Literal(step))
             };
 
-        registry.set_var_value(obj_var.clone(), CircuitValue::CoordMap(obj_map));
+        registry.set_obj_var_value(obj_var.clone(), CircuitValue::CoordMap(obj_map));
 
-        if let Some(offset_expr) = offset_expr_opt {
-            let new_offset_expr =
-                OffsetExpr::Add(
-                    Box::new(offset_expr),
-                    Box::new(OffsetExpr::Var(inner_i_dim_name.clone()))
-                );
+        let obj_var_id = registry.register_circuit(ParamCircuitExpr::obj_var(obj_var));
 
-            ParamCircuitExpr::Rotate(
-                Box::new(new_offset_expr),
-                Box::new(ParamCircuitExpr::obj_var(obj_var))
-            )
+        let output_expr =
+            if let Some(offset_expr) = offset_expr_opt {
+                let new_offset_expr =
+                    OffsetExpr::Add(
+                        Box::new(offset_expr),
+                        Box::new(OffsetExpr::Var(inner_i_dim_name.clone()))
+                    );
 
-        } else {
-            let offset_var = registry.fresh_offset_fvar();
-            registry.set_offset_var_value(offset_var.clone(), CircuitValue::CoordMap(step_map));
+                ParamCircuitExpr::Rotate(new_offset_expr, obj_var_id)
 
-            ParamCircuitExpr::Rotate(
-                Box::new(OffsetExpr::Var(offset_var)),
-                Box::new(ParamCircuitExpr::obj_var(obj_var))
-            )
-        }
+            } else {
+                let offset_var = registry.fresh_offset_fvar();
+                registry.set_offset_var_value(offset_var.clone(), CircuitValue::CoordMap(step_map));
+
+                ParamCircuitExpr::Rotate(OffsetExpr::Var(offset_var), obj_var_id)
+            };
+
+        registry.register_circuit(output_expr)
     }
 }
 
@@ -1040,8 +1062,8 @@ impl InputArrayMaterializer for DiagonalArrayMaterializer {
         shape: &Shape,
         schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
-        registry: &mut CircuitRegistry
-    ) -> ParamCircuitExpr {
+        registry: &mut CircuitObjectRegistry
+    ) -> CircuitId {
         if let Some(ClientPreprocessing::Permute(dim_i, dim_j)) = schedule.preprocessing {
             match (&transform.dims[dim_i], &transform.dims[dim_j]) {
                 // if dim i is empty, then the permutation is a no-op
@@ -1176,8 +1198,8 @@ mod tests {
         shape: Shape,
         schedule: IndexingSiteSchedule,
         transform: ArrayTransform, 
-    ) -> (CircuitRegistry, ParamCircuitExpr) {
-        let mut registry = CircuitRegistry::new();
+    ) -> (CircuitObjectRegistry, CircuitId) {
+        let mut registry = CircuitObjectRegistry::new();
         let circ =
             amat.materialize(
                 ArrayType::Ciphertext,
@@ -1188,10 +1210,10 @@ mod tests {
             );
 
         println!("{}", circ);
-        for ct_var in circ.ciphertext_vars() {
+        for ct_var in registry.circuit_ciphertext_vars(circ) {
             println!("{} =>\n{}", ct_var, registry.get_ct_var_value(&ct_var));
         }
-        for pt_var in circ.plaintext_vars() {
+        for pt_var in registry.circuit_plaintext_vars(circ) {
             println!("{} =>\n{}", pt_var, registry.get_pt_var_value(&pt_var));
         }
 
@@ -1347,7 +1369,10 @@ mod tests {
                 base, 
             );
 
-        let ct_var = circ.ciphertext_vars().iter().next().unwrap().clone();
+        let ct_var =
+            registry.circuit_ciphertext_vars(circ)
+            .iter().next().unwrap().clone();
+
         if let CircuitValue::CoordMap(coord_map) = registry.get_ct_var_value(&ct_var) {
             // ct_var should be mapped to the same vector at all coords
             assert!(coord_map.multiplicity() == 9);
@@ -1404,7 +1429,10 @@ mod tests {
                 base, 
             );
 
-        let ct_var = circ.ciphertext_vars().iter().next().unwrap().clone();
+        let ct_var =
+            registry.circuit_ciphertext_vars(circ)
+            .iter().next().unwrap().clone();
+
         if let CircuitValue::CoordMap(coord_map) = registry.get_ct_var_value(&ct_var) {
             // ct_var should be mapped to the same vector at all coords
             assert!(coord_map.multiplicity() == 9);

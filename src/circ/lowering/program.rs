@@ -11,7 +11,7 @@ use crate::lang::{Operator, Extent, HEObjectName};
 use crate::scheduling::{OffsetExpr, DimName};
 use crate::util::NameGenerator;
 
-pub type NodeId = usize;
+pub type InstructionId = usize;
 
 #[derive(Clone, Debug)]
 pub enum HEIndex {
@@ -34,7 +34,7 @@ impl fmt::Display for HEIndex {
 #[derive(Clone, Debug)]
 pub enum HERef {
     // reference to a previous instruction's output
-    Node(NodeId),
+    Node(InstructionId),
 
     // index to a ciphertext array (variable if no indices)
     Ciphertext(HEObjectName, Vec<HEIndex>),
@@ -219,7 +219,8 @@ impl Display for HEProgram {
 
 pub struct CircuitLowering {
     name_generator: NameGenerator,
-    cur_instr_id: NodeId,
+    cur_instr_id: InstructionId,
+    circuit_instr_map: HashMap<CircuitId, InstructionId>,
 }
 
 impl CircuitLowering {
@@ -227,10 +228,11 @@ impl CircuitLowering {
         Self {
             name_generator: NameGenerator::new(),
             cur_instr_id: 0,
+            circuit_instr_map: HashMap::new(),
         }
     }
 
-    fn fresh_instr_id(&mut self) -> NodeId {
+    fn fresh_instr_id(&mut self) -> InstructionId {
         let id = self.cur_instr_id;
         self.cur_instr_id += 1;
         id
@@ -412,7 +414,7 @@ impl CircuitLowering {
         HEOperand::Literal(*offset)
     }
 
-    fn gen_program_context(&mut self, registry: &CircuitRegistry) -> HEProgramContext {
+    fn gen_program_context(&mut self, registry: &CircuitObjectRegistry) -> HEProgramContext {
         let mut vector_map = HashMap::new();
         let mut mask_map = HashMap::new();
         let mut const_map = HashMap::new();
@@ -474,9 +476,9 @@ impl CircuitLowering {
         let mut pt_inline_map: HashMap<VarName, HEOperand> = HashMap::new();
 
         // process statements
-        for (array, dims, circuit) in program.circuit_list {
+        for (array, dims, circuit_id) in program.expr_list {
             // preamble: allocate arrays referenced in the circuit expr
-            for ct_var in circuit.ciphertext_vars() {
+            for ct_var in program.registry.circuit_ciphertext_vars(circuit_id) {
                 let circval = program.registry.get_ct_var_value(&ct_var);
 
                 if let Some(operand) = Self::inline_ciphertext_object(circval, &context) {
@@ -493,7 +495,7 @@ impl CircuitLowering {
                 }
             }
 
-            for pt_var in circuit.plaintext_vars() {
+            for pt_var in program.registry.circuit_plaintext_vars(circuit_id) {
                 let circval = program.registry.get_pt_var_value(&pt_var);
 
                 if let Some(operand) = Self::inline_plaintext_object(circval, &context) {
@@ -510,7 +512,7 @@ impl CircuitLowering {
                 }
             }
 
-            for offset_fvar in circuit.offset_fvars() {
+            for offset_fvar in program.registry.circuit_offset_fvars(circuit_id) {
                 CircuitLowering::process_circuit_val(
                     program.registry.get_offset_fvar_value(&offset_fvar),
                     offset_fvar,
@@ -536,7 +538,8 @@ impl CircuitLowering {
             let mut body_statements: Vec<HEStatement> = Vec::new();
             let array_id =
                 self.gen_expr_instrs_recur(
-                    circuit,
+                    circuit_id,
+                    &program.registry,
                     &dims, 
                     &ct_inline_map,
                     &pt_inline_map,
@@ -571,172 +574,186 @@ impl CircuitLowering {
 
     pub fn gen_expr_instrs_recur(
         &mut self,
-        expr: ParamCircuitExpr,
+        expr_id: CircuitId,
+        registry: &CircuitObjectRegistry,
         indices: &Vec<(String, usize)>,
         ct_inline_map: &HashMap<VarName, HEOperand>,
         pt_inline_map: &HashMap<VarName, HEOperand>,
         operand_map: &mut HashMap<usize, HEOperand>,
         stmts: &mut Vec<HEStatement>
-    ) -> NodeId {
-        match expr {
-            ParamCircuitExpr::CiphertextVar(var) => {
-                let id = self.fresh_instr_id();
-                if let Some(operand) = ct_inline_map.get(&var) {
-                    operand_map.insert(id, operand.clone());
+    ) -> InstructionId {
+        if let Some(instr_id) = self.circuit_instr_map.get(&expr_id) {
+            *instr_id
 
-                }  else {
-                    let index_vars =
-                        indices.iter()
-                        .map(|(var, _)| HEIndex::Var(var.clone()))
-                        .collect();
-                    let operand = 
-                        HEOperand::Ref(HERef::Ciphertext(var, index_vars));
-                    operand_map.insert(id, operand);
-                }
+        } else {
+            match registry.get_circuit(expr_id) {
+                ParamCircuitExpr::CiphertextVar(var) => {
+                    let instr_id = self.fresh_instr_id();
+                    if let Some(operand) = ct_inline_map.get(var) {
+                        operand_map.insert(instr_id, operand.clone());
 
-                id
-            },
+                    }  else {
+                        let index_vars =
+                            indices.iter()
+                            .map(|(var, _)| HEIndex::Var(var.clone()))
+                            .collect();
+                        let operand = 
+                            HEOperand::Ref(HERef::Ciphertext(var.clone(), index_vars));
+                        operand_map.insert(instr_id, operand);
+                    }
 
-            ParamCircuitExpr::PlaintextVar(var) => {
-                let id = self.fresh_instr_id();
-                if let Some(operand) = pt_inline_map.get(&var) {
-                    operand_map.insert(id, operand.clone());
+                    self.circuit_instr_map.insert(expr_id, instr_id);
+                    instr_id
+                },
 
-                } else {
-                    let index_vars =
-                        indices.iter()
-                        .map(|(var, _)| HEIndex::Var(var.clone()))
-                        .collect();
-                    let operand =
-                        HEOperand::Ref(HERef::Plaintext(var, index_vars));
-                    operand_map.insert(id, operand);
-                }
+                ParamCircuitExpr::PlaintextVar(var) => {
+                    let instr_id = self.fresh_instr_id();
+                    if let Some(operand) = pt_inline_map.get(var) {
+                        operand_map.insert(instr_id, operand.clone());
 
-                id
-            },
+                    } else {
+                        let index_vars =
+                            indices.iter()
+                            .map(|(var, _)| HEIndex::Var(var.clone()))
+                            .collect();
+                        let operand =
+                            HEOperand::Ref(HERef::Plaintext(var.clone(), index_vars));
+                        operand_map.insert(instr_id, operand);
+                    }
 
-            ParamCircuitExpr::Literal(val) => {
-                let id = self.fresh_instr_id();
-                let operand = HEOperand::Literal(val);
-                operand_map.insert(id, operand);
-                id
-            },
+                    instr_id
+                },
 
-            ParamCircuitExpr::Op(op, expr1, expr2) => {
-                let id1 =
-                    self.gen_expr_instrs_recur(
-                        *expr1,
-                        indices, 
-                        ct_inline_map,
-                        pt_inline_map,
-                        operand_map,
-                        stmts
+                ParamCircuitExpr::Literal(val) => {
+                    let instr_id = self.fresh_instr_id();
+                    let operand = HEOperand::Literal(*val);
+                    operand_map.insert(instr_id, operand);
+                    self.circuit_instr_map.insert(expr_id, instr_id);
+                    instr_id
+                },
+
+                ParamCircuitExpr::Op(op, expr1, expr2) => {
+                    let id1 =
+                        self.gen_expr_instrs_recur(
+                            *expr1,
+                            registry,
+                            indices, 
+                            ct_inline_map,
+                            pt_inline_map,
+                            operand_map,
+                            stmts
+                        );
+                        
+                    let id2 =
+                        self.gen_expr_instrs_recur(
+                            *expr2,
+                            registry,
+                            indices, 
+                            ct_inline_map,
+                            pt_inline_map,
+                            operand_map,
+                            stmts
+                        );
+
+                    let operand1 = operand_map.get(&id1).unwrap().clone();
+                    let operand2 = operand_map.get(&id2).unwrap().clone();
+
+                    let id = self.fresh_instr_id();
+                    let instr =
+                        match op {
+                            Operator::Add => HEInstruction::Add(id, operand1, operand2),
+                            Operator::Sub => HEInstruction::Sub(id, operand1, operand2),
+                            Operator::Mul => HEInstruction::Mul(id, operand1, operand2),
+                        };
+
+                    stmts.push(HEStatement::Instruction(instr));
+                    operand_map.insert(id, HEOperand::Ref(HERef::Node(id)));
+                    id
+                },
+
+                ParamCircuitExpr::Rotate(steps, body) => {
+                    let body_id =
+                        self.gen_expr_instrs_recur(
+                            *body,
+                            registry,
+                            indices,
+                            ct_inline_map,
+                            pt_inline_map,
+                            operand_map,
+                            stmts
+                        );
+
+                    let id = self.fresh_instr_id();
+
+                    let body_operand = operand_map.get(&body_id).unwrap().clone();
+                    stmts.push(
+                        HEStatement::Instruction(
+                            HEInstruction::Rot(id, steps.clone(), body_operand)
+                        )
                     );
+                    operand_map.insert(id, HEOperand::Ref(HERef::Node(id)));
+
+                    id
+                },
+
+                ParamCircuitExpr::ReduceVectors(dim, extent, op, body) => {
+                    let mut body_indices = indices.clone();
+                    body_indices.push((dim.clone(), *extent));
+
+                    let mut body_stmts: Vec<HEStatement> = Vec::new();
+
+                    let body_id =
+                        self.gen_expr_instrs_recur(
+                            *body,
+                            registry,
+                            &body_indices,
+                            ct_inline_map,
+                            pt_inline_map,
+                            operand_map,
+                            &mut body_stmts,
+                        );
+
+                    let body_operand = operand_map.get(&body_id).unwrap().clone();
+
+                    let reduce_var = self.name_generator.get_fresh_name("reduce");
+
+                    let reduce_var_ref = 
+                        HEOperand::Ref(HERef::Ciphertext(reduce_var.clone(), vec![]));
+
+                    let reduce_id = self.fresh_instr_id();
+
+                    let reduce_stmt = 
+                        match op {
+                            Operator::Add =>
+                                HEInstruction::Add(reduce_id, reduce_var_ref.clone(), body_operand),
+
+                            Operator::Sub =>
+                                HEInstruction::Sub(reduce_id, reduce_var_ref.clone(), body_operand),
+
+                            Operator::Mul => 
+                                HEInstruction::Mul(reduce_id, reduce_var_ref.clone(), body_operand),
+                        };
+
+                    body_stmts.push(HEStatement::Instruction(reduce_stmt));
+                    body_stmts.push(
+                        HEStatement::SetVar(
+                            reduce_var.clone(),
+                            vec![],
+                            HEOperand::Ref(HERef::Node(reduce_id)),
+                        )
+                    );
+
+                    stmts.extend([
+                        HEStatement::DeclareVar(reduce_var.clone(), vec![]),
+                        HEStatement::ForNode(dim.clone(), *extent, body_stmts),
+                    ]);
                     
-                let id2 =
-                    self.gen_expr_instrs_recur(
-                        *expr2,
-                        indices, 
-                        ct_inline_map,
-                        pt_inline_map,
-                        operand_map,
-                        stmts
-                    );
+                    let id = self.fresh_instr_id();
+                    operand_map.insert(id, reduce_var_ref);
 
-                let operand1 = operand_map.get(&id1).unwrap().clone();
-                let operand2 = operand_map.get(&id2).unwrap().clone();
-
-                let id = self.fresh_instr_id();
-                let instr =
-                    match op {
-                        Operator::Add => HEInstruction::Add(id, operand1, operand2),
-                        Operator::Sub => HEInstruction::Sub(id, operand1, operand2),
-                        Operator::Mul => HEInstruction::Mul(id, operand1, operand2),
-                    };
-
-                stmts.push(HEStatement::Instruction(instr));
-                operand_map.insert(id, HEOperand::Ref(HERef::Node(id)));
-                id
-            },
-
-            ParamCircuitExpr::Rotate(steps, body) => {
-                let body_id =
-                    self.gen_expr_instrs_recur(
-                        *body,
-                        indices,
-                        ct_inline_map,
-                        pt_inline_map,
-                        operand_map,
-                        stmts
-                    );
-
-                let id = self.fresh_instr_id();
-
-                let body_operand = operand_map.get(&body_id).unwrap().clone();
-                stmts.push(
-                    HEStatement::Instruction(HEInstruction::Rot(id, *steps, body_operand))
-                );
-                operand_map.insert(id, HEOperand::Ref(HERef::Node(id)));
-
-                id
-            },
-
-            ParamCircuitExpr::ReduceVectors(dim, extent, op, body) => {
-                let mut body_indices = indices.clone();
-                body_indices.push((dim.clone(), extent));
-
-                let mut body_stmts: Vec<HEStatement> = Vec::new();
-
-                let body_id =
-                    self.gen_expr_instrs_recur(
-                        *body,
-                        &body_indices,
-                        ct_inline_map,
-                        pt_inline_map,
-                        operand_map,
-                        &mut body_stmts,
-                    );
-
-                let body_operand = operand_map.get(&body_id).unwrap().clone();
-
-                let reduce_var = self.name_generator.get_fresh_name("reduce");
-
-                let reduce_var_ref = 
-                    HEOperand::Ref(HERef::Ciphertext(reduce_var.clone(), vec![]));
-
-                let reduce_id = self.fresh_instr_id();
-
-                let reduce_stmt = 
-                    match op {
-                        Operator::Add =>
-                            HEInstruction::Add(reduce_id, reduce_var_ref.clone(), body_operand),
-
-                        Operator::Sub =>
-                            HEInstruction::Sub(reduce_id, reduce_var_ref.clone(), body_operand),
-
-                        Operator::Mul => 
-                            HEInstruction::Mul(reduce_id, reduce_var_ref.clone(), body_operand),
-                    };
-
-                body_stmts.push(HEStatement::Instruction(reduce_stmt));
-                body_stmts.push(
-                    HEStatement::SetVar(
-                        reduce_var.clone(),
-                        vec![],
-                        HEOperand::Ref(HERef::Node(reduce_id)),
-                    )
-                );
-
-                stmts.extend([
-                    HEStatement::DeclareVar(reduce_var.clone(), vec![]),
-                    HEStatement::ForNode(dim, extent, body_stmts),
-                ]);
-                
-                let id = self.fresh_instr_id();
-                operand_map.insert(id, reduce_var_ref);
-
-                id
-            },
+                    id
+                },
+            }
         }
     }
 }
@@ -1144,16 +1161,6 @@ mod tests {
 
     #[test]
     fn test_reduce() {
-        let circuit =
-            ParamCircuitExpr::Op(
-                Operator::Add,
-                Box::new(ParamCircuitExpr::ReduceVectors(
-                    String::from("j"), 2, Operator::Add,
-                    Box::new(ParamCircuitExpr::CiphertextVar(String::from("ct"))),
-                )),
-                Box::new(ParamCircuitExpr::Literal(2))
-            );
-
         let mut coord_map =
             IndexCoordinateMap::from_coord_system(
                 IndexCoordinateSystem::from_dim_list(
@@ -1176,7 +1183,23 @@ mod tests {
         coord_map.set(im::vector![1, 0], ct_obj.clone());
         coord_map.set(im::vector![1, 1], ct_obj.clone());
 
-        let mut registry = CircuitRegistry::new();
+        let mut registry = CircuitObjectRegistry::new();
+
+        let lit_2 = registry.register_circuit(ParamCircuitExpr::Literal(2));
+        let ct = registry.register_circuit(ParamCircuitExpr::CiphertextVar(String::from("ct")));
+        let reduce_vec =
+            registry.register_circuit(
+                ParamCircuitExpr::ReduceVectors(
+                    String::from("j"), 2, Operator::Add,
+                    ct
+                )
+            );
+
+        let circuit =
+            registry.register_circuit(
+                ParamCircuitExpr::Op(Operator::Add, reduce_vec, lit_2)
+            );
+
         registry.ct_var_values.insert(
             String::from("ct"),
             CircuitValue::CoordMap(coord_map)
@@ -1185,7 +1208,7 @@ mod tests {
         let circuit_program =
             ParamCircuitProgram {
                 registry,
-                circuit_list: vec![
+                expr_list: vec![
                     (String::from("out"),
                     vec![(String::from("i"), 2)],
                     circuit)
