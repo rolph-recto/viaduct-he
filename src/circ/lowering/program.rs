@@ -1,3 +1,4 @@
+use itertools::Itertools;
 /// program.rs
 /// instruction representation of HE programs
 
@@ -5,8 +6,7 @@ use pretty::RcDoc;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{self, Display};
 
-use crate::circ2::vector_info::VectorInfo;
-use crate::circ2::{ParamCircuitProgram, ParamCircuitExpr, CircuitValue, MaskVector, CiphertextObject, PlaintextObject, CircuitRegistry, IndexCoord, VarName};
+use crate::circ2::{*, vector_info::VectorInfo};
 use crate::lang::{Operator, Extent, HEObjectName};
 use crate::scheduling::{OffsetExpr, DimName};
 use crate::util::NameGenerator;
@@ -89,20 +89,6 @@ pub enum HEInstruction {
     Rot(usize, OffsetExpr, HEOperand),
 }
 
-impl HEInstruction {
-    fn get_operands(&self) -> Vec<HEOperand> {
-        match self {
-            HEInstruction::Add(_, op1, op2) |
-            HEInstruction::Sub(_, op1, op2) |
-            HEInstruction::Mul(_, op1, op2) =>
-                vec![op1.clone(), op2.clone()],
-
-            HEInstruction::Rot(_, op1, op2) =>
-                vec![op2.clone()],
-        }
-    }
-}
-
 impl fmt::Display for HEInstruction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -124,7 +110,6 @@ impl fmt::Display for HEInstruction {
 #[derive(Clone, Debug)]
 pub enum HEStatement {
     ForNode(String, usize, Vec<HEStatement>),
-    // Var(String, IndexCoordinateMap<HEOperand>),
     DeclareVar(String, Vec<Extent>),
     SetVar(String, Vec<HEIndex>, HEOperand),
     Instruction(HEInstruction),
@@ -182,21 +167,47 @@ impl Display for HEStatement {
     }
 }
 
-struct InputContext {
+pub struct HEProgramContext {
     vector_map: HashMap<VectorInfo, String>,
     mask_map: HashMap<MaskVector, String>,
     const_map: HashMap<isize, String>,
 }
 
 pub struct HEProgram {
+    pub context: HEProgramContext,
     pub statements: Vec<HEStatement>,
 }
 
 impl HEProgram {
     pub fn to_doc(&self) -> RcDoc<()> {
         RcDoc::intersperse(
-            self.statements.iter().map(|s| s.to_doc()),
-            RcDoc::hardline()
+            self.context.vector_map.iter().map(|(vector, name)| {
+                RcDoc::text(format!("{} = vector({})", name, vector))
+            })
+            ,RcDoc::hardline()
+        )
+        .append(
+            RcDoc::intersperse(
+                self.context.mask_map.iter().map(|(mask, name)| {
+                    RcDoc::text(format!("{} = mask({:?})", name, mask))
+                })
+                ,RcDoc::hardline()
+            )
+        )
+        .append(
+            RcDoc::intersperse(
+                self.context.const_map.iter().map(|(constval, name)| {
+                    RcDoc::text(format!("{} = const({})", name, constval))
+                })
+                ,RcDoc::hardline()
+            )
+        )
+        .append(RcDoc::hardline())
+        .append(
+            RcDoc::intersperse(
+                self.statements.iter().map(|s| s.to_doc()),
+                RcDoc::hardline()
+            )
         )
     }
 }
@@ -226,7 +237,7 @@ impl CircuitLowering {
         id
     }
 
-    fn resolve_ciphertext_object(obj: &CiphertextObject, input: &InputContext) -> HEOperand {
+    fn resolve_ciphertext_object(obj: &CiphertextObject, input: &HEProgramContext) -> HEOperand {
         match obj {
             CiphertextObject::InputVector(vector) => {
                 let vector_var = input.vector_map.get(vector).unwrap().clone();
@@ -241,16 +252,17 @@ impl CircuitLowering {
         }
     }
 
+    // TODO finish this
     fn compute_coord_relationship(
         index_vars: Vec<DimName>,
         coord_val_map: HashMap<IndexCoord, IndexCoord>
     ) -> Option<Vec<HEIndex>> {
-        todo!()
+        None
     }
 
     fn inline_ciphertext_object(
         circval: &CircuitValue<CiphertextObject>,
-        input: &InputContext
+        input: &HEProgramContext
     ) -> Option<HEOperand> {
         match circval {
             CircuitValue::CoordMap(coord_map) => {
@@ -306,7 +318,7 @@ impl CircuitLowering {
 
     fn inline_plaintext_object(
         circval: &CircuitValue<PlaintextObject>,
-        input: &InputContext
+        input: &HEProgramContext
     ) -> Option<HEOperand> {
         match circval {
             CircuitValue::CoordMap(coord_map) => {
@@ -344,7 +356,7 @@ impl CircuitLowering {
         }
     }
 
-    fn resolve_plaintext_object(obj: &PlaintextObject, input: &InputContext) -> HEOperand {
+    fn resolve_plaintext_object(obj: &PlaintextObject, input: &HEProgramContext) -> HEOperand {
         match obj {
             PlaintextObject::Const(val) => {
                 let const_var = input.const_map.get(val).unwrap().clone();
@@ -358,11 +370,11 @@ impl CircuitLowering {
         }
     }
 
-    fn resolve_offset(offset: &isize, _input: &InputContext) -> HEOperand {
+    fn resolve_offset(offset: &isize, _input: &HEProgramContext) -> HEOperand {
         HEOperand::Literal(*offset)
     }
 
-    fn gen_input_context(&mut self, registry: &CircuitRegistry) -> InputContext {
+    fn gen_program_context(&mut self, registry: &CircuitRegistry) -> HEProgramContext {
         let mut vector_map = HashMap::new();
         let mut mask_map = HashMap::new();
         let mut const_map = HashMap::new();
@@ -381,14 +393,14 @@ impl CircuitLowering {
             const_map.insert(constval, format!("const_{}", constval));
         }
 
-        InputContext { vector_map, mask_map, const_map, }
+        HEProgramContext { vector_map, mask_map, const_map, }
     }
 
     fn process_circuit_val<T>(
         value: &CircuitValue<T>,
         var: String,
-        input: &InputContext,
-        f: fn(&T, &InputContext) -> HEOperand,
+        input: &HEProgramContext,
+        f: fn(&T, &HEProgramContext) -> HEOperand,
         statements: &mut Vec<HEStatement>,
     ) {
         match value {
@@ -418,8 +430,7 @@ impl CircuitLowering {
 
     pub fn lower(&mut self, program: ParamCircuitProgram) -> HEProgram {
         let mut statements: Vec<HEStatement> = Vec::new();
-        // process inputs
-        let input = self.gen_input_context(&program.registry);
+        let context = self.gen_program_context(&program.registry);
 
         let mut ct_inline_map: HashMap<VarName, HEOperand> = HashMap::new();
         let mut pt_inline_map: HashMap<VarName, HEOperand> = HashMap::new();
@@ -427,18 +438,17 @@ impl CircuitLowering {
         // process statements
         for (array, dims, circuit) in program.circuit_list {
             // preamble: allocate arrays referenced in the circuit expr
-            // TODO: allow inlining for simple expressions
             for ct_var in circuit.ciphertext_vars() {
                 let circval = program.registry.get_ct_var_value(&ct_var);
 
-                if let Some(operand) = Self::inline_ciphertext_object(circval, &input) {
+                if let Some(operand) = Self::inline_ciphertext_object(circval, &context) {
                     ct_inline_map.insert(ct_var, operand);
 
                 } else {
                     CircuitLowering::process_circuit_val(
                         program.registry.get_ct_var_value(&ct_var),
                         ct_var,
-                        &input,
+                        &context,
                         CircuitLowering::resolve_ciphertext_object,
                         &mut statements,
                     );
@@ -448,14 +458,14 @@ impl CircuitLowering {
             for pt_var in circuit.plaintext_vars() {
                 let circval = program.registry.get_pt_var_value(&pt_var);
 
-                if let Some(operand) = Self::inline_plaintext_object(circval, &input) {
+                if let Some(operand) = Self::inline_plaintext_object(circval, &context) {
                     pt_inline_map.insert(pt_var, operand);
 
                 } else {
                     CircuitLowering::process_circuit_val(
                         program.registry.get_pt_var_value(&pt_var),
                         pt_var,
-                        &input,
+                        &context,
                         CircuitLowering::resolve_plaintext_object,
                         &mut statements,
                     );
@@ -466,7 +476,7 @@ impl CircuitLowering {
                 CircuitLowering::process_circuit_val(
                     program.registry.get_offset_fvar_value(&offset_fvar),
                     offset_fvar,
-                    &input,
+                    &context,
                     CircuitLowering::resolve_offset,
                     &mut statements,
                 );
@@ -478,10 +488,13 @@ impl CircuitLowering {
             let dim_extents = 
                 dims.iter().map(|(_, extent)| *extent).collect();
 
+            // generate statements for array expr
+            // first, declare array
             statements.push(
                 HEStatement::DeclareVar(array.clone(), dim_extents)
             );
 
+            // generate statements in the array expr's body
             let mut body_statements: Vec<HEStatement> = Vec::new();
             let array_id =
                 self.gen_expr_instrs_recur(
@@ -493,6 +506,7 @@ impl CircuitLowering {
                     &mut body_statements,
                 );
 
+            // set the array's value to the body statement's computed value
             body_statements.push(
                 HEStatement::SetVar(
                     array,
@@ -504,6 +518,7 @@ impl CircuitLowering {
             let mut dims_reversed = dims.clone();
             dims_reversed.reverse();
 
+            // wrap the body in a nest of for loops
             let array_statement = 
                 dims_reversed.into_iter()
                 .fold(body_statements, |acc, (dim, extent)| {
@@ -513,7 +528,7 @@ impl CircuitLowering {
             statements.push(array_statement);
         }
 
-        HEProgram { statements }
+        HEProgram { context, statements }
     }
 
     pub fn gen_expr_instrs_recur(
