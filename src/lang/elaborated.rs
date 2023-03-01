@@ -4,7 +4,10 @@ use indexmap::IndexMap;
 
 use crate::util::NameGenerator;
 
-use super::{ArrayName, Shape, SourceExpr, SourceProgram, OUTPUT_EXPR_NAME, IndexingId, ArrayType};
+use super::{
+    ArrayName, Shape, OUTPUT_EXPR_NAME, IndexingId, ArrayType,
+    source::{SourceExpr, SourceProgram}
+};
 
 /// like SourceProgram, but with uniquely named indexing sites
 pub struct ElaboratedProgram {

@@ -1,5 +1,5 @@
 pub mod circ;
-pub mod circ2;
 pub mod lang;
+pub mod program;
 pub mod util;
 pub mod scheduling;

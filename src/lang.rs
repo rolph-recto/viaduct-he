@@ -1,5 +1,5 @@
 use core::fmt::Display;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ops::Index;
 
 use gcollections::ops::Bounded;
@@ -12,15 +12,12 @@ pub mod extent_analysis;
 pub mod source;
 pub mod elaborated;
 pub mod index_elim;
-pub mod index_free;
 pub mod typechecker;
-
-pub use self::source::*;
-pub use self::index_free::*;
 
 pub static OUTPUT_EXPR_NAME: &'static str = "__root__";
 
-pub type DimSize = usize;
+// name of a dimension in a schedule
+pub type DimName = String;
 pub type Extent = usize;
 pub type Shape = im::Vector<Extent>;
 
@@ -32,6 +29,7 @@ pub type ArrayName = String;
 
 // identifier for indexing site
 pub type IndexingId = String;
+pub type VectorId = usize;
 
 pub type ArrayEnvironment = HashMap<ArrayName, Shape>;
 pub type IndexEnvironment = HashMap<IndexVar, Extent>;
@@ -196,5 +194,125 @@ impl ArrayTransform {
                 }
             }
         }).collect()
+    }
+}
+
+pub struct OffsetEnvironment {
+    index_map: HashMap<DimName, usize>,
+    function_values: HashMap<String, isize>,
+}
+
+impl OffsetEnvironment {
+    pub fn new(index_map: HashMap<DimName, usize>) -> Self {
+        OffsetEnvironment { index_map, function_values: HashMap::new() }
+    }
+
+    pub fn set_function_value(&mut self, func: String, value: isize) {
+        self.function_values.insert(func, value);
+    }
+}
+
+#[derive(Clone,Debug,PartialEq,Eq,Hash)]
+pub enum OffsetExpr {
+    Add(Box<OffsetExpr>, Box<OffsetExpr>),
+    Mul(Box<OffsetExpr>, Box<OffsetExpr>),
+    Literal(isize),
+    Var(DimName),
+    FunctionVar(String, im::Vector<DimName>),
+}
+
+impl OffsetExpr {
+    pub fn eval(&self, store: &OffsetEnvironment) -> isize {
+        match self {
+            OffsetExpr::Add(expr1, expr2) => {
+                let val1 = expr1.eval(store);
+                let val2 = expr2.eval(store);
+                val1 + val2
+            },
+
+            OffsetExpr::Mul(expr1, expr2) => {
+                let val1 = expr1.eval(store);
+                let val2 = expr2.eval(store);
+                val1 * val2
+            },
+
+            OffsetExpr::Literal(lit) => *lit,
+
+            OffsetExpr::Var(var) => store.index_map[var] as isize,
+
+            OffsetExpr::FunctionVar(func, _) => store.function_values[func],
+        }
+    }
+
+    pub fn const_value(&self) -> Option<isize> {
+        match self {
+            OffsetExpr::Add(expr1, expr2) => {
+                let const1 = expr1.const_value()?;
+                let const2 = expr2.const_value()?;
+                Some(const1 + const2)
+            },
+
+            OffsetExpr::Mul(expr1, expr2) => {
+                let const1 = expr1.const_value()?;
+                let const2 = expr2.const_value()?;
+                Some(const1 + const2)
+            },
+            
+            OffsetExpr::Literal(lit) => Some(*lit),
+
+            OffsetExpr::Var(_) => None,
+
+            OffsetExpr::FunctionVar(_, _) => None,
+        }
+    }
+
+    pub fn function_vars(&self) -> HashSet<String> {
+        match self {
+            OffsetExpr::Add(expr1, expr2) |
+            OffsetExpr::Mul(expr1, expr2) => {
+                let mut vars1 = expr1.function_vars();
+                let vars2 = expr2.function_vars();
+                vars1.extend(vars2);
+                vars1
+            },
+
+            OffsetExpr::Literal(_) | OffsetExpr::Var(_) =>
+                HashSet::new(),
+
+            OffsetExpr::FunctionVar(fvar, _) =>
+                HashSet::from([fvar.clone()])
+        }
+    }
+}
+
+impl Display for OffsetExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OffsetExpr::Add(expr1, expr2) => {
+                write!(f, "({} + {})", expr1, expr2)
+            },
+
+            OffsetExpr::Mul(expr1, expr2) => {
+                write!(f, "({} * {})", expr1, expr2)
+            },
+
+            OffsetExpr::Literal(lit) => {
+                write!(f, "{}", lit)
+            },
+
+            OffsetExpr::Var(var) => {
+                write!(f, "{}", var)
+            },
+
+            OffsetExpr::FunctionVar(func, vars) => {
+                write!(f, "{}{:?}", func, vars)
+            }
+        }
+    }
+}
+
+impl Default for OffsetExpr {
+    fn default() -> Self {
+        OffsetExpr::Literal(0)
     }
 }

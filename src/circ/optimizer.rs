@@ -5,8 +5,6 @@ use std::{time::*, cmp::{max, min}};
 
 use self::{greedy_extractor::*, lp_extractor::*};
 
-use super::HECircuit;
-
 mod greedy_extractor;
 pub mod lp_extractor;
 
@@ -23,12 +21,6 @@ define_language! {
         // FunctionVar(Symbol),
         // IndexVar(Symbol),
         // ReduceVectors(Symbol, Id),
-    }
-}
-
-impl From<HECircuit> for RecExpr<HEOptCircuit> {
-    fn from(circ: HECircuit) -> Self {
-        circ.to_opt_circuit()
     }
 }
 

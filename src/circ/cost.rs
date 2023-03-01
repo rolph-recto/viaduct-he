@@ -1,8 +1,10 @@
 use std::{ops::{Add, Mul}, cmp::max};
 
-use crate::{circ2::{
-    ParamCircuitProgram, ParamCircuitExpr, IndexCoordinateSystem, VectorType
-}, lang::Operator, scheduling::ExprScheduleType};
+use crate::{
+    circ::{
+        ParamCircuitProgram, ParamCircuitExpr, IndexCoordinateSystem, VectorType
+    },
+};
 
 #[derive(Copy,Clone,Debug,PartialEq,Eq)]
 pub struct CostFeatures {
@@ -289,7 +291,7 @@ impl CostEstimator {
 
 #[cfg(test)]
 mod tests{
-    use crate::{lang::{parser::ProgramParser, index_elim::IndexElimination, source::SourceProgram, elaborated::Elaborator}, circ2::materializer::{Materializer, DummyArrayMaterializer}, scheduling::Schedule};
+    use crate::{lang::{parser::ProgramParser, index_elim::IndexElimination, source::SourceProgram, elaborated::Elaborator}, circ::materializer::{Materializer, DummyArrayMaterializer}, scheduling::Schedule};
     use super::*;
 
     // generate an initial schedule for a program

@@ -10,6 +10,8 @@ use crate::{
     },
 };
 
+use super::source::{SourceExpr, IndexExpr};
+
 /// expression with associated data about lowering to an index-free representation
 #[derive(Clone,Debug)]
 pub enum TransformedExpr {
@@ -711,7 +713,7 @@ impl IndexElimination {
 
 #[cfg(test)]
 mod tests{
-    use crate::lang::{parser::ProgramParser, elaborated::Elaborator};
+    use crate::lang::{parser::ProgramParser, elaborated::Elaborator, source::SourceProgram};
     use super::*;
 
     fn test_index_elim(src: &str) {

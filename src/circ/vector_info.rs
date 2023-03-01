@@ -3,9 +3,9 @@ use std::{fmt::Display, collections::{HashMap, HashSet}, cmp::min};
 use gcollections::ops::Bounded;
 
 use crate::{
-    circ2::PlaintextObject,
-    lang::{DimIndex, ArrayName, OffsetMap, Shape, ArrayTransform, DimContent},
-    scheduling::{ClientPreprocessing, DimName, IndexingSiteSchedule, HasExplodedDims, ScheduleDim, ExprSchedule, VectorScheduleDim, OffsetEnvironment}
+    circ::PlaintextObject,
+    lang::*,
+    scheduling::*,
 };
 
 use super::{IndexCoordinateSystem, IndexCoordinateMap, CircuitValue};

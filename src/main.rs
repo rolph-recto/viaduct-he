@@ -4,18 +4,11 @@ extern crate lalrpop_util;
 /// Vectorizer for homomorphic encryption circuits
 
 use clap::Parser;
-use egg::RecExpr;
 use log::*;
-use std::collections::HashMap;
 
 use he_vectorizer::{
-    circ::{
-        lowering::{
-            program::HEProgram,
-        },
-        optimizer::{HEOptCircuit, ExtractorType, Optimizer, HELatencyModel, HEGraph}, HECircuitStore, circ_gen::HECircuitGenerator, self,
-    },
-    lang::{ClientTransform, parser::ProgramParser, index_elim::IndexElimination},
+    lang::{parser::ProgramParser, index_elim::IndexElimination},
+    circ::optimizer::ExtractorType,
 };
 
 #[derive(Parser)]

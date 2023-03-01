@@ -8,143 +8,13 @@ use crate::{
     lang::{*,
         index_elim::{TransformedExpr, TransformedProgram, ArrayDim}
     },
-    circ2::{
+    circ::{
         IndexCoordinateMap,
+        optimizer::HEOptCircuit,
         vector_info::VectorInfo, CircuitValue
-    }, circ::optimizer::HEOptCircuit
+    }
 };
 
-pub type DimName = String;
-
-pub struct OffsetEnvironment {
-    index_map: HashMap<DimName, usize>,
-    function_values: HashMap<String, isize>,
-}
-
-impl OffsetEnvironment {
-    pub fn new(index_map: HashMap<DimName, usize>) -> Self {
-        OffsetEnvironment { index_map, function_values: HashMap::new() }
-    }
-
-    pub fn set_function_value(&mut self, func: String, value: isize) {
-        self.function_values.insert(func, value);
-    }
-}
-
-#[derive(Clone,Debug,PartialEq,Eq,Hash)]
-pub enum OffsetExpr {
-    Add(Box<OffsetExpr>, Box<OffsetExpr>),
-    Mul(Box<OffsetExpr>, Box<OffsetExpr>),
-    Literal(isize),
-    Var(DimName),
-    FunctionVar(String, im::Vector<DimName>),
-}
-
-impl OffsetExpr {
-    pub fn eval(&self, store: &OffsetEnvironment) -> isize {
-        match self {
-            OffsetExpr::Add(expr1, expr2) => {
-                let val1 = expr1.eval(store);
-                let val2 = expr2.eval(store);
-                val1 + val2
-            },
-
-            OffsetExpr::Mul(expr1, expr2) => {
-                let val1 = expr1.eval(store);
-                let val2 = expr2.eval(store);
-                val1 * val2
-            },
-
-            OffsetExpr::Literal(lit) => *lit,
-
-            OffsetExpr::Var(var) => store.index_map[var] as isize,
-
-            OffsetExpr::FunctionVar(func, _) => store.function_values[func],
-        }
-    }
-
-    pub fn const_value(&self) -> Option<isize> {
-        match self {
-            OffsetExpr::Add(expr1, expr2) => {
-                let const1 = expr1.const_value()?;
-                let const2 = expr2.const_value()?;
-                Some(const1 + const2)
-            },
-
-            OffsetExpr::Mul(expr1, expr2) => {
-                let const1 = expr1.const_value()?;
-                let const2 = expr2.const_value()?;
-                Some(const1 + const2)
-            },
-            
-            OffsetExpr::Literal(lit) => Some(*lit),
-
-            OffsetExpr::Var(_) => None,
-
-            OffsetExpr::FunctionVar(_, _) => None,
-        }
-    }
-
-    pub fn function_vars(&self) -> HashSet<String> {
-        match self {
-            OffsetExpr::Add(expr1, expr2) |
-            OffsetExpr::Mul(expr1, expr2) => {
-                let mut vars1 = expr1.function_vars();
-                let vars2 = expr2.function_vars();
-                vars1.extend(vars2);
-                vars1
-            },
-
-            OffsetExpr::Literal(_) | OffsetExpr::Var(_) =>
-                HashSet::new(),
-
-            OffsetExpr::FunctionVar(fvar, _) =>
-                HashSet::from([fvar.clone()])
-        }
-    }
-
-    pub fn to_opt_circuit_recur(&self, opt_expr: &mut RecExpr<HEOptCircuit>) -> egg::Id {
-        match self {
-            OffsetExpr::Add(_, _) => todo!(),
-            OffsetExpr::Mul(_, _) => todo!(),
-            OffsetExpr::Literal(_) => todo!(),
-            OffsetExpr::Var(_) => todo!(),
-            OffsetExpr::FunctionVar(_, _) => todo!(),
-        }
-    }
-}
-
-impl Display for OffsetExpr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            OffsetExpr::Add(expr1, expr2) => {
-                write!(f, "({} + {})", expr1, expr2)
-            },
-
-            OffsetExpr::Mul(expr1, expr2) => {
-                write!(f, "({} * {})", expr1, expr2)
-            },
-
-            OffsetExpr::Literal(lit) => {
-                write!(f, "{}", lit)
-            },
-
-            OffsetExpr::Var(var) => {
-                write!(f, "{}", var)
-            },
-
-            OffsetExpr::FunctionVar(func, vars) => {
-                write!(f, "{}{:?}", func, vars)
-            }
-        }
-    }
-}
-
-impl Default for OffsetExpr {
-    fn default() -> Self {
-        OffsetExpr::Literal(0)
-    }
-}
 
 // a schedule for a dimension
 #[derive(Clone,Debug,PartialEq,Eq,Hash)]
@@ -673,7 +543,7 @@ impl Schedule {
 
 #[cfg(test)]
 mod tests {
-    use crate::lang::{parser::ProgramParser, index_elim::IndexElimination, elaborated::Elaborator};
+    use crate::lang::{parser::ProgramParser, index_elim::IndexElimination, elaborated::Elaborator, source::SourceProgram};
     use super::*;
 
     // generate an initial schedule for a program
