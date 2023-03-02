@@ -1,14 +1,15 @@
 use egg::{RecExpr, Symbol};
 use itertools::Itertools;
-use std::{collections::{HashSet, HashMap, LinkedList}, fmt::Display, ops::Range};
+use std::{
+    collections::{HashMap, HashSet, LinkedList},
+    fmt::Display,
+    ops::Range,
+};
 
 use crate::{
-    circ::{
-        optimizer::HEOptCircuit,
-        vector_info::VectorInfo
-    },
+    circ::{optimizer::HEOptCircuit, vector_info::VectorInfo},
     lang::*,
-    scheduling::{ScheduleDim}, 
+    scheduling::ScheduleDim,
 };
 
 pub mod cost;
@@ -21,8 +22,11 @@ pub mod vector_info;
 pub type CircuitId = usize;
 pub type VarName = String;
 
-#[derive(Copy,Clone,Debug,PartialEq,Eq)]
-pub enum VectorType { Ciphertext, Plaintext }
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum VectorType {
+    Ciphertext,
+    Plaintext,
+}
 
 pub trait CanCreateObjectVar<T: CircuitObject> {
     fn obj_var(var: VarName) -> Self;
@@ -30,11 +34,11 @@ pub trait CanCreateObjectVar<T: CircuitObject> {
 
 /// parameterized circuit expr that represents an *array* of circuit exprs
 /// these exprs are parameterized by exploded dim coordinate variables
-/// 
+///
 /// Note that this is not a recursive data structure; instead it uses
 /// circuit ids to allow sharing of subcircuits---i.e. circuits can be DAGs,
 /// not just trees; this eases equality saturation and lowering
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub enum ParamCircuitExpr {
     CiphertextVar(VarName),
     PlaintextVar(VarName),
@@ -47,19 +51,15 @@ pub enum ParamCircuitExpr {
 impl ParamCircuitExpr {
     pub fn circuit_refs(&self) -> Vec<CircuitId> {
         match self {
-            ParamCircuitExpr::CiphertextVar(_) |
-            ParamCircuitExpr::PlaintextVar(_) |
-            ParamCircuitExpr::Literal(_) => 
-                vec![],
+            ParamCircuitExpr::CiphertextVar(_)
+            | ParamCircuitExpr::PlaintextVar(_)
+            | ParamCircuitExpr::Literal(_) => vec![],
 
-            ParamCircuitExpr::Op(_, id1, id2) =>
-                vec![*id1, *id2],
+            ParamCircuitExpr::Op(_, id1, id2) => vec![*id1, *id2],
 
-            ParamCircuitExpr::Rotate(_, id) =>
-                vec![*id],
+            ParamCircuitExpr::Rotate(_, id) => vec![*id],
 
-            ParamCircuitExpr::ReduceVectors(_, _, _, id) =>
-                vec![*id]
+            ParamCircuitExpr::ReduceVectors(_, _, _, id) => vec![*id],
         }
     }
 
@@ -114,27 +114,27 @@ impl Display for ParamCircuitExpr {
         match self {
             ParamCircuitExpr::CiphertextVar(name) => {
                 write!(f, "CT({})", name)
-            },
+            }
 
             ParamCircuitExpr::PlaintextVar(name) => {
                 write!(f, "PT({})", name)
-            },
+            }
 
             ParamCircuitExpr::Literal(lit) => {
                 write!(f, "{}", lit)
-            },
+            }
 
             ParamCircuitExpr::Op(op, expr1, expr2) => {
                 write!(f, "({} {} {})", expr1, op, expr2)
-            },
+            }
 
             ParamCircuitExpr::Rotate(offset, expr) => {
                 write!(f, "rot({}, {})", offset, expr)
-            },
+            }
 
             ParamCircuitExpr::ReduceVectors(index, _, op, expr) => {
                 write!(f, "reduce({}, {}, {})", index, op, expr)
-            },
+            }
         }
     }
 }
@@ -151,19 +151,14 @@ impl CanCreateObjectVar<PlaintextObject> for ParamCircuitExpr {
     }
 }
 
-
 pub type IndexCoord = im::Vector<usize>;
 
-#[derive(Debug,Clone)]
-pub struct IndexCoordinateSystem(Vec<(DimName,usize)>);
+#[derive(Debug, Clone)]
+pub struct IndexCoordinateSystem(Vec<(DimName, usize)>);
 
 impl IndexCoordinateSystem {
-    pub fn new<'a, A: Iterator<Item=&'a ScheduleDim>>(dims: A) -> Self {
-        IndexCoordinateSystem(
-            dims.map(|dim| {
-                (dim.name.clone(), dim.extent)
-            }).collect()
-        )
+    pub fn new<'a, A: Iterator<Item = &'a ScheduleDim>>(dims: A) -> Self {
+        IndexCoordinateSystem(dims.map(|dim| (dim.name.clone(), dim.extent)).collect())
     }
 
     pub fn from_dim_list(dims: Vec<(DimName, usize)>) -> IndexCoordinateSystem {
@@ -174,57 +169,59 @@ impl IndexCoordinateSystem {
         IndexCoordinateSystem(coord_system.0.clone())
     }
 
-    pub fn coord_iter(&self) -> impl Iterator<Item=im::Vector<usize>> + Clone {
-        self.0.iter()
-        .map(|(_, extent)| (0..*extent))
-        .multi_cartesian_product()
-        .into_iter()
-        .map(|coord| im::Vector::from(coord))
+    pub fn coord_iter(&self) -> impl Iterator<Item = im::Vector<usize>> + Clone {
+        self.0
+            .iter()
+            .map(|(_, extent)| (0..*extent))
+            .multi_cartesian_product()
+            .into_iter()
+            .map(|coord| im::Vector::from(coord))
     }
 
-    pub fn index_map_iter(&self) -> impl Iterator<Item=HashMap<DimName,usize>> + Clone {
+    pub fn index_map_iter(&self) -> impl Iterator<Item = HashMap<DimName, usize>> + Clone {
         let index_vars = self.index_vars();
-        self.coord_iter().map(move |coord| {
-            index_vars.clone().into_iter().zip(coord).collect()
-        })
+        self.coord_iter()
+            .map(move |coord| index_vars.clone().into_iter().zip(coord).collect())
     }
 
     // iterate through coordinates while fixing an index to be a subset of its range
-    pub fn coord_iter_subset(&self, dim: &DimName, range: Range<usize>) -> impl Iterator<Item=im::Vector<usize>> + Clone {
-        self.0.iter()
-        .map(|(idim, extent)| {
-            if idim == dim {
-                range.clone()
-
-            } else {
-                0..*extent
-            }
-        }).multi_cartesian_product()
-        .into_iter()
-        .map(|coord| im::Vector::from(coord))
+    pub fn coord_iter_subset(
+        &self,
+        dim: &DimName,
+        range: Range<usize>,
+    ) -> impl Iterator<Item = im::Vector<usize>> + Clone {
+        self.0
+            .iter()
+            .map(|(idim, extent)| {
+                if idim == dim {
+                    range.clone()
+                } else {
+                    0..*extent
+                }
+            })
+            .multi_cartesian_product()
+            .into_iter()
+            .map(|coord| im::Vector::from(coord))
     }
 
     pub fn index_vars(&self) -> Vec<String> {
-        self.0.iter()
-        .map(|(var, _)| var.clone())
-        .collect()
+        self.0.iter().map(|(var, _)| var.clone()).collect()
     }
 
     pub fn in_range(&self, coord: IndexCoord) -> bool {
         if self.0.len() == coord.len() {
-            self.0.iter()
-            .zip(coord.iter())
-            .map(|((_, extent), point)| *point <= *extent)
-            .all(|x| x)
-            
+            self.0
+                .iter()
+                .zip(coord.iter())
+                .map(|((_, extent), point)| *point <= *extent)
+                .all(|x| x)
         } else {
             false
         }
     }
 
     pub fn is_empty(&self) -> bool {
-        self.0.len() == 0 ||
-        self.0.iter().all(|(_, extent)| *extent == 0)
+        self.0.len() == 0 || self.0.iter().all(|(_, extent)| *extent == 0)
     }
 
     /// count how many items this coordinate system represents
@@ -237,54 +234,69 @@ impl IndexCoordinateSystem {
 #[derive(Debug)]
 pub struct IndexCoordinateMap<T> {
     coord_system: IndexCoordinateSystem,
-    coord_map: HashMap<IndexCoord, T>
+    coord_map: HashMap<IndexCoord, T>,
 }
 
 impl<T> IndexCoordinateMap<T> {
     pub fn new<'a, A: Iterator<Item = &'a ScheduleDim>>(dims: A) -> Self {
         let coord_system = IndexCoordinateSystem::new(dims);
         let coord_map: HashMap<IndexCoord, T> = HashMap::new();
-        IndexCoordinateMap { coord_system, coord_map }
+        IndexCoordinateMap {
+            coord_system,
+            coord_map,
+        }
     }
 
     pub fn from_coord_system(coord_system: IndexCoordinateSystem) -> Self {
-        IndexCoordinateMap { coord_system, coord_map: HashMap::new() }
+        IndexCoordinateMap {
+            coord_system,
+            coord_map: HashMap::new(),
+        }
     }
-    
-    pub fn coord_iter(&self) -> impl Iterator<Item=IndexCoord> + Clone {
+
+    pub fn coord_iter(&self) -> impl Iterator<Item = IndexCoord> + Clone {
         self.coord_system.coord_iter()
     }
 
-    pub fn index_map_iter(&self) -> impl Iterator<Item=HashMap<DimName,usize>> + Clone {
+    pub fn index_map_iter(&self) -> impl Iterator<Item = HashMap<DimName, usize>> + Clone {
         self.coord_system.index_map_iter()
     }
 
     pub fn coord_as_index_map(&self, coord: IndexCoord) -> HashMap<DimName, usize> {
-        self.coord_system.0.iter()
-        .map(|(dim_name, _)| dim_name.clone())
-        .zip(coord)
-        .collect()
+        self.coord_system
+            .0
+            .iter()
+            .map(|(dim_name, _)| dim_name.clone())
+            .zip(coord)
+            .collect()
     }
 
-    pub fn index_map_as_coord(&self, index_map: HashMap<DimName,usize>) -> IndexCoord {
-        self.coord_system.0.iter()
-        .map(|(dim_name, _)| index_map[dim_name])
-        .collect()
+    pub fn index_map_as_coord(&self, index_map: HashMap<DimName, usize>) -> IndexCoord {
+        self.coord_system
+            .0
+            .iter()
+            .map(|(dim_name, _)| index_map[dim_name])
+            .collect()
     }
 
-    pub fn coord_iter_subset(&self, dim: &DimName, range: Range<usize>) -> impl Iterator<Item=IndexCoord> + Clone {
+    pub fn coord_iter_subset(
+        &self,
+        dim: &DimName,
+        range: Range<usize>,
+    ) -> impl Iterator<Item = IndexCoord> + Clone {
         self.coord_system.coord_iter_subset(dim, range)
     }
 
-    pub fn value_iter(&self) -> impl Iterator<Item=(IndexCoord,Option<&T>)> + Clone {
+    pub fn value_iter(&self) -> impl Iterator<Item = (IndexCoord, Option<&T>)> + Clone {
         self.coord_iter().map(|coord| {
             let value = self.coord_map.get(&coord);
             (coord, value)
         })
     }
 
-    pub fn map<F,U>(&self, f: F) -> IndexCoordinateMap<U>
-        where F: Fn(&IndexCoord, &T) -> U
+    pub fn map<F, U>(&self, f: F) -> IndexCoordinateMap<U>
+    where
+        F: Fn(&IndexCoord, &T) -> U,
     {
         let mut coord_map = IndexCoordinateMap::from_coord_system(self.coord_system.clone());
         for (coord, value_opt) in self.value_iter() {
@@ -323,7 +335,6 @@ impl<T: Display> Display for IndexCoordinateMap<T> {
         self.value_iter().try_for_each(|(coord, value_opt)| {
             if let Some(value) = value_opt {
                 write!(f, "{:?} => {}\n", coord, value)
-
             } else {
                 write!(f, "{:?} => null\n", coord)
             }
@@ -336,10 +347,10 @@ pub trait CircuitObject {
     fn expr_vector(array: String, coord: IndexCoord) -> Self;
 }
 
-#[derive(Clone,Debug,PartialEq,Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CiphertextObject {
     InputVector(VectorInfo),
-    ExprVector(ArrayName, IndexCoord)
+    ExprVector(ArrayName, IndexCoord),
 }
 
 impl CircuitObject for CiphertextObject {
@@ -355,12 +366,11 @@ impl CircuitObject for CiphertextObject {
 impl Display for CiphertextObject {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CiphertextObject::InputVector(v) =>
-                write!(f, "{}", v),
+            CiphertextObject::InputVector(v) => write!(f, "{}", v),
 
             CiphertextObject::ExprVector(array, coords) => {
-                let coord_str =
-                    coords.iter()
+                let coord_str = coords
+                    .iter()
                     .map(|coord| format!("[{}]", coord))
                     .collect::<Vec<String>>()
                     .join("");
@@ -373,7 +383,7 @@ impl Display for CiphertextObject {
 
 pub type MaskVector = im::Vector<(usize, usize, usize)>;
 
-#[derive(Clone,Debug,PartialEq,Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PlaintextObject {
     InputVector(VectorInfo),
     ExprVector(ArrayName, IndexCoord),
@@ -381,7 +391,7 @@ pub enum PlaintextObject {
     // plaintext filled with a constant value
     Const(isize),
 
-    // plaintext of 1s and 0s used to mask 
+    // plaintext of 1s and 0s used to mask
     // the mask is a vector of (dim_size, lower, upper)
     // where [lower, upper) defines the interval filled with 1s;
     // values outside of this interval is 0, so when multiplied with a vector
@@ -400,18 +410,19 @@ impl CircuitObject for PlaintextObject {
 }
 
 impl Default for PlaintextObject {
-    fn default() -> Self { PlaintextObject::Const(1) }
+    fn default() -> Self {
+        PlaintextObject::Const(1)
+    }
 }
 
 impl Display for PlaintextObject {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PlaintextObject::InputVector(vector) =>
-                write!(f, "{}", vector),
+            PlaintextObject::InputVector(vector) => write!(f, "{}", vector),
 
             PlaintextObject::ExprVector(vector, coords) => {
-                let coords_str =
-                    coords.iter()
+                let coords_str = coords
+                    .iter()
                     .map(|coord| format!("[{}]", coord))
                     .collect::<Vec<String>>()
                     .join("");
@@ -419,11 +430,9 @@ impl Display for PlaintextObject {
                 write!(f, "{}{}", vector, coords_str)
             }
 
-            PlaintextObject::Const(lit) =>
-                write!(f, "{}", lit),
+            PlaintextObject::Const(lit) => write!(f, "{}", lit),
 
-            PlaintextObject::Mask(mask) =>
-                write!(f, "{:?}", mask),
+            PlaintextObject::Mask(mask) => write!(f, "{:?}", mask),
         }
     }
 }
@@ -432,22 +441,26 @@ impl Display for PlaintextObject {
 #[derive(Debug)]
 pub enum CircuitValue<T> {
     CoordMap(IndexCoordinateMap<T>),
-    Single(T)
+    Single(T),
 }
 
 impl<T> CircuitValue<T> {
-    pub fn map<U,F>(&self, f: F) -> CircuitValue<U> where F: Fn(&IndexCoord, &T)->U {
+    pub fn map<U, F>(&self, f: F) -> CircuitValue<U>
+    where
+        F: Fn(&IndexCoord, &T) -> U,
+    {
         match self {
-            CircuitValue::CoordMap(coord_map) => 
-                CircuitValue::CoordMap(coord_map.map(f)),
+            CircuitValue::CoordMap(coord_map) => CircuitValue::CoordMap(coord_map.map(f)),
 
-            CircuitValue::Single(obj) =>
-                CircuitValue::Single(f(&im::Vector::new(), obj))
+            CircuitValue::Single(obj) => CircuitValue::Single(f(&im::Vector::new(), obj)),
         }
     }
 }
 
-impl<T: Display> Display for CircuitValue<T> where T: Display {
+impl<T: Display> Display for CircuitValue<T>
+where
+    T: Display,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             CircuitValue::CoordMap(map) => write!(f, "{}", map),
@@ -466,7 +479,7 @@ pub trait CanRegisterObject<'a, T: CircuitObject> {
 #[derive(Debug)]
 pub struct CircuitObjectRegistry {
     pub circuit_map: HashMap<CircuitId, ParamCircuitExpr>,
-    pub cur_circuit_id: CircuitId, 
+    pub cur_circuit_id: CircuitId,
 
     pub ct_var_values: HashMap<VarName, CircuitValue<CiphertextObject>>,
     pub ct_var_id: usize,
@@ -704,17 +717,17 @@ impl<'a> CanRegisterObject<'a, PlaintextObject> for CircuitObjectRegistry {
 
 impl Display for CircuitObjectRegistry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.ct_var_values.iter().try_for_each(|(ct_var, val)| {
-            write!(f, "{} => \n{}\n", ct_var, val)
-        })?;
+        self.ct_var_values
+            .iter()
+            .try_for_each(|(ct_var, val)| write!(f, "{} => \n{}\n", ct_var, val))?;
 
-        self.pt_var_values.iter().try_for_each(|(pt_var, val)| {
-            write!(f, "{} => \n{}\n", pt_var, val)
-        })?;
+        self.pt_var_values
+            .iter()
+            .try_for_each(|(pt_var, val)| write!(f, "{} => \n{}\n", pt_var, val))?;
 
-        self.offset_fvar_values.iter().try_for_each(|(offset_var, val)| {
-            write!(f, "{} => \n{}\n", offset_var, val)
-        })?;
+        self.offset_fvar_values
+            .iter()
+            .try_for_each(|(offset_var, val)| write!(f, "{} => \n{}\n", offset_var, val))?;
 
         Ok(())
     }
@@ -724,7 +737,7 @@ impl Display for CircuitObjectRegistry {
 #[derive(Debug)]
 pub struct ParamCircuitProgram {
     pub registry: CircuitObjectRegistry,
-    pub expr_list: Vec<(String, Vec<(DimName,Extent)>, CircuitId)>
+    pub expr_list: Vec<(String, Vec<(DimName, Extent)>, CircuitId)>,
 }
 
 impl Display for ParamCircuitProgram {

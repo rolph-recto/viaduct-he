@@ -1,14 +1,14 @@
-use std::{fmt::Display, collections::{HashMap, HashSet}, cmp::min};
+use std::{
+    cmp::min,
+    collections::{HashMap, HashSet},
+    fmt::Display,
+};
 
 use gcollections::ops::Bounded;
 
-use crate::{
-    circ::PlaintextObject,
-    lang::*,
-    scheduling::*,
-};
+use crate::{circ::PlaintextObject, lang::*, scheduling::*};
 
-use super::{IndexCoordinateSystem, IndexCoordinateMap, CircuitValue};
+use super::{CircuitValue, IndexCoordinateMap, IndexCoordinateSystem};
 
 // like DimContent, but with padding information
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -16,27 +16,46 @@ pub enum VectorDimContent {
     // we assume that dimensions have the following structure
     // | pad_left | oob_left | extent | oob_right | pad_right |
     FilledDim {
-        dim: DimIndex, extent: usize, stride: usize,
+        dim: DimIndex,
+        extent: usize,
+        stride: usize,
 
         // out of bounds intervals
-        oob_left: usize, oob_right: usize,
-        
+        oob_left: usize,
+        oob_right: usize,
+
         // padding
-        pad_left: usize, pad_right: usize,
+        pad_left: usize,
+        pad_right: usize,
     },
 
     // dim that has repeated elements from other dims
-    EmptyDim { extent: usize, pad_left: usize, pad_right: usize, oob_right: usize, },
+    EmptyDim {
+        extent: usize,
+        pad_left: usize,
+        pad_right: usize,
+        oob_right: usize,
+    },
 
     // dim with a reduced element in its first coordinate
-    ReducedDim { extent: usize, pad_left: usize, pad_right: usize, },
+    ReducedDim {
+        extent: usize,
+        pad_left: usize,
+        pad_right: usize,
+    },
 }
 
 impl Display for VectorDimContent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             VectorDimContent::FilledDim {
-                dim, extent, stride, oob_left, oob_right, pad_left, pad_right
+                dim,
+                extent,
+                stride,
+                oob_left,
+                oob_right,
+                pad_left,
+                pad_right,
             } => {
                 let mut extra: String = String::new();
 
@@ -49,9 +68,14 @@ impl Display for VectorDimContent {
                 }
 
                 write!(f, "{{{}:{}::{}{}}}", dim, extent, stride, extra)
-            },
+            }
 
-            VectorDimContent::EmptyDim { extent, pad_left, pad_right, oob_right } => {
+            VectorDimContent::EmptyDim {
+                extent,
+                pad_left,
+                pad_right,
+                oob_right,
+            } => {
                 let mut extra: String = String::new();
                 if *pad_left != 0 || *pad_right != 0 {
                     extra.push_str(&format!("[pad=({},{})]", pad_left, pad_right));
@@ -62,16 +86,19 @@ impl Display for VectorDimContent {
                 }
 
                 write!(f, "{{{}{}}}", extent, extra)
-            },
+            }
 
-            VectorDimContent::ReducedDim { extent, pad_left, pad_right } => {
+            VectorDimContent::ReducedDim {
+                extent,
+                pad_left,
+                pad_right,
+            } => {
                 if *pad_left != 0 || *pad_right != 0 {
                     write!(f, "{{R{}[pad=({},{})]}}", extent, pad_left, pad_right)
-
                 } else {
                     write!(f, "{{R{}}}", extent)
                 }
-            },
+            }
         }
     }
 }
@@ -80,25 +107,32 @@ impl VectorDimContent {
     pub fn size(&self) -> usize {
         match self {
             VectorDimContent::FilledDim {
-                dim: _, extent, stride: _,
-                oob_left, oob_right,
-                pad_left, pad_right
-            } => {
-                pad_left + oob_left + extent + oob_right + pad_right
-            }
+                dim: _,
+                extent,
+                stride: _,
+                oob_left,
+                oob_right,
+                pad_left,
+                pad_right,
+            } => pad_left + oob_left + extent + oob_right + pad_right,
 
-            VectorDimContent::EmptyDim { extent, pad_left, pad_right, oob_right } => {
-                pad_left + (*extent) + pad_right + oob_right
-            },
+            VectorDimContent::EmptyDim {
+                extent,
+                pad_left,
+                pad_right,
+                oob_right,
+            } => pad_left + (*extent) + pad_right + oob_right,
 
-            VectorDimContent::ReducedDim { extent, pad_left, pad_right } => {
-                pad_left + (*extent) + pad_right
-            },
+            VectorDimContent::ReducedDim {
+                extent,
+                pad_left,
+                pad_right,
+            } => pad_left + (*extent) + pad_right,
         }
     }
 }
 
-#[derive(Clone,Debug,PartialEq,Eq,Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct VectorInfo {
     pub array: ArrayName,
     pub preprocessing: Option<ClientPreprocessing>,
@@ -109,20 +143,26 @@ pub struct VectorInfo {
 impl Display for VectorInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(preprocess) = self.preprocessing {
-            write!(f, "{}({})[{}]<{}>",
+            write!(
+                f,
+                "{}({})[{}]<{}>",
                 self.array,
                 preprocess,
                 self.offset_map,
-                self.dims.iter()
+                self.dims
+                    .iter()
                     .map(|dim| dim.to_string())
                     .collect::<Vec<String>>()
                     .join(", ")
             )
         } else {
-            write!(f, "{}[{}]<{}>",
+            write!(
+                f,
+                "{}[{}]<{}>",
                 self.array,
                 self.offset_map,
-                self.dims.iter()
+                self.dims
+                    .iter()
                     .map(|dim| dim.to_string())
                     .collect::<Vec<String>>()
                     .join(", ")
@@ -143,7 +183,11 @@ impl VectorInfo {
         let transform_dim_offset = transform_offset_map.get(dim.index);
         match dim_content {
             // clip dimension to (0, array dimension's extent)
-            DimContent::FilledDim { dim: idim, extent: transform_extent, stride: istride } => {
+            DimContent::FilledDim {
+                dim: idim,
+                extent: transform_extent,
+                stride: istride,
+            } => {
                 let dim_offset = *clipped_offset_map.get(*idim);
                 let array_extent = shape[*idim].upper() as usize;
                 let new_stride = *istride * dim.stride;
@@ -153,25 +197,29 @@ impl VectorInfo {
                 while dim_offset + ((oob_left * new_stride) as isize) < 0 {
                     oob_left += 1;
                 }
-                
+
                 // indexing beyond array_extent; clip
                 let mut oob_right: usize = 0;
-                while dim_offset + ((new_stride * (dim.extent - 1 - oob_right)) as isize) >= array_extent as isize {
+                while dim_offset + ((new_stride * (dim.extent - 1 - oob_right)) as isize)
+                    >= array_extent as isize
+                {
                     oob_right += 1;
                 }
 
-                while transform_dim_offset + (dim.stride * (dim.extent - 1 - oob_right)) >= *transform_extent {
+                while transform_dim_offset + (dim.stride * (dim.extent - 1 - oob_right))
+                    >= *transform_extent
+                {
                     oob_right += 1;
                 }
 
                 // increment offset by oob_left
                 let cur_offset = *clipped_offset_map.get(*idim);
                 clipped_offset_map.set(*idim, cur_offset + ((oob_left * new_stride) as isize));
-                
-                let new_extent_signed = 
+
+                let new_extent_signed =
                     (dim.extent as isize) - (oob_left as isize) - (oob_right as isize);
 
-                if new_extent_signed >= 0 { 
+                if new_extent_signed >= 0 {
                     VectorDimContent::FilledDim {
                         dim: *idim,
                         extent: new_extent_signed as usize,
@@ -181,8 +229,8 @@ impl VectorInfo {
                         pad_left: dim.pad_left,
                         pad_right: dim.pad_right,
                     }
-
-                } else { // make entire dim OOB
+                } else {
+                    // make entire dim OOB
                     VectorDimContent::FilledDim {
                         dim: *idim,
                         extent: 0,
@@ -192,13 +240,16 @@ impl VectorInfo {
                         pad_left: dim.pad_left,
                         pad_right: dim.pad_right,
                     }
-
                 }
-            },
+            }
 
-            DimContent::EmptyDim { extent: transform_extent } => {
+            DimContent::EmptyDim {
+                extent: transform_extent,
+            } => {
                 let mut oob_right: usize = 0;
-                while transform_dim_offset + (dim.stride * (dim.extent - 1 - oob_right)) >= *transform_extent {
+                while transform_dim_offset + (dim.stride * (dim.extent - 1 - oob_right))
+                    >= *transform_extent
+                {
                     oob_right += 1;
                 }
 
@@ -222,18 +273,23 @@ impl VectorInfo {
     ) -> Self {
         let offset_env = OffsetEnvironment::new(index_map);
 
-        let mut clipped_offset_map =
-            schedule.get_indexed_offset_map(transform)
+        let mut clipped_offset_map = schedule
+            .get_indexed_offset_map(transform)
             .map(|offset| offset.eval(&offset_env));
 
-        let transform_offset_map =
-            schedule.get_transform_offset_map(transform)
+        let transform_offset_map = schedule
+            .get_transform_offset_map(transform)
             .map(|offset| usize::try_from(offset.eval(&offset_env)).unwrap());
 
         let mut materialized_dims: im::Vector<VectorDimContent> = im::Vector::new();
         for dim in schedule.vectorized_dims.iter() {
-            let materialized_dim =
-                VectorInfo::process_schedule_dim(shape, transform, &mut clipped_offset_map, &transform_offset_map, dim);
+            let materialized_dim = VectorInfo::process_schedule_dim(
+                shape,
+                transform,
+                &mut clipped_offset_map,
+                &transform_offset_map,
+                dim,
+            );
             materialized_dims.push_back(materialized_dim);
         }
 
@@ -255,29 +311,26 @@ impl VectorInfo {
         if !coord_system.is_empty() {
             let mut coord_map = IndexCoordinateMap::from_coord_system(coord_system);
             for index_map in coord_map.index_map_iter() {
-                let vector =
-                    VectorInfo::get_input_vector_at_coord(
-                        index_map.clone(),
-                        shape,
-                        schedule,
-                        transform,
-                        preprocessing
-                    );
+                let vector = VectorInfo::get_input_vector_at_coord(
+                    index_map.clone(),
+                    shape,
+                    schedule,
+                    transform,
+                    preprocessing,
+                );
 
                 coord_map.set(coord_map.index_map_as_coord(index_map), vector);
             }
 
             CircuitValue::CoordMap(coord_map)
-
         } else {
-            let vector =
-                VectorInfo::get_input_vector_at_coord(
-                    HashMap::new(),
-                    shape,
-                    schedule,
-                    transform,
-                    preprocessing
-                );
+            let vector = VectorInfo::get_input_vector_at_coord(
+                HashMap::new(),
+                shape,
+                schedule,
+                transform,
+                preprocessing,
+            );
 
             CircuitValue::Single(vector)
         }
@@ -289,36 +342,32 @@ impl VectorInfo {
         expr_schedule: &ExprSchedule,
         preprocessing: Option<ClientPreprocessing>,
     ) -> Self {
-        let transform =
-            ArrayTransform::from_shape(array, &expr_schedule.shape);
+        let transform = ArrayTransform::from_shape(array, &expr_schedule.shape);
 
         let offset_env = OffsetEnvironment::new(index_map);
 
-        let mut clipped_offset_map =
-            expr_schedule.get_indexed_offset_map(&transform)
+        let mut clipped_offset_map = expr_schedule
+            .get_indexed_offset_map(&transform)
             .map(|offset| offset.eval(&offset_env));
 
-        let transform_offset_map =
-            expr_schedule.get_transform_offset_map(&transform)
+        let transform_offset_map = expr_schedule
+            .get_transform_offset_map(&transform)
             .map(|offset| offset.eval(&offset_env) as usize);
 
         let mut materialized_dims: im::Vector<VectorDimContent> = im::Vector::new();
         for dim in expr_schedule.vectorized_dims.iter() {
-            let materialized_dim =
-                match dim {
-                    VectorScheduleDim::Filled(sched_dim) => {
-                        VectorInfo::process_schedule_dim(
-                            &expr_schedule.shape,
-                            &transform,
-                            &mut clipped_offset_map,
-                            &transform_offset_map,
-                            sched_dim
-                        )
-                    },
+            let materialized_dim = match dim {
+                VectorScheduleDim::Filled(sched_dim) => VectorInfo::process_schedule_dim(
+                    &expr_schedule.shape,
+                    &transform,
+                    &mut clipped_offset_map,
+                    &transform_offset_map,
+                    sched_dim,
+                ),
 
-                    VectorScheduleDim::Reduced(_) => todo!(),
-                    VectorScheduleDim::ReducedRepeated(_) => todo!(),
-                };
+                VectorScheduleDim::Reduced(_) => todo!(),
+                VectorScheduleDim::ReducedRepeated(_) => todo!(),
+            };
 
             materialized_dims.push_back(materialized_dim);
         }
@@ -337,16 +386,14 @@ impl VectorInfo {
 
         if self.dims.len() != other.dims.len() {
             None
-
         } else if self == other {
             Some((0, PlaintextObject::Const(1)))
-
         } else {
             let mut seen_dims: HashSet<DimIndex> = HashSet::new();
             let mut dims_to_fill: Vec<usize> = Vec::new();
 
             // check derivability conditions
-            let dims_derivable = 
+            let dims_derivable =
                 self.dims.iter()
                 .zip(other.dims.iter())
                 .all(|(dim1, dim2)| {
@@ -394,7 +441,7 @@ impl VectorInfo {
                             same_dim && dim_unseen && same_stride && offset_equiv &&
                             same_size && in_extent && self_no_oob
                         },
-                        
+
                         // empty dims will not be rotated for derivation, but
                         // but they might need to be masked
                         (EmptyDim { extent: extent1, pad_left: pad_left1, pad_right: pad_right1, oob_right: oob_right1 },
@@ -438,29 +485,37 @@ impl VectorInfo {
                 });
 
             let mut nonvectorized_dims =
-                (0..min(self.offset_map.num_dims(), other.offset_map.num_dims()))
-                .filter(|dim| {
-                    !self.dims.iter().any(|dim2_content| {
-                        match dim2_content {
-                            FilledDim {
-                                dim: dim2, extent: _, stride: _,
-                                oob_left: _, oob_right: _, pad_left: _, pad_right: _,
-                            } => dim == dim2,
+                (0..min(self.offset_map.num_dims(), other.offset_map.num_dims())).filter(|dim| {
+                    !self.dims.iter().any(|dim2_content| match dim2_content {
+                        FilledDim {
+                            dim: dim2,
+                            extent: _,
+                            stride: _,
+                            oob_left: _,
+                            oob_right: _,
+                            pad_left: _,
+                            pad_right: _,
+                        } => dim == dim2,
 
-                            EmptyDim { extent: _, pad_left: _, pad_right : _, oob_right: _ } |
-                            ReducedDim { extent: _, pad_left: _, pad_right : _ } => false,
+                        EmptyDim {
+                            extent: _,
+                            pad_left: _,
+                            pad_right: _,
+                            oob_right: _,
                         }
+                        | ReducedDim {
+                            extent: _,
+                            pad_left: _,
+                            pad_right: _,
+                        } => false,
                     })
                 });
 
-            let nonvectorized_dims_equal_offsets = 
-                nonvectorized_dims.all(|dim| {
-                    self.offset_map.get(dim) == other.offset_map.get(dim)
-                });
+            let nonvectorized_dims_equal_offsets =
+                nonvectorized_dims.all(|dim| self.offset_map.get(dim) == other.offset_map.get(dim));
 
             if self.array != other.array || !dims_derivable || !nonvectorized_dims_equal_offsets {
                 None
-
             } else {
                 let mut block_size: usize = 1;
                 let mut rotate_steps = 0;
@@ -502,7 +557,7 @@ impl VectorInfo {
                             // assume that the dimensions are laid out in the parent like:
                             // wrapl_content1 | wrapl pad_right | pad_left1 | oob_left1 | content1 | oob_right1 | pad_right1 | wrapr pad_left1 | wrapr_content1
 
-                            let wrapl_content1_hi = 
+                            let wrapl_content1_hi =
                                 dim_steps - (pad_right1 as isize) - 1;
 
                             let content1_lo =
@@ -511,7 +566,7 @@ impl VectorInfo {
                             let content1_hi =
                                 dim_steps + ((pad_left1 + oob_left1 + extent1) as isize) - 1;
 
-                            let wrapr_content1_lo = 
+                            let wrapr_content1_lo =
                                 dim_steps + ((dim_size + pad_left1) as isize);
 
                             let oob_left2_lo = pad_left2 as isize;
@@ -544,7 +599,7 @@ impl VectorInfo {
 
                             // if the OOB right interval in derived vector is nonempty
                             // and parent's contents intersect with it, mask OOB right in derived
-                            let mask_hi_opt = 
+                            let mask_hi_opt =
                                 if oob_right2_hi != oob_right2_lo && oob_right2_intersect {
                                     Some(dim_size - pad_right2 - oob_right2 - 1)
 
@@ -565,7 +620,7 @@ impl VectorInfo {
 
                             mask_dim_info.push((dim_size, dim_mask));
                         },
-                        
+
                         (EmptyDim { extent: extent1, pad_left: pad_left1, pad_right: pad_right1, oob_right: oob_right1 },
                         EmptyDim { extent: extent2, pad_left: pad_left2, pad_right: pad_right2, oob_right: oob_right2 }) => {
                             let dim_size = pad_left1 + extent1 + pad_right1 + oob_right1;
@@ -579,7 +634,6 @@ impl VectorInfo {
                                 } else {
                                     Some((pad_left2, dim_size - pad_right2 - oob_right2 -1))
                                 };
- 
                             mask_dim_info.push((dim_size, dim_mask));
                         },
 
@@ -612,25 +666,21 @@ impl VectorInfo {
                     }
                 });
 
-                let is_mask_const =
-                    mask_dim_info.iter()
-                    .all(|(_, dim_mask)| dim_mask.is_none());
+                let is_mask_const = mask_dim_info.iter().all(|(_, dim_mask)| dim_mask.is_none());
 
-                let mask =
-                    if is_mask_const {
-                        PlaintextObject::Const(1)
+                let mask = if is_mask_const {
+                    PlaintextObject::Const(1)
+                } else {
+                    let mask = mask_dim_info
+                        .into_iter()
+                        .map(|(dim_size, dim_mask)| match dim_mask {
+                            Some((lo, hi)) => (dim_size, lo, hi),
+                            None => (dim_size, 0, dim_size - 1),
+                        })
+                        .collect();
 
-                    } else {
-                        let mask =
-                            mask_dim_info.into_iter().map(|(dim_size, dim_mask)| {
-                                match dim_mask {
-                                    Some((lo, hi)) => (dim_size, lo, hi),
-                                    None => (dim_size, 0, dim_size - 1)
-                                }
-                            }).collect();
-
-                        PlaintextObject::Mask(mask)
-                    };
+                    PlaintextObject::Mask(mask)
+                };
 
                 Some((rotate_steps, mask))
             }
@@ -645,13 +695,12 @@ mod tests {
     #[test]
     fn test_vector_derive() {
         // vec1 equals vec2
-        let vec1 = 
-            VectorInfo {
-                array: String::from("a"),
-                preprocessing: None,
-                offset_map: OffsetMap::new(2),
-                dims: im::vector![],
-            };
+        let vec1 = VectorInfo {
+            array: String::from("a"),
+            preprocessing: None,
+            offset_map: OffsetMap::new(2),
+            dims: im::vector![],
+        };
 
         assert!(vec1.derive(&vec1).is_some())
     }
@@ -659,39 +708,37 @@ mod tests {
     #[test]
     fn test_vector_derive1b() {
         // vec1: 0 1 2 3
-        let vec1 = 
-            VectorInfo {
-                array: String::from("a"),
-                preprocessing: None,
-                offset_map: OffsetMap::new(2),
-                dims: im::vector![
-                    VectorDimContent::FilledDim {
-                        dim: 0,
-                        extent: 4,
-                        stride: 1,
-                        oob_left: 0, oob_right: 0,
-                        pad_left: 0, pad_right: 0,
-                    }
-                ],
-            };
+        let vec1 = VectorInfo {
+            array: String::from("a"),
+            preprocessing: None,
+            offset_map: OffsetMap::new(2),
+            dims: im::vector![VectorDimContent::FilledDim {
+                dim: 0,
+                extent: 4,
+                stride: 1,
+                oob_left: 0,
+                oob_right: 0,
+                pad_left: 0,
+                pad_right: 0,
+            }],
+        };
 
         // vec2: 0 1 2 3
         let offset2: OffsetMap<isize> = OffsetMap::new(2);
-        let vec2= 
-            VectorInfo {
-                array: String::from("a"),
-                preprocessing: None,
-                offset_map: offset2,
-                dims: im::vector![
-                    VectorDimContent::FilledDim {
-                        dim: 0,
-                        extent: 4,
-                        stride: 1,
-                        oob_left: 0, oob_right: 0,
-                        pad_left: 0, pad_right: 0,
-                    }
-                ],
-            };
+        let vec2 = VectorInfo {
+            array: String::from("a"),
+            preprocessing: None,
+            offset_map: offset2,
+            dims: im::vector![VectorDimContent::FilledDim {
+                dim: 0,
+                extent: 4,
+                stride: 1,
+                oob_left: 0,
+                oob_right: 0,
+                pad_left: 0,
+                pad_right: 0,
+            }],
+        };
 
         let res = vec1.derive(&vec2).unwrap();
         println!("{:?}", res);
@@ -702,24 +749,22 @@ mod tests {
 
     #[test]
     fn test_vector_derive2() {
-        let vec1 = 
-            VectorInfo {
-                array: String::from("a"),
-                preprocessing: None,
-                offset_map: OffsetMap::new(2),
-                dims: im::vector![],
-            };
+        let vec1 = VectorInfo {
+            array: String::from("a"),
+            preprocessing: None,
+            offset_map: OffsetMap::new(2),
+            dims: im::vector![],
+        };
 
         let mut offset2: OffsetMap<isize> = OffsetMap::new(2);
         offset2.set(0, 1);
 
-        let vec2= 
-            VectorInfo {
-                array: String::from("a"),
-                preprocessing: None,
-                offset_map: offset2,
-                dims: im::vector![],
-            };
+        let vec2 = VectorInfo {
+            array: String::from("a"),
+            preprocessing: None,
+            offset_map: offset2,
+            dims: im::vector![],
+        };
 
         // offsets of nonvectorized dims don't match, no derivation
         assert!(vec1.derive(&vec2).is_none())
@@ -728,41 +773,39 @@ mod tests {
     #[test]
     fn test_vector_derive3() {
         // vec1: 0 1 2 3
-        let vec1 = 
-            VectorInfo {
-                array: String::from("a"),
-                preprocessing: None,
-                offset_map: OffsetMap::new(2),
-                dims: im::vector![
-                    VectorDimContent::FilledDim {
-                        dim: 0,
-                        extent: 4,
-                        stride: 1,
-                        oob_left: 0, oob_right: 0,
-                        pad_left: 0, pad_right: 0,
-                    }
-                ],
-            };
+        let vec1 = VectorInfo {
+            array: String::from("a"),
+            preprocessing: None,
+            offset_map: OffsetMap::new(2),
+            dims: im::vector![VectorDimContent::FilledDim {
+                dim: 0,
+                extent: 4,
+                stride: 1,
+                oob_left: 0,
+                oob_right: 0,
+                pad_left: 0,
+                pad_right: 0,
+            }],
+        };
 
         let mut offset2: OffsetMap<isize> = OffsetMap::new(2);
         offset2.set(0, 1);
 
         // vec2: x 1 2 3
-        let vec2= 
-            VectorInfo {
-                array: String::from("a"),
-                preprocessing: None,
-                offset_map: offset2,
-                dims: im::vector![
-                    VectorDimContent::FilledDim {
-                        dim: 0,
-                        extent: 3,
-                        stride: 1,
-                        oob_left: 1, oob_right: 0,
-                        pad_left: 0, pad_right: 0,
-                    }
-                ],
-            };
+        let vec2 = VectorInfo {
+            array: String::from("a"),
+            preprocessing: None,
+            offset_map: offset2,
+            dims: im::vector![VectorDimContent::FilledDim {
+                dim: 0,
+                extent: 3,
+                stride: 1,
+                oob_left: 1,
+                oob_right: 0,
+                pad_left: 0,
+                pad_right: 0,
+            }],
+        };
 
         let res = vec1.derive(&vec2).unwrap();
         println!("{:?}", res);
@@ -775,38 +818,36 @@ mod tests {
     #[test]
     fn test_vector_derive4() {
         // vec1 = 0 1 2 3
-        let vec1 = 
-            VectorInfo {
-                array: String::from("a"),
-                preprocessing: None,
-                offset_map: OffsetMap::new(2),
-                dims: im::vector![
-                    VectorDimContent::FilledDim {
-                        dim: 0,
-                        extent: 4,
-                        stride: 1,
-                        oob_left: 0, oob_right: 0,
-                        pad_left: 0, pad_right: 0,
-                    }
-                ],
-            };
+        let vec1 = VectorInfo {
+            array: String::from("a"),
+            preprocessing: None,
+            offset_map: OffsetMap::new(2),
+            dims: im::vector![VectorDimContent::FilledDim {
+                dim: 0,
+                extent: 4,
+                stride: 1,
+                oob_left: 0,
+                oob_right: 0,
+                pad_left: 0,
+                pad_right: 0,
+            }],
+        };
 
         // vec2 = 0 1 2 x
-        let vec2= 
-            VectorInfo {
-                array: String::from("a"),
-                preprocessing: None,
-                offset_map: OffsetMap::new(2),
-                dims: im::vector![
-                    VectorDimContent::FilledDim {
-                        dim: 0,
-                        extent: 3,
-                        stride: 1,
-                        oob_left: 0, oob_right: 1,
-                        pad_left: 0, pad_right: 0,
-                    }
-                ],
-            };
+        let vec2 = VectorInfo {
+            array: String::from("a"),
+            preprocessing: None,
+            offset_map: OffsetMap::new(2),
+            dims: im::vector![VectorDimContent::FilledDim {
+                dim: 0,
+                extent: 3,
+                stride: 1,
+                oob_left: 0,
+                oob_right: 1,
+                pad_left: 0,
+                pad_right: 0,
+            }],
+        };
 
         // vec can be masked to get vec2
         let res = vec1.derive(&vec2).unwrap();
@@ -818,39 +859,37 @@ mod tests {
     #[test]
     fn test_vector_derive6() {
         // vec1: 0 1 2 3
-        let vec1 = 
-            VectorInfo {
-                array: String::from("a"),
-                preprocessing: None,
-                offset_map: OffsetMap::new(2),
-                dims: im::vector![
-                    VectorDimContent::FilledDim {
-                        dim: 0,
-                        extent: 4,
-                        stride: 1,
-                        oob_left: 0, oob_right: 0,
-                        pad_left: 0, pad_right: 0,
-                    }
-                ],
-            };
+        let vec1 = VectorInfo {
+            array: String::from("a"),
+            preprocessing: None,
+            offset_map: OffsetMap::new(2),
+            dims: im::vector![VectorDimContent::FilledDim {
+                dim: 0,
+                extent: 4,
+                stride: 1,
+                oob_left: 0,
+                oob_right: 0,
+                pad_left: 0,
+                pad_right: 0,
+            }],
+        };
 
         // vec2: x 0 1 2
         let offset2: OffsetMap<isize> = OffsetMap::new(2);
-        let vec2= 
-            VectorInfo {
-                array: String::from("a"),
-                preprocessing: None,
-                offset_map: offset2,
-                dims: im::vector![
-                    VectorDimContent::FilledDim {
-                        dim: 0,
-                        extent: 3,
-                        stride: 1,
-                        oob_left: 1, oob_right: 0,
-                        pad_left: 0, pad_right: 0,
-                    }
-                ],
-            };
+        let vec2 = VectorInfo {
+            array: String::from("a"),
+            preprocessing: None,
+            offset_map: offset2,
+            dims: im::vector![VectorDimContent::FilledDim {
+                dim: 0,
+                extent: 3,
+                stride: 1,
+                oob_left: 1,
+                oob_right: 0,
+                pad_left: 0,
+                pad_right: 0,
+            }],
+        };
 
         let res = vec1.derive(&vec2).unwrap();
         println!("{:?}", res);
@@ -864,53 +903,51 @@ mod tests {
     fn test_vector_derive7() {
         // vec1: R X X X
         // (R is reduced value)
-        let vec1 = 
-            VectorInfo {
-                array: String::from("a"),
-                preprocessing: None,
-                offset_map: OffsetMap::new(2),
-                dims: im::vector![
-                    VectorDimContent::FilledDim {
-                        dim: 0,
-                        stride: 1,
-                        extent: 4,
-                        pad_left: 0,
-                        pad_right: 0,
-                        oob_left: 0,
-                        oob_right: 0,
-                    },
-                    VectorDimContent::ReducedDim {
-                        extent: 4,
-                        pad_left: 0,
-                        pad_right: 0,
-                    },
-                ],
-            };
+        let vec1 = VectorInfo {
+            array: String::from("a"),
+            preprocessing: None,
+            offset_map: OffsetMap::new(2),
+            dims: im::vector![
+                VectorDimContent::FilledDim {
+                    dim: 0,
+                    stride: 1,
+                    extent: 4,
+                    pad_left: 0,
+                    pad_right: 0,
+                    oob_left: 0,
+                    oob_right: 0,
+                },
+                VectorDimContent::ReducedDim {
+                    extent: 4,
+                    pad_left: 0,
+                    pad_right: 0,
+                },
+            ],
+        };
 
         let offset2: OffsetMap<isize> = OffsetMap::new(2);
-        let vec2= 
-            VectorInfo {
-                array: String::from("a"),
-                preprocessing: None,
-                offset_map: offset2,
-                dims: im::vector![
-                    VectorDimContent::FilledDim {
-                        dim: 0,
-                        stride: 1,
-                        extent: 4,
-                        pad_left: 0,
-                        pad_right: 0,
-                        oob_left: 0,
-                        oob_right: 0,
-                    },
-                    VectorDimContent::EmptyDim {
-                        extent: 4,
-                        pad_left: 0,
-                        pad_right: 0,
-                        oob_right: 0,
-                    }
-                ],
-            };
+        let vec2 = VectorInfo {
+            array: String::from("a"),
+            preprocessing: None,
+            offset_map: offset2,
+            dims: im::vector![
+                VectorDimContent::FilledDim {
+                    dim: 0,
+                    stride: 1,
+                    extent: 4,
+                    pad_left: 0,
+                    pad_right: 0,
+                    oob_left: 0,
+                    oob_right: 0,
+                },
+                VectorDimContent::EmptyDim {
+                    extent: 4,
+                    pad_left: 0,
+                    pad_right: 0,
+                    oob_right: 0,
+                }
+            ],
+        };
 
         let res = vec1.derive(&vec2).unwrap();
         println!("{:?}", res);

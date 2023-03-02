@@ -1,6 +1,6 @@
-use egg::*;
-use std::{collections::HashMap, cmp::Ordering};
 use crate::circ::optimizer::*;
+use egg::*;
+use std::{cmp::Ordering, collections::HashMap};
 
 #[derive(Debug, Clone)]
 pub(crate) struct HECost {
@@ -10,7 +10,7 @@ pub(crate) struct HECost {
 
 impl HECost {
     fn cost(&self) -> f64 {
-        (self.muldepth+1) as f64 * self.latency
+        (self.muldepth + 1) as f64 * self.latency
     }
 }
 
@@ -35,24 +35,28 @@ impl<'a> CostFunction<HEOptCircuit> for HECostFunction<'a> {
     type Cost = HECost;
 
     fn cost<C>(&mut self, enode: &HEOptCircuit, mut costs: C) -> Self::Cost
-        where C: FnMut(Id) -> Self::Cost
+    where
+        C: FnMut(Id) -> Self::Cost,
     {
-        let child_muldepth =
-            enode.children().iter().fold(0, |acc, child| {
-                max(acc, costs(*child).muldepth)
-            });
+        let child_muldepth = enode
+            .children()
+            .iter()
+            .fold(0, |acc, child| max(acc, costs(*child).muldepth));
 
-        let child_latency: f64 =
-            enode.children().iter().map(|child| costs(*child).latency).sum();
+        let child_latency: f64 = enode
+            .children()
+            .iter()
+            .map(|child| costs(*child).latency)
+            .sum();
 
-        let is_plainop =
-            enode.children().iter().any(|child| {
-                self.egraph[*child].data.constval.is_some()
-            });
+        let is_plainop = enode
+            .children()
+            .iter()
+            .any(|child| self.egraph[*child].data.constval.is_some());
 
         let mut muldepth = child_muldepth;
-        let latency = 
-            child_latency + match enode {
+        let latency = child_latency
+            + match enode {
                 HEOptCircuit::Num(_) => self.latency.num,
 
                 HEOptCircuit::Add(_) => {
@@ -61,7 +65,7 @@ impl<'a> CostFunction<HEOptCircuit> for HECostFunction<'a> {
                     } else {
                         self.latency.add
                     }
-                },
+                }
 
                 HEOptCircuit::Sub(_) => {
                     if is_plainop {
@@ -69,7 +73,7 @@ impl<'a> CostFunction<HEOptCircuit> for HECostFunction<'a> {
                     } else {
                         self.latency.sub
                     }
-                },
+                }
 
                 HEOptCircuit::Mul(_) => {
                     if is_plainop {
@@ -78,7 +82,7 @@ impl<'a> CostFunction<HEOptCircuit> for HECostFunction<'a> {
                         muldepth += 1;
                         self.latency.mul
                     }
-                },
+                }
 
                 HEOptCircuit::Rot(_) => self.latency.rot,
 

@@ -1,12 +1,11 @@
 /// program.rs
 /// instruction representation of HE programs
-
 use pretty::RcDoc;
 use std::collections::HashMap;
 use std::fmt::{self, Display};
 
-use crate::circ::{MaskVector, vector_info::VectorInfo};
-use crate::lang::{Extent, ArrayName, OffsetExpr};
+use crate::circ::{vector_info::VectorInfo, MaskVector};
+use crate::lang::{ArrayName, Extent, OffsetExpr};
 
 pub type InstructionId = usize;
 
@@ -21,11 +20,9 @@ pub enum HEIndex {
 impl Display for HEIndex {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            HEIndex::Var(var) =>
-                write!(f, "{}", var),
+            HEIndex::Var(var) => write!(f, "{}", var),
 
-            HEIndex::Literal(val) =>
-                write!(f, "{}", val),
+            HEIndex::Literal(val) => write!(f, "{}", val),
         }
     }
 }
@@ -39,28 +36,27 @@ pub enum HERef {
     Ciphertext(ArrayName, Vec<HEIndex>),
 
     // index to a plaintext array (variable if no indices)
-    Plaintext(ArrayName, Vec<HEIndex>)
+    Plaintext(ArrayName, Vec<HEIndex>),
 }
 
 impl Display for HERef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            HERef::Instruction(id) =>
-                write!(f, "i{}", id),
+            HERef::Instruction(id) => write!(f, "i{}", id),
 
             HERef::Ciphertext(vector, indices) => {
-                let index_str =
-                    indices.iter()
+                let index_str = indices
+                    .iter()
                     .map(|i| format!("[{}]", i))
                     .collect::<Vec<String>>()
                     .join("");
 
                 write!(f, "{}{}", vector, index_str)
-            },
+            }
 
             HERef::Plaintext(vector, indices) => {
-                let index_str =
-                    indices.iter()
+                let index_str = indices
+                    .iter()
                     .map(|i| format!("[{}]", i))
                     .collect::<Vec<String>>()
                     .join("");
@@ -82,11 +78,11 @@ impl fmt::Display for HEOperand {
         match self {
             HEOperand::Ref(r) => {
                 write!(f, "{}", r)
-            },
+            }
 
             HEOperand::Literal(n) => {
                 write!(f, "{}", n)
-            },
+            }
         }
     }
 }
@@ -102,17 +98,13 @@ pub enum HEInstruction {
 impl fmt::Display for HEInstruction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            HEInstruction::Add(id, op1, op2) =>
-                write!(f, "i{} = {} + {}", id, op1, op2),
+            HEInstruction::Add(id, op1, op2) => write!(f, "i{} = {} + {}", id, op1, op2),
 
-            HEInstruction::Sub(id, op1, op2) =>
-                write!(f, "i{} = {} - {}", id, op1, op2),
+            HEInstruction::Sub(id, op1, op2) => write!(f, "i{} = {} - {}", id, op1, op2),
 
-            HEInstruction::Mul(id, op1, op2) =>
-                write!(f, "i{} = {} * {}", id, op1, op2),
+            HEInstruction::Mul(id, op1, op2) => write!(f, "i{} = {} * {}", id, op1, op2),
 
-            HEInstruction::Rot(id, op1, op2) =>
-                write!(f, "i{} = rot {} {}", id, op1, op2),
+            HEInstruction::Rot(id, op1, op2) => write!(f, "i{} = rot {} {}", id, op1, op2),
         }
     }
 }
@@ -130,43 +122,35 @@ impl HEStatement {
         match self {
             HEStatement::ForNode(dim, extent, body) => {
                 let body_doc =
-                    RcDoc::intersperse(
-                        body.iter().map(|stmt| stmt.to_doc()),
-                        RcDoc::hardline()
-                    );
+                    RcDoc::intersperse(body.iter().map(|stmt| stmt.to_doc()), RcDoc::hardline());
 
                 RcDoc::text(format!("for {}: {} {{", dim, extent))
-                .append(
-                    RcDoc::hardline()
-                    .append(body_doc)
-                    .nest(4)
-                )
-                .append(RcDoc::hardline())
-                .append(RcDoc::text("}"))
-            },
+                    .append(RcDoc::hardline().append(body_doc).nest(4))
+                    .append(RcDoc::hardline())
+                    .append(RcDoc::text("}"))
+            }
 
             HEStatement::DeclareVar(var, extents) => {
-                let extent_str = 
-                    extents.iter()
+                let extent_str = extents
+                    .iter()
                     .map(|i| format!("[{}]", i))
                     .collect::<Vec<String>>()
                     .join("");
 
                 RcDoc::text(format!("var {}{}", var, extent_str))
-            },
+            }
 
             HEStatement::SetVar(var, indices, val) => {
-                let index_str = 
-                    indices.iter()
+                let index_str = indices
+                    .iter()
                     .map(|i| format!("[{}]", i))
                     .collect::<Vec<String>>()
                     .join("");
 
                 RcDoc::text(format!("{}{} = {}", var, index_str, val))
-            },
+            }
 
-            HEStatement::Instruction(instr) =>
-                RcDoc::text(instr.to_string())
+            HEStatement::Instruction(instr) => RcDoc::text(instr.to_string()),
         }
     }
 }
@@ -191,36 +175,33 @@ pub struct HEProgram {
 impl HEProgram {
     pub fn to_doc(&self) -> RcDoc<()> {
         RcDoc::intersperse(
-            self.context.vector_map.iter().map(|(vector, name)| {
-                RcDoc::text(format!("{} = vector({})", name, vector))
-            })
-            ,RcDoc::hardline()
+            self.context
+                .vector_map
+                .iter()
+                .map(|(vector, name)| RcDoc::text(format!("{} = vector({})", name, vector))),
+            RcDoc::hardline(),
         )
         .append(RcDoc::hardline())
-        .append(
-            RcDoc::intersperse(
-                self.context.mask_map.iter().map(|(mask, name)| {
-                    RcDoc::text(format!("{} = mask({:?})", name, mask))
-                })
-                ,RcDoc::hardline()
-            )
-        )
+        .append(RcDoc::intersperse(
+            self.context
+                .mask_map
+                .iter()
+                .map(|(mask, name)| RcDoc::text(format!("{} = mask({:?})", name, mask))),
+            RcDoc::hardline(),
+        ))
         .append(RcDoc::hardline())
-        .append(
-            RcDoc::intersperse(
-                self.context.const_map.iter().map(|(constval, name)| {
-                    RcDoc::text(format!("{} = const({})", name, constval))
-                })
-                ,RcDoc::hardline()
-            )
-        )
+        .append(RcDoc::intersperse(
+            self.context
+                .const_map
+                .iter()
+                .map(|(constval, name)| RcDoc::text(format!("{} = const({})", name, constval))),
+            RcDoc::hardline(),
+        ))
         .append(RcDoc::hardline())
-        .append(
-            RcDoc::intersperse(
-                self.statements.iter().map(|s| s.to_doc()),
-                RcDoc::hardline()
-            )
-        )
+        .append(RcDoc::intersperse(
+            self.statements.iter().map(|s| s.to_doc()),
+            RcDoc::hardline(),
+        ))
     }
 }
 
@@ -229,7 +210,6 @@ impl Display for HEProgram {
         self.to_doc().render_fmt(80, f)
     }
 }
-
 
 /*
 pub struct HEProgram {
@@ -331,7 +311,7 @@ impl HEProgram {
                         }
                     }
                 },
-                
+
                 HEInstruction::Rot { id: _, op1: _, op2: _ } => {
                     latency += model.rot;
                 }
@@ -459,16 +439,16 @@ impl From<&RecExpr<HEOptCircuit>> for HEProgram {
 
                 HEOptCircuit::Add([id1, id2]) => {
                     op_processor(
-                        &mut node_map, id, 
+                        &mut node_map, id,
                         |index, op1, op2| {
                             HEInstruction::Add { id: index, op1, op2 }
                         },
                         id1, id2);
                 }
-                
+
                 HEOptCircuit::Sub([id1, id2]) => {
                     op_processor(
-                        &mut node_map, id, 
+                        &mut node_map, id,
                         |index, op1, op2| {
                             HEInstruction::Sub { id: index, op1, op2 }
                         },
@@ -477,15 +457,15 @@ impl From<&RecExpr<HEOptCircuit>> for HEProgram {
 
                 HEOptCircuit::Mul([id1, id2]) => {
                     op_processor(
-                        &mut node_map, id, 
-                        |index, op1, op2| HEInstruction::Mul { id: index, op1, op2 }, 
+                        &mut node_map, id,
+                        |index, op1, op2| HEInstruction::Mul { id: index, op1, op2 },
                         id1, id2);
                 }
 
                 HEOptCircuit::Rot([id1, id2]) => {
                     op_processor(
-                        &mut node_map, id, 
-                        |index, op1, op2| HEInstruction::Rot { id: index, op1, op2 }, 
+                        &mut node_map, id,
+                        |index, op1, op2| HEInstruction::Rot { id: index, op1, op2 },
                         id1, id2);
                 }
             }
@@ -620,16 +600,11 @@ impl HEProgramInterpreter {
 #[cfg(test)]
 mod tests {
     use crate::{
-        lang::{BaseOffsetMap, Operator},
         circ::{
-            IndexCoordinateMap,
-            IndexCoordinateSystem,
-            ParamCircuitProgram,
-            CiphertextObject,
-            CircuitObjectRegistry,
-            ParamCircuitExpr,
-            CircuitValue
+            CiphertextObject, CircuitObjectRegistry, CircuitValue, IndexCoordinateMap,
+            IndexCoordinateSystem, ParamCircuitExpr, ParamCircuitProgram,
         },
+        lang::{BaseOffsetMap, Operator},
         program::lowering::CircuitLowering,
     };
 
@@ -644,19 +619,17 @@ mod tests {
     #[test]
     fn test_reduce() {
         let mut coord_map =
-            IndexCoordinateMap::from_coord_system(
-                IndexCoordinateSystem::from_dim_list(
-                    vec![(String::from("i"), 2), (String::from("j"), 2)]
-                )
-            );
+            IndexCoordinateMap::from_coord_system(IndexCoordinateSystem::from_dim_list(vec![
+                (String::from("i"), 2),
+                (String::from("j"), 2),
+            ]));
 
-        let vector =
-            VectorInfo {
-                array: String::from("arr"),
-                preprocessing: None,
-                offset_map: BaseOffsetMap::new(2),
-                dims: im::Vector::new(),
-            };
+        let vector = VectorInfo {
+            array: String::from("arr"),
+            preprocessing: None,
+            offset_map: BaseOffsetMap::new(2),
+            dims: im::Vector::new(),
+        };
 
         let ct_obj = CiphertextObject::InputVector(vector);
 
@@ -669,33 +642,24 @@ mod tests {
 
         let lit_2 = registry.register_circuit(ParamCircuitExpr::Literal(2));
         let ct = registry.register_circuit(ParamCircuitExpr::CiphertextVar(String::from("ct")));
-        let reduce_vec =
-            registry.register_circuit(
-                ParamCircuitExpr::ReduceVectors(
-                    String::from("j"), 2, Operator::Add,
-                    ct
-                )
-            );
+        let reduce_vec = registry.register_circuit(ParamCircuitExpr::ReduceVectors(
+            String::from("j"),
+            2,
+            Operator::Add,
+            ct,
+        ));
 
         let circuit =
-            registry.register_circuit(
-                ParamCircuitExpr::Op(Operator::Add, reduce_vec, lit_2)
-            );
+            registry.register_circuit(ParamCircuitExpr::Op(Operator::Add, reduce_vec, lit_2));
 
-        registry.ct_var_values.insert(
-            String::from("ct"),
-            CircuitValue::CoordMap(coord_map)
-        );
+        registry
+            .ct_var_values
+            .insert(String::from("ct"), CircuitValue::CoordMap(coord_map));
 
-        let circuit_program =
-            ParamCircuitProgram {
-                registry,
-                expr_list: vec![
-                    (String::from("out"),
-                    vec![(String::from("i"), 2)],
-                    circuit)
-                ]
-            };
+        let circuit_program = ParamCircuitProgram {
+            registry,
+            expr_list: vec![(String::from("out"), vec![(String::from("i"), 2)], circuit)],
+        };
 
         test_lowering(circuit_program);
     }

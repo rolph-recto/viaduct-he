@@ -4,7 +4,7 @@ use indexmap::IndexMap;
 
 use crate::lang::*;
 
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub struct SourceProgram {
     // use IndexMap instead of HashMap to preserve the program order
     pub input_map: IndexMap<ArrayName, (Shape, ArrayType)>,
@@ -12,7 +12,11 @@ pub struct SourceProgram {
 }
 
 impl SourceProgram {
-    pub fn new(inputs: im::Vector<Input>, let_bindings: im::Vector<LetBinding>, output_expr: SourceExpr) -> Self {
+    pub fn new(
+        inputs: im::Vector<Input>,
+        let_bindings: im::Vector<LetBinding>,
+        output_expr: SourceExpr,
+    ) -> Self {
         // compute input map and expr binding map
         let mut input_map: IndexMap<ArrayName, (Shape, ArrayType)> = IndexMap::new();
         inputs.iter().for_each(|input| {
@@ -29,7 +33,10 @@ impl SourceProgram {
         });
         expr_map.insert(String::from(OUTPUT_EXPR_NAME), output_expr.clone());
 
-        SourceProgram { input_map, expr_map }
+        SourceProgram {
+            input_map,
+            expr_map,
+        }
     }
 
     pub fn is_input(&self, array: &String) -> bool {
@@ -55,17 +62,17 @@ impl SourceProgram {
 
 impl Display for SourceProgram {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.input_map.iter().try_for_each(|(array, shape)|
-            write!(f, "{}{:?}", array, shape)
-        )?;
-        self.expr_map.iter().try_for_each(|(array, expr)| {
-            write!(f, "let {} = {}", array, expr)
-        })?;
+        self.input_map
+            .iter()
+            .try_for_each(|(array, shape)| write!(f, "{}{:?}", array, shape))?;
+        self.expr_map
+            .iter()
+            .try_for_each(|(array, expr)| write!(f, "let {} = {}", array, expr))?;
         Ok(())
     }
 }
 
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub struct Input(pub ArrayName, pub Shape, pub ArrayType);
 
 impl Display for Input {
@@ -74,41 +81,35 @@ impl Display for Input {
     }
 }
 
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub struct LetBinding(pub ArrayName, pub Box<SourceExpr>);
 
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub enum SourceExpr {
     For(IndexVar, Extent, Box<SourceExpr>),
     Reduce(Operator, Box<SourceExpr>),
     ExprOp(Operator, Box<SourceExpr>, Box<SourceExpr>),
     Indexing(ArrayName, im::Vector<IndexExpr>),
-    Literal(isize)
+    Literal(isize),
 }
 
 impl SourceExpr {
     pub fn get_indexed_arrays(&self) -> HashSet<String> {
         match self {
-            SourceExpr::For(_, _, body) => {
-                body.get_indexed_arrays()
-            },
+            SourceExpr::For(_, _, body) => body.get_indexed_arrays(),
 
-            SourceExpr::Reduce(_, body) => {
-                body.get_indexed_arrays()
-            },
+            SourceExpr::Reduce(_, body) => body.get_indexed_arrays(),
 
             SourceExpr::ExprOp(_, expr1, expr2) => {
                 let mut arrays1 = expr1.get_indexed_arrays();
                 let mut arrays2 = expr2.get_indexed_arrays();
                 arrays1.extend(arrays2);
                 arrays1
-            },
+            }
 
-            SourceExpr::Indexing(array, _) =>
-                HashSet::from([array.clone()]),
+            SourceExpr::Indexing(array, _) => HashSet::from([array.clone()]),
 
-            SourceExpr::Literal(_) =>
-                HashSet::new()
+            SourceExpr::Literal(_) => HashSet::new(),
         }
     }
 }
@@ -119,22 +120,21 @@ impl Display for SourceExpr {
         match self {
             For(index, extent, body) => {
                 write!(f, "for {} : {} in {}", index, extent, body)
-            },
+            }
 
             Reduce(op, body) => {
-                let reduce_op_str = 
-                    match op {
-                        Operator::Add => "sum",
-                        Operator::Sub => "sum_sub",
-                        Operator::Mul => "product"
-                    };
+                let reduce_op_str = match op {
+                    Operator::Add => "sum",
+                    Operator::Sub => "sum_sub",
+                    Operator::Mul => "product",
+                };
 
                 write!(f, "{}({})", reduce_op_str, body)
-            },
+            }
 
             ExprOp(op, expr1, expr2) => {
                 write!(f, "({} {} {})", expr1, op, expr2)
-            },
+            }
 
             Indexing(arr, index_list) => {
                 let mut index_str = String::new();
@@ -142,20 +142,20 @@ impl Display for SourceExpr {
                     index_str.push_str(&format!("[{}]", index))
                 }
                 write!(f, "{}{}", arr, index_str)
-            },
+            }
 
             Literal(val) => {
                 write!(f, "{}", val)
-            },
+            }
         }
     }
 }
 
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub enum IndexExpr {
     Var(IndexVar),
     Literal(isize),
-    Op(Operator, Box<IndexExpr>, Box<IndexExpr>)
+    Op(Operator, Box<IndexExpr>, Box<IndexExpr>),
 }
 
 impl IndexExpr {
@@ -163,7 +163,6 @@ impl IndexExpr {
         let vars = self.get_vars();
         if vars.len() == 1 {
             vars.into_iter().last()
-
         } else {
             None
         }
@@ -175,9 +174,7 @@ impl IndexExpr {
 
             IndexExpr::Literal(_) => im::HashSet::new(),
 
-            IndexExpr::Op(_, expr1, expr2) => {
-                expr1.get_vars().union(expr2.get_vars())
-            }
+            IndexExpr::Op(_, expr1, expr2) => expr1.get_vars().union(expr2.get_vars()),
         }
     }
 }

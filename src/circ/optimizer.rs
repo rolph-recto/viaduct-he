@@ -1,7 +1,10 @@
+use clap::ValueEnum;
 use egg::*;
 use log::*;
-use clap::ValueEnum;
-use std::{time::*, cmp::{max, min}};
+use std::{
+    cmp::{max, min},
+    time::*,
+};
 
 use self::{greedy_extractor::*, lp_extractor::*};
 
@@ -25,10 +28,17 @@ define_language! {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum RewriteOp { Add, Sub, Mul }
+enum RewriteOp {
+    Add,
+    Sub,
+    Mul,
+}
 
 #[derive(Clone, ValueEnum)]
-pub enum ExtractorType { Greedy, LP }
+pub enum ExtractorType {
+    Greedy,
+    LP,
+}
 
 pub struct HELatencyModel {
     pub add: f64,
@@ -63,7 +73,7 @@ pub type HEGraph = egg::EGraph<HEOptCircuit, HEData>;
 #[derive(Debug, Default, Clone, Copy)]
 pub struct HEData {
     constval: Option<isize>,
-    muldepth: usize
+    muldepth: usize,
 }
 
 impl Analysis<HEOptCircuit> for HEData {
@@ -72,9 +82,11 @@ impl Analysis<HEOptCircuit> for HEData {
     fn merge(&mut self, to: &mut Self::Data, from: Self::Data) -> DidMerge {
         if to.constval == from.constval {
             merge_min(&mut to.muldepth, from.muldepth)
-
         } else {
-            panic!("attmepting to merge numeric exprs with different values: {:?} and {:?} ", to.constval, from.constval);
+            panic!(
+                "attmepting to merge numeric exprs with different values: {:?} and {:?} ",
+                to.constval, from.constval
+            );
         }
         /*
         match (to.constval, from.constval) {
@@ -98,63 +110,70 @@ impl Analysis<HEOptCircuit> for HEData {
         let data = |id: &Id| egraph[*id].data;
 
         match enode {
-            HEOptCircuit::Num(n) =>
-                HEData { constval: Some(*n), muldepth: 0 },
+            HEOptCircuit::Num(n) => HEData {
+                constval: Some(*n),
+                muldepth: 0,
+            },
 
             HEOptCircuit::Add([id1, id2]) => {
-                let constval: Option<isize> = 
-                    data(id1).constval.and_then(|d1|
-                        data(id2).constval.map(|d2| d1 + d2)
-                    );
+                let constval: Option<isize> = data(id1)
+                    .constval
+                    .and_then(|d1| data(id2).constval.map(|d2| d1 + d2));
 
                 let muldepth = max(data(id1).muldepth, data(id2).muldepth);
 
                 HEData { constval, muldepth }
-            },
+            }
 
             HEOptCircuit::Sub([id1, id2]) => {
-                let constval: Option<isize> = 
-                    data(id1).constval.and_then(|d1|
-                        data(id2).constval.map(|d2| d1 - d2)
-                    );
+                let constval: Option<isize> = data(id1)
+                    .constval
+                    .and_then(|d1| data(id2).constval.map(|d2| d1 - d2));
 
                 let muldepth = max(data(id1).muldepth, data(id2).muldepth);
 
                 HEData { constval, muldepth }
-            },
+            }
 
             HEOptCircuit::Mul([id1, id2]) => {
                 let v1 = data(id1).constval;
                 let v2 = data(id2).constval;
 
                 // special case multiplicative annihilator (0)
-                let constval: Option<isize> = 
-                    match (v1, v2) {
-                        (Some(0), _) => Some(0),
-                        (_, Some(0)) => Some(0),
-                        (Some(d1), Some(d2)) => Some(d1 * d2),
-                        _ => None
-                    };
+                let constval: Option<isize> = match (v1, v2) {
+                    (Some(0), _) => Some(0),
+                    (_, Some(0)) => Some(0),
+                    (Some(d1), Some(d2)) => Some(d1 * d2),
+                    _ => None,
+                };
 
                 // don't count scalar multiplication as muldepth
-                let muldepth =
-                    if constval.is_none() {
-                        max(data(id1).muldepth, data(id2).muldepth) + 1
-                    } else {
-                        0
-                    };
+                let muldepth = if constval.is_none() {
+                    max(data(id1).muldepth, data(id2).muldepth) + 1
+                } else {
+                    0
+                };
 
                 HEData { constval, muldepth }
-            },
+            }
 
             HEOptCircuit::Rot([id1, id2]) => {
                 let muldepth = max(data(id1).muldepth, data(id2).muldepth);
-                HEData { constval: egraph[*id1].data.constval, muldepth }
+                HEData {
+                    constval: egraph[*id1].data.constval,
+                    muldepth,
+                }
             }
 
-            HEOptCircuit::CiphertextRef(_) => HEData { constval: None, muldepth: 0 },
+            HEOptCircuit::CiphertextRef(_) => HEData {
+                constval: None,
+                muldepth: 0,
+            },
 
-            HEOptCircuit::PlaintextRef(_) => HEData { constval: None, muldepth: 0 },
+            HEOptCircuit::PlaintextRef(_) => HEData {
+                constval: None,
+                muldepth: 0,
+            },
         }
     }
 }
@@ -170,18 +189,15 @@ fn is_zero(var: &'static str) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
 fn is_const_nonzero(var: &'static str) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
     let var = var.parse().unwrap();
     let zero = HEOptCircuit::Num(0);
-    move |egraph, _, subst| {
-        match egraph[subst[var]].data.constval {
-            Some(x) => x != 0,
-            None => false,
-        }
+    move |egraph, _, subst| match egraph[subst[var]].data.constval {
+        Some(x) => x != 0,
+        None => false,
     }
 }
 
 fn is_constant(str: &'static str) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
     let var = str.parse().unwrap();
-    move |egraph, _, subst|
-        egraph[subst[var]].data.constval.is_some()
+    move |egraph, _, subst| egraph[subst[var]].data.constval.is_some()
 }
 
 fn has_constant_factor(
@@ -195,7 +211,7 @@ fn has_constant_factor(
         let b_id = egraph.find(subst[bvar]);
         match (egraph[a_id].data.constval, egraph[b_id].data.constval) {
             (None, Some(bval)) => true,
-            _ => false
+            _ => false,
         }
     }
 }
@@ -204,8 +220,9 @@ fn has_constant_factor(
 fn can_fold(astr: &'static str, bstr: &'static str) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
     let avar = astr.parse().unwrap();
     let bvar = bstr.parse().unwrap();
-    move |egraph, _, subst|
+    move |egraph, _, subst| {
         egraph[subst[avar]].data.constval.is_some() && egraph[subst[bvar]].data.constval.is_some()
+    }
 }
 
 fn can_split_rot(
@@ -225,7 +242,10 @@ fn can_split_rot(
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct AddToMul { a: Var, b: Var }
+struct AddToMul {
+    a: Var,
+    b: Var,
+}
 
 impl Applier<HEOptCircuit, HEData> for AddToMul {
     fn apply_one(
@@ -256,7 +276,10 @@ impl Applier<HEOptCircuit, HEData> for AddToMul {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct MulToAdd { a: Var, b: Var }
+struct MulToAdd {
+    a: Var,
+    b: Var,
+}
 
 impl Applier<HEOptCircuit, HEData> for MulToAdd {
     fn apply_one(
@@ -288,7 +311,7 @@ impl Applier<HEOptCircuit, HEData> for MulToAdd {
 
                 changed = changed || egraph.union(matched_id, acc);
             }
-        } 
+        }
 
         if changed {
             vec![matched_id]
@@ -299,7 +322,10 @@ impl Applier<HEOptCircuit, HEData> for MulToAdd {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct SubInverse { a: Var, b: Var }
+struct SubInverse {
+    a: Var,
+    b: Var,
+}
 
 impl Applier<HEOptCircuit, HEData> for SubInverse {
     fn apply_one(
@@ -325,9 +351,12 @@ impl Applier<HEOptCircuit, HEData> for SubInverse {
     }
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct ConstantFold { op: RewriteOp, a: Var, b: Var }
+struct ConstantFold {
+    op: RewriteOp,
+    a: Var,
+    b: Var,
+}
 
 impl Applier<HEOptCircuit, HEData> for ConstantFold {
     fn apply_one(
@@ -341,13 +370,12 @@ impl Applier<HEOptCircuit, HEData> for ConstantFold {
         let aval: isize = egraph[subst[self.a]].data.constval.unwrap();
         let bval: isize = egraph[subst[self.b]].data.constval.unwrap();
 
-        let folded_val =
-            match self.op {
-                RewriteOp::Add => aval + bval,
-                RewriteOp::Sub => aval - bval,
-                RewriteOp::Mul => aval * bval,
-            };
-        
+        let folded_val = match self.op {
+            RewriteOp::Add => aval + bval,
+            RewriteOp::Sub => aval - bval,
+            RewriteOp::Mul => aval * bval,
+        };
+
         let folded_id = egraph.add(HEOptCircuit::Num(folded_val));
 
         if egraph.union(matched_id, folded_id) {
@@ -359,7 +387,10 @@ impl Applier<HEOptCircuit, HEData> for ConstantFold {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct FactorSplit { a: Var, b: Var }
+struct FactorSplit {
+    a: Var,
+    b: Var,
+}
 
 impl Applier<HEOptCircuit, HEData> for FactorSplit {
     fn apply_one(
@@ -394,7 +425,11 @@ impl Applier<HEOptCircuit, HEData> for FactorSplit {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct RotateWrap { size: isize, x: Var, l: Var }
+struct RotateWrap {
+    size: isize,
+    x: Var,
+    l: Var,
+}
 
 impl Applier<HEOptCircuit, HEData> for RotateWrap {
     fn apply_one(
@@ -419,7 +454,12 @@ impl Applier<HEOptCircuit, HEData> for RotateWrap {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct RotateSquash { size: usize, x: Var, l1: Var, l2: Var }
+struct RotateSquash {
+    size: usize,
+    x: Var,
+    l1: Var,
+    l2: Var,
+}
 
 impl Applier<HEOptCircuit, HEData> for RotateSquash {
     fn apply_one(
@@ -479,34 +519,27 @@ impl Applier<HEOptCircuit, HEData> for RotateSplit {
             let cur_l2 = l2_val - (i as isize);
 
             // recall that (rot x 0 ) = x
-            let rot_in1 =
-                if cur_l1 != 0 {
-                    let cur_l1_class = egraph.add(HEOptCircuit::Num(cur_l1));
-                    egraph.add(HEOptCircuit::Rot([x1_class, cur_l1_class]))
+            let rot_in1 = if cur_l1 != 0 {
+                let cur_l1_class = egraph.add(HEOptCircuit::Num(cur_l1));
+                egraph.add(HEOptCircuit::Rot([x1_class, cur_l1_class]))
+            } else {
+                x1_class
+            };
 
-                } else {
-                    x1_class
-                };
+            let rot_in2 = if cur_l2 != 0 {
+                let cur_l2_class = egraph.add(HEOptCircuit::Num(cur_l2));
+                egraph.add(HEOptCircuit::Rot([x2_class, cur_l2_class]))
+            } else {
+                x2_class
+            };
 
-            let rot_in2 = 
-                if cur_l2 != 0 {
-                    let cur_l2_class = egraph.add(HEOptCircuit::Num(cur_l2));
-                    egraph.add(HEOptCircuit::Rot([x2_class, cur_l2_class]))
-                } else {
-                    x2_class
-                };
+            let op: HEOptCircuit = match self.op {
+                RewriteOp::Add => HEOptCircuit::Add([rot_in1, rot_in2]),
 
-            let op: HEOptCircuit =
-                match self.op {
-                    RewriteOp::Add =>
-                        HEOptCircuit::Add([rot_in1, rot_in2]),
+                RewriteOp::Sub => HEOptCircuit::Sub([rot_in1, rot_in2]),
 
-                    RewriteOp::Sub =>
-                        HEOptCircuit::Sub([rot_in1, rot_in2]),
-
-                    RewriteOp::Mul =>
-                        HEOptCircuit::Add([rot_in1, rot_in2]),
-                };
+                RewriteOp::Mul => HEOptCircuit::Add([rot_in1, rot_in2]),
+            };
 
             // dbg!(&op, i, cur_l1, cur_l2, max_outer);
             // let x1_children: Vec<&HEOptCircuit> =
@@ -531,7 +564,7 @@ impl Applier<HEOptCircuit, HEData> for RotateSplit {
 }
 
 pub struct Optimizer {
-    rules: Vec<Rewrite<HEOptCircuit, HEData>>
+    rules: Vec<Rewrite<HEOptCircuit, HEData>>,
 }
 
 impl Optimizer {
@@ -541,13 +574,11 @@ impl Optimizer {
             rewrite!("add-identity"; "(+ ?a 0)" <=> "?a"),
             rewrite!("add-assoc"; "(+ ?a (+ ?b ?c))" <=> "(+ (+ ?a ?b) ?c)"),
             rewrite!("add-commute"; "(+ ?a ?b)" <=> "(+ ?b ?a)"),
-
             // bidirectional multiplication rules
             rewrite!("mul-identity"; "(* ?a 1)" <=> "?a"),
             rewrite!("mul-assoc"; "(* ?a (* ?b ?c))" <=> "(* (* ?a ?b) ?c)"),
             rewrite!("mul-commute"; "(* ?a ?b)" <=> "(* ?b ?a)"),
             rewrite!("mul-distribute"; "(* (+ ?a ?b) ?c)" <=> "(+ (* ?a ?c) (* ?b ?c))"),
-
             // bidirectional rotation rules
             rewrite!("rot-distribute-mul"; "(rot (* ?a ?b) ?l)" <=> "(* (rot ?a ?l) (rot ?b ?l))"),
             rewrite!("rot-distribute-add"; "(rot (+ ?a ?b) ?l)" <=> "(+ (rot ?a ?l) (rot ?b ?l))"),
@@ -558,7 +589,6 @@ impl Optimizer {
         rules.extend(vec![
             // unidirectional rules
             rewrite!("mul-annihilator"; "(* ?a 0)" => "0"),
-
             // a - b = a + (-1 * b)
             rewrite!("sub-inverse"; "(- ?a ?b)" => {
                 SubInverse {
@@ -566,22 +596,18 @@ impl Optimizer {
                     b: "?b".parse().unwrap(),
                 }
             }),
-
             rewrite!("rot-distribute1-mul";
                 "(* (rot ?a ?l) (rot ?b ?l))" => "(rot (* (rot ?a (- ?l 1)) (rot ?b (- ?l 1))) 1)"
                 if is_const_nonzero("?l")
             ),
-
             rewrite!("rot-distribute1-add";
                 "(+ (rot ?a ?l) (rot ?b ?l))" => "(rot (+ (rot ?a (- ?l 1)) (rot ?b (- ?l 1))) 1)"
                 if is_const_nonzero("?l")
             ),
-
             rewrite!("rot-distribute1-sub";
                 "(- (rot ?a ?l) (rot ?b ?l))" => "(rot (- (rot ?a (- ?l 1)) (rot ?b (- ?l 1))) 1)"
                 if is_const_nonzero("?l")
             ),
-
             // x + (x * c) = x * (c + 1), where c is a constant
             rewrite!("add-to-mul"; "(+ ?a (* ?a ?b))" => {
                 AddToMul {
@@ -589,7 +615,6 @@ impl Optimizer {
                     b: "?b".parse().unwrap()
                 }
             } if has_constant_factor("?a", "?b")),
-
             // x * c = x + (x * (c - 1)), where c is a constant
             rewrite!("mul-to-add"; "(* ?a ?b)" => {
                 MulToAdd {
@@ -597,7 +622,6 @@ impl Optimizer {
                     b: "?b".parse().unwrap()
                 }
             } if has_constant_factor("?a", "?b")),
-
             // constant folding
             rewrite!("add-fold"; "(+ ?a ?b)" => {
                 ConstantFold {
@@ -606,7 +630,6 @@ impl Optimizer {
                     b: "?b".parse().unwrap()
                 }
             } if can_fold("?a", "?b")),
-
             rewrite!("sub-fold"; "(- ?a ?b)" => {
                 ConstantFold {
                     op: RewriteOp::Sub,
@@ -614,7 +637,6 @@ impl Optimizer {
                     b: "?b".parse().unwrap()
                 }
             } if can_fold("?a", "?b")),
-
             rewrite!("mul-fold"; "(* ?a ?b)" => {
                 ConstantFold {
                     op: RewriteOp::Mul,
@@ -622,17 +644,14 @@ impl Optimizer {
                     b: "?b".parse().unwrap()
                 }
             } if can_fold("?a", "?b")),
-
             // rotation of 0 doesn't do anything
             rewrite!("rot-none"; "(rot ?x ?l)" => "?x" if is_zero("?l")),
-
             // wrap rotation according to vector length
             /*
             rewrite!("rot-wrap"; "(rot ?x ?l)" => {
                 RotateWrap { x: "?x".parse().unwrap(), l: "?l".parse().unwrap() }
             } if beyond_vec_length("?l")),
             */
-
             // squash nested rotations into a single rotation
             rewrite!("rot-squash"; "(rot (rot ?x ?l1) ?l2)" => {
                 RotateSquash {
@@ -642,7 +661,6 @@ impl Optimizer {
                     l2: "?l2".parse().unwrap()
                 }
             }),
-
             // given an operation on rotated vectors,
             // split rotation before and after the operation
             // rewrite!("rot-add-split"; "(+ (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
@@ -679,14 +697,20 @@ impl Optimizer {
         Optimizer { rules }
     }
 
-    pub fn rules(&self) -> &[Rewrite<HEOptCircuit,HEData>] {
+    pub fn rules(&self) -> &[Rewrite<HEOptCircuit, HEData>] {
         &self.rules
     }
 
-    pub fn optimize(&self, expr: &RecExpr<HEOptCircuit>, size: usize, timeout: usize, extractor_type: ExtractorType) -> RecExpr<HEOptCircuit> {
+    pub fn optimize(
+        &self,
+        expr: &RecExpr<HEOptCircuit>,
+        size: usize,
+        timeout: usize,
+        extractor_type: ExtractorType,
+    ) -> RecExpr<HEOptCircuit> {
         info!("running equality saturation for {} seconds...", timeout);
 
-        let optimization_time = Instant::now(); 
+        let optimization_time = Instant::now();
 
         // simplify the expression using a Runner, which creates an e-graph with
         // the given expression and runs the given rules over it
@@ -704,53 +728,62 @@ impl Optimizer {
 
         let extraction_time = Instant::now();
 
-        let opt_expr =
-            match extractor_type {
-                ExtractorType::Greedy => {
-                    info!("using greedy extractor to derive optimized program...");
-                    // let extractor = GreedyExtractor::new(egraph, HECostFunction { egraph, count: 0 });
-                    // let extractor = Extractor::new(egraph, HECostFunction { egraph, latency: HELatencyModel::default() });
-                    let extractor = Extractor::new(egraph, HECostFunction { egraph, latency: HELatencyModel::default() });
-                    let (_, opt_expr) = extractor.find_best(root);
-                    info!("optimized solution found: {}", opt_expr.pretty(20));
-                    opt_expr
-                },
-                ExtractorType::LP => {
-                    info!("using LP extractor to derive optimized program...");
-                    // let mut lp_extractor = LpExtractor::new(egraph, OpSizeFunction { latency: HELatencyModel::default() });
-                    let mut lp_extractor = LpExtractor::new(egraph, AstSize);
-                    let solution = lp_extractor.solve(root);
-                    // let mut lp_extractor = HEExtractor::new(egraph, root, HELatencyModel::default());
-                    // let solution = lp_extractor.solve();
-                    info!("optimized solution found: {}", solution.pretty(20));
-                    solution
-                }
-            };
+        let opt_expr = match extractor_type {
+            ExtractorType::Greedy => {
+                info!("using greedy extractor to derive optimized program...");
+                // let extractor = GreedyExtractor::new(egraph, HECostFunction { egraph, count: 0 });
+                // let extractor = Extractor::new(egraph, HECostFunction { egraph, latency: HELatencyModel::default() });
+                let extractor = Extractor::new(
+                    egraph,
+                    HECostFunction {
+                        egraph,
+                        latency: HELatencyModel::default(),
+                    },
+                );
+                let (_, opt_expr) = extractor.find_best(root);
+                info!("optimized solution found: {}", opt_expr.pretty(20));
+                opt_expr
+            }
+            ExtractorType::LP => {
+                info!("using LP extractor to derive optimized program...");
+                // let mut lp_extractor = LpExtractor::new(egraph, OpSizeFunction { latency: HELatencyModel::default() });
+                let mut lp_extractor = LpExtractor::new(egraph, AstSize);
+                let solution = lp_extractor.solve(root);
+                // let mut lp_extractor = HEExtractor::new(egraph, root, HELatencyModel::default());
+                // let solution = lp_extractor.solve();
+                info!("optimized solution found: {}", solution.pretty(20));
+                solution
+            }
+        };
 
-        info!("Extraction time: {}ms", extraction_time.elapsed().as_millis());
+        info!(
+            "Extraction time: {}ms",
+            extraction_time.elapsed().as_millis()
+        );
 
         opt_expr
     }
 }
 
 #[cfg(test)]
-mod tests{
+mod tests {
     use super::*;
-    
+
     fn run_equiv(s1: &str, s2: &str) -> (bool, String) {
         let optimizer = Optimizer::new(16);
         let expr1 = s1.parse().unwrap();
         let expr2 = s2.parse().unwrap();
-        let mut runner =
-            Runner::default()
+        let mut runner = Runner::default()
             .with_explanations_enabled()
             .with_expr(&expr1)
             .run(optimizer.rules());
 
         let equiv = runner.egraph.equivs(&expr1, &expr2).len() > 0;
         if equiv {
-            (true, runner.explain_equivalence(&expr1, &expr2).get_flat_string())
-
+            (
+                true,
+                runner.explain_equivalence(&expr1, &expr2).get_flat_string(),
+            )
         } else {
             (false, String::from(""))
         }
@@ -759,8 +792,7 @@ mod tests{
     fn run_extractor(s: &str) -> RecExpr<HEOptCircuit> {
         let optimizer = Optimizer::new(16);
         let expr = s.parse().unwrap();
-        let runner =
-            Runner::default()
+        let runner = Runner::default()
             // .with_explanations_enabled()
             .with_expr(&expr)
             .run(optimizer.rules());
@@ -769,11 +801,12 @@ mod tests{
         // let mut extractor = HEExtractor::new(&runner.egraph, root);
         // extractor.solve().unwrap()
 
-        let mut extractor =
-            LpExtractor::new(
-                &runner.egraph, 
-                OpSizeFunction { latency: HELatencyModel::default() }
-            );
+        let mut extractor = LpExtractor::new(
+            &runner.egraph,
+            OpSizeFunction {
+                latency: HELatencyModel::default(),
+            },
+        );
         extractor.solve(root)
     }
 

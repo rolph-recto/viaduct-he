@@ -1,12 +1,15 @@
-use std::{collections::{HashMap, HashSet}, fmt::Display};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+};
 
 use indexmap::IndexMap;
 
 use crate::util::NameGenerator;
 
 use super::{
-    ArrayName, Shape, OUTPUT_EXPR_NAME, IndexingId, ArrayType,
-    source::{SourceExpr, SourceProgram}
+    source::{SourceExpr, SourceProgram},
+    ArrayName, ArrayType, IndexingId, Shape, OUTPUT_EXPR_NAME,
 };
 
 /// like SourceProgram, but with uniquely named indexing sites
@@ -23,8 +26,8 @@ impl ElaboratedProgram {
     pub fn get_expr_dependency_map(&self) -> HashMap<IndexingId, HashSet<IndexingId>> {
         let mut dependency_map: HashMap<ArrayName, HashSet<ArrayName>> = HashMap::new();
         for (array, expr) in self.expr_map.iter() {
-            let expr_indexed: HashSet<ArrayName> =
-                expr.get_indexed_arrays()
+            let expr_indexed: HashSet<ArrayName> = expr
+                .get_indexed_arrays()
                 .into_iter()
                 .filter(|indexed| self.is_expr(indexed))
                 .collect();
@@ -58,7 +61,6 @@ impl ElaboratedProgram {
                 if self.is_input(&indexing_id) {
                     let array = self.rename_map.get(&indexing_id).unwrap().clone();
                     array_group_map.insert(indexing_id, array);
-
                 } else {
                     array_group_map.insert(indexing_id.clone(), indexing_id);
                 }
@@ -71,13 +73,13 @@ impl ElaboratedProgram {
 
 impl Display for ElaboratedProgram {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.input_map.iter().try_for_each(|(array, shape)| {
-            write!(f, "input {}: {:?}\n", array, shape)
-        })?;
+        self.input_map
+            .iter()
+            .try_for_each(|(array, shape)| write!(f, "input {}: {:?}\n", array, shape))?;
 
-        self.expr_map.iter().try_for_each(|(id, expr)| {
-            write!(f, "let {} = {}\n", id, expr)
-        })?;
+        self.expr_map
+            .iter()
+            .try_for_each(|(id, expr)| write!(f, "let {} = {}\n", id, expr))?;
 
         Ok(())
     }
@@ -85,12 +87,14 @@ impl Display for ElaboratedProgram {
 
 // the elaborator uniqifies indexing sites
 pub struct Elaborator {
-    name_generator: NameGenerator
+    name_generator: NameGenerator,
 }
 
 impl Elaborator {
     pub fn new() -> Self {
-        Self { name_generator: NameGenerator::new() }
+        Self {
+            name_generator: NameGenerator::new(),
+        }
     }
 
     pub fn run(mut self, program: SourceProgram) -> ElaboratedProgram {
@@ -113,41 +117,52 @@ impl Elaborator {
                     worklist.push(k.clone());
                     rename_map.insert(k, v);
                 }
-
             }
         }
 
         // elaboration runs backwards from the output expr,
         // so reverse the insertion order to get the program order
         expr_map.reverse();
-        ElaboratedProgram { input_map: program.input_map, expr_map, rename_map }
+        ElaboratedProgram {
+            input_map: program.input_map,
+            expr_map,
+            rename_map,
+        }
     }
-    
-    pub fn elaborate_expr(&mut self, expr: SourceExpr) -> (SourceExpr, HashMap<ArrayName, ArrayName>) {
+
+    pub fn elaborate_expr(
+        &mut self,
+        expr: SourceExpr,
+    ) -> (SourceExpr, HashMap<ArrayName, ArrayName>) {
         match expr {
             SourceExpr::For(var, extent, body) => {
                 let (new_body, body_renames) = self.elaborate_expr(*body);
-                (SourceExpr::For(var, extent, Box::new(new_body)), body_renames)
-            },
+                (
+                    SourceExpr::For(var, extent, Box::new(new_body)),
+                    body_renames,
+                )
+            }
 
             SourceExpr::Reduce(op, body) => {
                 let (new_body, body_renames) = self.elaborate_expr(*body);
                 (SourceExpr::Reduce(op, Box::new(new_body)), body_renames)
-            },
-            
+            }
+
             SourceExpr::ExprOp(op, expr1, expr2) => {
                 let (new_expr1, mut expr1_renames) = self.elaborate_expr(*expr1);
                 let (new_expr2, mut expr2_renames) = self.elaborate_expr(*expr2);
 
-                for (k, v)in expr2_renames {
-                    expr1_renames.insert(k,v);
+                for (k, v) in expr2_renames {
+                    expr1_renames.insert(k, v);
                 }
 
-                (SourceExpr::ExprOp(op, Box::new(new_expr1), Box::new(new_expr2)), expr1_renames)
-            },
+                (
+                    SourceExpr::ExprOp(op, Box::new(new_expr1), Box::new(new_expr2)),
+                    expr1_renames,
+                )
+            }
 
-            SourceExpr::Literal(_) =>
-                (expr, HashMap::new()),
+            SourceExpr::Literal(_) => (expr, HashMap::new()),
 
             SourceExpr::Indexing(array, index) => {
                 let new_array = self.name_generator.get_fresh_name(&array);

@@ -1,60 +1,61 @@
-use std::collections::{HashMap, HashSet};
 use crate::circ::optimizer::*;
-use coin_cbc::{Model, Col, Sense};
-use good_lp::{*, solvers::coin_cbc::CoinCbcProblem};
+use coin_cbc::{Col, Model, Sense};
+use good_lp::{solvers::coin_cbc::CoinCbcProblem, *};
+use std::collections::{HashMap, HashSet};
 
-pub struct OpSizeFunction { pub latency: HELatencyModel }
+pub struct OpSizeFunction {
+    pub latency: HELatencyModel,
+}
 
 impl LpCostFunction<HEOptCircuit, HEData> for OpSizeFunction {
     fn node_cost(&mut self, egraph: &HEGraph, _: Id, enode: &HEOptCircuit) -> f64 {
-        let child_muldepth =
-            enode.children().iter().fold(0, |acc, child| {
-                max(acc, egraph[*child].data.muldepth)
-            });
+        let child_muldepth = enode
+            .children()
+            .iter()
+            .fold(0, |acc, child| max(acc, egraph[*child].data.muldepth));
 
-        let is_plainop =
-            enode.children().iter().any(|child| {
-                egraph[*child].data.constval.is_some()
-            });
+        let is_plainop = enode
+            .children()
+            .iter()
+            .any(|child| egraph[*child].data.constval.is_some());
 
         let mut muldepth = child_muldepth;
-        let latency = 
-            match enode {
-                HEOptCircuit::Num(_) => self.latency.num,
+        let latency = match enode {
+            HEOptCircuit::Num(_) => self.latency.num,
 
-                HEOptCircuit::Add(_) => {
-                    if is_plainop {
-                        self.latency.add_plain
-                    } else {
-                        self.latency.add
-                    }
-                },
+            HEOptCircuit::Add(_) => {
+                if is_plainop {
+                    self.latency.add_plain
+                } else {
+                    self.latency.add
+                }
+            }
 
-                HEOptCircuit::Sub(_) => {
-                    if is_plainop {
-                        self.latency.sub_plain
-                    } else {
-                        self.latency.sub
-                    }
-                },
+            HEOptCircuit::Sub(_) => {
+                if is_plainop {
+                    self.latency.sub_plain
+                } else {
+                    self.latency.sub
+                }
+            }
 
-                HEOptCircuit::Mul(_) => {
-                    if is_plainop {
-                        self.latency.mul_plain
-                    } else {
-                        muldepth += 1;
-                        self.latency.mul
-                    }
-                },
+            HEOptCircuit::Mul(_) => {
+                if is_plainop {
+                    self.latency.mul_plain
+                } else {
+                    muldepth += 1;
+                    self.latency.mul
+                }
+            }
 
-                HEOptCircuit::Rot(_) => self.latency.rot,
+            HEOptCircuit::Rot(_) => self.latency.rot,
 
-                HEOptCircuit::CiphertextRef(_) => self.latency.sym,
+            HEOptCircuit::CiphertextRef(_) => self.latency.sym,
 
-                HEOptCircuit::PlaintextRef(_) => self.latency.sym,
-            };
+            HEOptCircuit::PlaintextRef(_) => self.latency.sym,
+        };
 
-        ((muldepth+1) as f64) * latency
+        ((muldepth + 1) as f64) * latency
     }
 }
 
@@ -92,7 +93,7 @@ impl<'a> HEExtractor<'a> {
             }).collect();
 
         let root_var = class_vars.get(&root).unwrap();
-        
+
         let mut cycles: HashSet<(Id, usize)> = Default::default();
         find_cycles(egraph, |id, i| {
             cycles.insert((id, i));
@@ -181,7 +182,7 @@ impl<'a> HEExtractor<'a> {
                                 MUL_LATENCY
                             },
 
-                        HEOptCircuit::Rot(_) => 
+                        HEOptCircuit::Rot(_) =>
                             ROT_LATENCY,
 
                         HEOptCircuit::CiphertextRef(_) |
@@ -198,12 +199,12 @@ impl<'a> HEExtractor<'a> {
         Self { egraph, model, class_vars, root }
     }
 
-    // solve LP model and extract solution 
+    // solve LP model and extract solution
     // very similar to egg's LpExtractor::solve_multiple
     pub fn solve(self) -> Result<RecExpr<HEOptCircuit>, ResolutionError> {
         let solution = self.model.solve()?;
         let mut expr: RecExpr<HEOptCircuit> = RecExpr::default();
-    
+
         let mut worklist: Vec<Id> = Vec::from([self.egraph.find(self.root)]);
         let mut ids: HashMap<Id, Id> = HashMap::default();
 
@@ -300,11 +301,10 @@ impl<'a> HEExtractor<'a> {
                     continue;
                 }
 
-                let is_node_mul =
-                    match node {
-                        HEOptCircuit::Mul(_) => true,
-                        _ => false,
-                    } && egraph[id].data.constval.is_none();
+                let is_node_mul = match node {
+                    HEOptCircuit::Mul(_) => true,
+                    _ => false,
+                } && egraph[id].data.constval.is_none();
 
                 for child in node.children() {
                     let child_active = vars[child].active;
@@ -349,39 +349,37 @@ impl<'a> HEExtractor<'a> {
                     is_plainop = is_plainop && egraph[egraph.find(*child)].data.constval.is_some();
                 }
 
-                let op_latency =
-                    match node {
-                        HEOptCircuit::Num(_) =>
-                            latency.num,
+                let op_latency = match node {
+                    HEOptCircuit::Num(_) => latency.num,
 
-                        HEOptCircuit::Add(_) =>
-                            if is_plainop {
-                                latency.add_plain
+                    HEOptCircuit::Add(_) => {
+                        if is_plainop {
+                            latency.add_plain
+                        } else {
+                            latency.add
+                        }
+                    }
 
-                            } else {
-                                latency.add
-                            },
+                    HEOptCircuit::Sub(_) => {
+                        if is_plainop {
+                            latency.sub_plain
+                        } else {
+                            latency.sub
+                        }
+                    }
 
-                        HEOptCircuit::Sub(_) =>
-                            if is_plainop {
-                                latency.sub_plain
-                            } else {
-                                latency.sub
-                            },
+                    HEOptCircuit::Mul(_) => {
+                        if is_plainop {
+                            latency.mul_plain
+                        } else {
+                            latency.mul
+                        }
+                    }
 
-                        HEOptCircuit::Mul(_) =>
-                            if is_plainop {
-                                latency.mul_plain
-                            } else {
-                                latency.mul
-                            },
+                    HEOptCircuit::Rot(_) => latency.rot,
 
-                        HEOptCircuit::Rot(_) => latency.rot,
-
-                        HEOptCircuit::CiphertextRef(_) |
-                        HEOptCircuit::PlaintextRef(_) =>
-                            latency.sym,
-                    };
+                    HEOptCircuit::CiphertextRef(_) | HEOptCircuit::PlaintextRef(_) => latency.sym,
+                };
 
                 model.set_obj_coeff(node_active, op_latency);
             }
@@ -430,7 +428,8 @@ impl<'a> HEExtractor<'a> {
                 continue;
             }
             let v = &self.vars[&id];
-            assert!(solution.col(v.active) > 0.0,
+            assert!(
+                solution.col(v.active) > 0.0,
                 "num nodes: {}; num nodes in cycle: {}",
                 v.nodes.len(),
                 self.cycles.iter().filter(|(id2, _)| id == *id2).count()
@@ -450,7 +449,6 @@ impl<'a> HEExtractor<'a> {
         expr
     }
 }
-
 
 // copied from egg's lp_extract module
 fn find_cycles<L, N>(egraph: &EGraph<L, N>, root: Id, mut f: impl FnMut(Id, usize))

@@ -3,10 +3,10 @@ use std::hash::Hash;
 
 use super::*;
 
-#[derive(Copy,Clone,Debug,Eq,Hash,PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq)]
 pub struct ConstraintVar(usize);
 
-#[derive(Copy,Clone,Debug,Eq,Hash,PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq)]
 pub struct ShapeId(usize);
 
 enum ExtentConstraint {
@@ -59,10 +59,16 @@ impl ExtentAnalysis {
         id
     }
 
-    pub fn add_equals_constraint(&mut self, id1: ShapeId, head1: usize, id2: ShapeId, head2: usize) {
+    pub fn add_equals_constraint(
+        &mut self,
+        id1: ShapeId,
+        head1: usize,
+        id2: ShapeId,
+        head2: usize,
+    ) {
         if let (Some(vars1), Some(vars2)) = (self.shape_map.get(&id1), self.shape_map.get(&id2)) {
             let suf1 = &vars1[head1..];
-            let suf2= &vars2[head2..];
+            let suf2 = &vars2[head2..];
             if suf1.len() == suf1.len() {
                 for (v1, v2) in suf1.iter().zip(suf2.iter()) {
                     self.constraints.push(ExtentConstraint::Equals(*v1, *v2));
@@ -70,24 +76,27 @@ impl ExtentAnalysis {
             } else {
                 panic!("trying to add equality constraints to shapes with different dimensions")
             }
-
         } else {
             panic!("trying to add equality constraint to unregistered shapes")
         }
     }
 
-    pub fn add_atleast_constraint(&mut self, id: ShapeId, head: usize, shape: im::Vector<Interval<i64>>) {
+    pub fn add_atleast_constraint(
+        &mut self,
+        id: ShapeId,
+        head: usize,
+        shape: im::Vector<Interval<i64>>,
+    ) {
         if let Some(vars) = self.shape_map.get(&id) {
             let suf = &vars[head..];
             if suf.len() == shape.len() {
                 for (v, extent) in vars.iter().zip(shape.iter()) {
-                    self.constraints.push(ExtentConstraint::AtLeast(*v, *extent));
+                    self.constraints
+                        .push(ExtentConstraint::AtLeast(*v, *extent));
                 }
-
             } else {
                 panic!("trying to add equality constraints to shapes with different dimensions")
             }
-
         } else {
             panic!("trying to add atleast constraint to unregistered shape")
         }
@@ -107,42 +116,37 @@ impl ExtentAnalysis {
             for constraint in self.constraints.iter() {
                 match constraint {
                     ExtentConstraint::Equals(var1, var2) => {
-                        let new_sol_opt =
-                            match (solution.get(var1), solution.get(var2)) {
-                                (None, None) => None,
-                                (None, Some(extent2)) => Some(*extent2),
-                                (Some(extent1), None) => Some(*extent1),
-                                (Some(extent1), Some(extent2)) => {
-                                    Some(extent1.hull(extent2))
-                                }
-                            };
+                        let new_sol_opt = match (solution.get(var1), solution.get(var2)) {
+                            (None, None) => None,
+                            (None, Some(extent2)) => Some(*extent2),
+                            (Some(extent1), None) => Some(*extent1),
+                            (Some(extent1), Some(extent2)) => Some(extent1.hull(extent2)),
+                        };
 
                         if let Some(new_sol) = new_sol_opt {
                             solution.insert(*var1, new_sol);
                             solution.insert(*var2, new_sol);
                         }
-                    },
-
-                    ExtentConstraint::AtLeast(var, extent) => {
-                        match solution.get(var) {
-                            Some(cur_sol) => {
-                                solution.insert(*var, extent.hull(cur_sol));
-                            },
-
-                            None => {
-                                solution.insert(*var, *extent);
-                            }
-                        }
                     }
+
+                    ExtentConstraint::AtLeast(var, extent) => match solution.get(var) {
+                        Some(cur_sol) => {
+                            solution.insert(*var, extent.hull(cur_sol));
+                        }
+
+                        None => {
+                            solution.insert(*var, *extent);
+                        }
+                    },
                 }
             }
         }
 
-        // collect solutions into 
+        // collect solutions into
         let mut shape_solution: HashMap<ShapeId, im::Vector<Interval<i64>>> = HashMap::new();
         for (&node, extent_vars) in self.shape_map.iter() {
-            let shape: im::Vector<Interval<i64>> =
-                extent_vars.iter()
+            let shape: im::Vector<Interval<i64>> = extent_vars
+                .iter()
                 .map(|var| {
                     if let Some(extent) = solution.get(var) {
                         *extent

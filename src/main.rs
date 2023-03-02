@@ -2,13 +2,12 @@ extern crate lalrpop_util;
 
 /// main.rs
 /// Vectorizer for homomorphic encryption circuits
-
 use clap::Parser;
 use log::*;
 
 use he_vectorizer::{
-    lang::{parser::ProgramParser, index_elim::IndexElimination},
     circ::optimizer::ExtractorType,
+    lang::{index_elim::IndexElimination, parser::ProgramParser},
 };
 
 #[derive(Parser)]
@@ -19,7 +18,12 @@ struct Arguments {
     file: String,
 
     /// template file for output program
-    #[clap(short = 't', long = "template", value_parser, default_value = "template.txt")]
+    #[clap(
+        short = 't',
+        long = "template",
+        value_parser,
+        default_value = "template.txt"
+    )]
     template: String,
 
     /// file for output program
@@ -43,17 +47,14 @@ struct Arguments {
     noinplace: bool,
 }
 
-fn dumpinfo() {
-
-}
+fn dumpinfo() {}
 
 fn main() {
     env_logger::init();
 
     let args = Arguments::parse();
     let input_str =
-        std::fs::read_to_string(&args.file)
-        .expect(&format!("Could not read file {}", &args.file));
+        std::fs::read_to_string(&args.file).expect(&format!("Could not read file {}", &args.file));
 
     let parser = ProgramParser::new();
     let src_program = parser.parse(&input_str).unwrap();
@@ -100,7 +101,7 @@ fn main() {
         HELoweredProgram::lower_program(
             args.size,
             args.noinplace,
-            &opt_prog, 
+            &opt_prog,
             &store,
             indfree_program.client_store,
             HashMap::new(),

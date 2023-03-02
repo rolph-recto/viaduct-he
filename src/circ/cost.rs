@@ -1,12 +1,11 @@
-use std::{ops::{Add, Mul}, cmp::max};
-
-use crate::{
-    circ::{
-        ParamCircuitProgram, ParamCircuitExpr, IndexCoordinateSystem, VectorType
-    },
+use std::{
+    cmp::max,
+    ops::{Add, Mul},
 };
 
-#[derive(Copy,Clone,Debug,PartialEq,Eq)]
+use crate::circ::{IndexCoordinateSystem, ParamCircuitExpr, ParamCircuitProgram, VectorType};
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct CostFeatures {
     input_ciphertexts: usize,
     input_plaintexts: usize,
@@ -48,21 +47,21 @@ impl CostFeatures {
 
     fn weighted_cost(&self, weights: &CostFeatures) -> usize {
         let weighted = (*self).weight(*weights);
-weighted.input_ciphertexts
-        + weighted.input_plaintexts
-        + weighted.output_ciphertexts
-        + weighted.rotations
-        + weighted.ct_ct_add
-        + weighted.pt_ct_add
-        + weighted.pt_pt_add
-        + weighted.ct_ct_mult
-        + weighted.pt_ct_mult
-        + weighted.pt_pt_mult
-        + weighted.ct_ct_sub
-        + weighted.pt_ct_sub
-        + weighted.pt_pt_sub
-        + weighted.ct_ct_muldepth
-        + weighted.pt_ct_muldepth
+        weighted.input_ciphertexts
+            + weighted.input_plaintexts
+            + weighted.output_ciphertexts
+            + weighted.rotations
+            + weighted.ct_ct_add
+            + weighted.pt_ct_add
+            + weighted.pt_pt_add
+            + weighted.ct_ct_mult
+            + weighted.pt_ct_mult
+            + weighted.pt_pt_mult
+            + weighted.ct_ct_sub
+            + weighted.pt_ct_sub
+            + weighted.pt_pt_sub
+            + weighted.ct_ct_muldepth
+            + weighted.pt_ct_muldepth
     }
 
     /// because this operation is meant for combining features of subexprs,
@@ -134,10 +133,12 @@ impl Default for CostFeatures {
 pub struct CostEstimator {}
 
 impl CostEstimator {
-    pub fn new() -> Self { CostEstimator {} }
+    pub fn new() -> Self {
+        CostEstimator {}
+    }
 
     // TODO finish
-    pub fn estimate_cost(&self, program: &ParamCircuitProgram) -> Result<CostFeatures,String> {
+    pub fn estimate_cost(&self, program: &ParamCircuitProgram) -> Result<CostFeatures, String> {
         Ok(CostFeatures::default())
         /*
         if let ExprScheduleType::Specific(schedule) = &program.schedule {
@@ -161,8 +162,16 @@ impl CostEstimator {
     }
 
     // TODO finish
-    fn estimate_cost_expr(&self, expr: &ParamCircuitExpr, coord_system: &IndexCoordinateSystem) -> (VectorType, usize, CostFeatures) {
-        (VectorType::Ciphertext, coord_system.multiplicity(), CostFeatures::new())
+    fn estimate_cost_expr(
+        &self,
+        expr: &ParamCircuitExpr,
+        coord_system: &IndexCoordinateSystem,
+    ) -> (VectorType, usize, CostFeatures) {
+        (
+            VectorType::Ciphertext,
+            coord_system.multiplicity(),
+            CostFeatures::new(),
+        )
         /*
         match expr {
             ParamCircuitExpr::CiphertextVar(_) => {
@@ -183,7 +192,7 @@ impl CostEstimator {
                 assert!(mult1 == mult2);
 
                 let mut out_cost = CostFeatures::new();
-                let out_type = 
+                let out_type =
                     match (op, type1, type2) {
                         (Operator::Add, VectorType::Ciphertext, VectorType::Ciphertext) => {
                             out_cost.ct_ct_add = mult1;
@@ -270,7 +279,7 @@ impl CostEstimator {
 
                     (Operator::Mul, VectorType::Ciphertext) => {
                         out_cost.ct_ct_mult = out_mult * (extent - 1);
-                        
+
                         // compilation of reduction will try to create a
                         // balanced tree of mults, so there is only log-factor
                         // addition to muldepth
@@ -290,9 +299,16 @@ impl CostEstimator {
 }
 
 #[cfg(test)]
-mod tests{
-    use crate::{lang::{parser::ProgramParser, index_elim::IndexElimination, source::SourceProgram, elaborated::Elaborator}, circ::materializer::{Materializer, DummyArrayMaterializer}, scheduling::Schedule};
+mod tests {
     use super::*;
+    use crate::{
+        circ::materializer::{DummyArrayMaterializer, Materializer},
+        lang::{
+            elaborated::Elaborator, index_elim::IndexElimination, parser::ProgramParser,
+            source::SourceProgram,
+        },
+        scheduling::Schedule,
+    };
 
     // generate an initial schedule for a program
     fn test_cost_estimator(src: &str) {
@@ -303,20 +319,14 @@ mod tests{
         let inline_set = elaborated.get_default_inline_set();
         let array_group_map = elaborated.get_default_array_group_map();
 
-        let res =
-            IndexElimination::new()
-            .run(&inline_set, &array_group_map, elaborated);
-        
+        let res = IndexElimination::new().run(&inline_set, &array_group_map, elaborated);
+
         assert!(res.is_ok());
 
         let tprogram = res.unwrap();
         let init_schedule = Schedule::gen_initial_schedule(&tprogram);
 
-        let materializer =
-            Materializer::new(
-                vec![Box::new(DummyArrayMaterializer {})],
-                tprogram,
-            );
+        let materializer = Materializer::new(vec![Box::new(DummyArrayMaterializer {})], tprogram);
 
         let res_mat = materializer.materialize(&init_schedule);
         assert!(res_mat.is_ok());
@@ -330,12 +340,12 @@ mod tests{
     #[test]
     fn test_imgblur() {
         test_cost_estimator(
-        "input img: [16,16] from client
+            "input img: [16,16] from client
             for x: 16 {
                 for y: 16 {
                     img[x-1][y-1] + img[x+1][y+1]
                 }
-            }"
+            }",
         );
     }
 }

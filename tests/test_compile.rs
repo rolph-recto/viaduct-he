@@ -54,7 +54,7 @@ fn test_compile(src: &str, size: usize, opt_duration: usize, extractor: Extracto
         HELoweredProgram::lower_program(
             size,
             noinplace,
-            &opt_prog, 
+            &opt_prog,
             &store,
             indfree_program.client_store,
             HashMap::new(),

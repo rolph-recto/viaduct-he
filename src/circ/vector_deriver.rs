@@ -1,8 +1,8 @@
 use bimap::BiHashMap;
 
 use crate::{
-    circ::{*, vector_info::VectorInfo},
-    scheduling::{IndexingSiteSchedule, ClientPreprocessing}
+    circ::{vector_info::VectorInfo, *},
+    scheduling::{ClientPreprocessing, IndexingSiteSchedule},
 };
 
 /// general methods for deriving vectors through rotation and masking
@@ -24,7 +24,6 @@ impl VectorDeriver {
     pub fn register_vector(&mut self, vector: VectorInfo) -> VectorId {
         if let Some(id) = self.vector_map.get_by_right(&vector) {
             *id
-
         } else {
             let id = self.cur_vector_id;
             self.cur_vector_id += 1;
@@ -38,7 +37,7 @@ impl VectorDeriver {
         for (id2, vector2) in self.vector_map.iter() {
             if id != *id2 {
                 if vector2.derive(vector).is_some() {
-                    return *id2
+                    return *id2;
                 }
             }
         }
@@ -76,7 +75,7 @@ impl VectorDeriver {
         schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
         preprocessing: Option<ClientPreprocessing>,
-        coords: impl Iterator<Item=IndexCoord> + Clone,
+        coords: impl Iterator<Item = IndexCoord> + Clone,
         obj_map: &mut IndexCoordinateMap<T>,
         mask_map: &mut IndexCoordinateMap<PlaintextObject>,
         step_map: &mut IndexCoordinateMap<isize>,
@@ -85,14 +84,13 @@ impl VectorDeriver {
         for coord in coords.clone() {
             let index_map = obj_map.coord_as_index_map(coord.clone());
 
-            let vector =
-                VectorInfo::get_input_vector_at_coord(
-                    index_map,
-                    array_shape,
-                    schedule,
-                    transform,
-                    preprocessing
-                );
+            let vector = VectorInfo::get_input_vector_at_coord(
+                index_map,
+                array_shape,
+                schedule,
+                transform,
+                preprocessing,
+            );
 
             let vector_id = self.register_vector(vector);
             vector_id_map.insert(coord, vector_id);
@@ -105,7 +103,8 @@ impl VectorDeriver {
             let vector_id = *vector_id_map.get(&coord).unwrap();
             let parent_id = self.find_transitive_parent(vector_id);
 
-            if vector_id != parent_id { // the vector is derived from some parent 
+            if vector_id != parent_id {
+                // the vector is derived from some parent
                 let vector = self.get_vector(vector_id);
                 let parent = self.get_vector(parent_id);
                 let (steps, mask) = parent.derive(vector).unwrap();
@@ -113,8 +112,8 @@ impl VectorDeriver {
                 step_map.set(coord.clone(), steps);
                 mask_map.set(coord.clone(), mask);
                 obj_map.set(coord, T::input_vector(parent.clone()));
-
-            } else { // the vector is not derived
+            } else {
+                // the vector is not derived
                 let vector = self.get_vector(vector_id);
                 step_map.set(coord.clone(), 0);
                 mask_map.set(coord.clone(), PlaintextObject::Const(1));
@@ -124,13 +123,13 @@ impl VectorDeriver {
     }
 
     fn derive_from_list<'a>(
-        src_list: impl Iterator<Item=(IndexCoord, Option<&'a VectorInfo>)>,
+        src_list: impl Iterator<Item = (IndexCoord, Option<&'a VectorInfo>)>,
         dst: &VectorInfo,
     ) -> Option<(VectorInfo, IndexCoord, isize, PlaintextObject)> {
         for (reg_coord, reg_vector_opt) in src_list {
             if let Some(reg_vector) = reg_vector_opt {
                 if let Some((steps, mask)) = reg_vector.derive(dst) {
-                    return Some((reg_vector.clone(), reg_coord.clone(), steps, mask))
+                    return Some((reg_vector.clone(), reg_coord.clone(), steps, mask));
                 }
             }
         }
@@ -142,25 +141,29 @@ impl VectorDeriver {
     pub fn derive_from_source<T: CircuitObject>(
         src: &CircuitValue<VectorInfo>,
         dst: &CircuitValue<VectorInfo>,
-    ) -> Option<(CircuitValue<T>, CircuitValue<isize>, CircuitValue<PlaintextObject>)> {
+    ) -> Option<(
+        CircuitValue<T>,
+        CircuitValue<isize>,
+        CircuitValue<PlaintextObject>,
+    )> {
         match dst {
             CircuitValue::CoordMap(dst_map) => {
                 // attempt to derive the dst map from the src map
                 match src {
                     CircuitValue::CoordMap(src_map) => {
                         // coordinate in src_map that can be used to derive dst_map vector
-                        let mut ct_map: IndexCoordinateMap<T> = IndexCoordinateMap::from_coord_system(dst_map.coord_system.clone());
-                        let mut step_map: IndexCoordinateMap<isize> = IndexCoordinateMap::from_coord_system(dst_map.coord_system.clone());
-                        let mut mask_map: IndexCoordinateMap<PlaintextObject> = IndexCoordinateMap::from_coord_system(dst_map.coord_system.clone());
+                        let mut ct_map: IndexCoordinateMap<T> =
+                            IndexCoordinateMap::from_coord_system(dst_map.coord_system.clone());
+                        let mut step_map: IndexCoordinateMap<isize> =
+                            IndexCoordinateMap::from_coord_system(dst_map.coord_system.clone());
+                        let mut mask_map: IndexCoordinateMap<PlaintextObject> =
+                            IndexCoordinateMap::from_coord_system(dst_map.coord_system.clone());
 
                         for (coord, dst_vector_opt) in dst_map.value_iter() {
                             let dst_vector = dst_vector_opt.unwrap();
 
                             let derive_opt =
-                                VectorDeriver::derive_from_list(
-                                    src_map.value_iter(),
-                                    dst_vector
-                                );
+                                VectorDeriver::derive_from_list(src_map.value_iter(), dst_vector);
 
                             if let Some((vector, reg_coord, steps, mask)) = derive_opt {
                                 let object = T::expr_vector(vector.array, reg_coord);
@@ -168,9 +171,8 @@ impl VectorDeriver {
                                 ct_map.set(coord.clone(), object);
                                 step_map.set(coord.clone(), steps);
                                 mask_map.set(coord.clone(), mask);
-
-                            } else  {
-                                return None
+                            } else {
+                                return None;
                             }
                         }
 
@@ -179,74 +181,70 @@ impl VectorDeriver {
                             CircuitValue::CoordMap(step_map),
                             CircuitValue::CoordMap(mask_map),
                         ))
-                    },
+                    }
 
                     CircuitValue::Single(src_vector) => {
-                        let mut step_map: IndexCoordinateMap<isize> = IndexCoordinateMap::from_coord_system(dst_map.coord_system.clone());
-                        let mut mask_map: IndexCoordinateMap<PlaintextObject> = IndexCoordinateMap::from_coord_system(dst_map.coord_system.clone());
+                        let mut step_map: IndexCoordinateMap<isize> =
+                            IndexCoordinateMap::from_coord_system(dst_map.coord_system.clone());
+                        let mut mask_map: IndexCoordinateMap<PlaintextObject> =
+                            IndexCoordinateMap::from_coord_system(dst_map.coord_system.clone());
 
                         for (coord, dst_vector_opt) in dst_map.value_iter() {
                             let dst_vector = dst_vector_opt.unwrap();
-                            let derive_opt =
-                                src_vector.derive(dst_vector);
+                            let derive_opt = src_vector.derive(dst_vector);
 
                             if let Some((steps, mask)) = derive_opt {
                                 step_map.set(coord.clone(), steps);
                                 mask_map.set(coord.clone(), mask);
-
-                            } else  {
-                                return None
+                            } else {
+                                return None;
                             }
                         }
 
                         Some((
-                            CircuitValue::Single(T::expr_vector(src_vector.array.clone(), im::Vector::new())),
+                            CircuitValue::Single(T::expr_vector(
+                                src_vector.array.clone(),
+                                im::Vector::new(),
+                            )),
                             CircuitValue::CoordMap(step_map),
                             CircuitValue::CoordMap(mask_map),
                         ))
                     }
                 }
-            },
+            }
 
-            CircuitValue::Single(dst_vector) => {
-                match src {
-                    CircuitValue::CoordMap(src_map) => {
-                        let derive_opt =
-                            VectorDeriver::derive_from_list(
-                                src_map.value_iter(),
-                                dst_vector
-                            );
+            CircuitValue::Single(dst_vector) => match src {
+                CircuitValue::CoordMap(src_map) => {
+                    let derive_opt =
+                        VectorDeriver::derive_from_list(src_map.value_iter(), dst_vector);
 
-                        if let Some((vector, reg_coord, steps, mask)) = derive_opt {
-                            let object = T::expr_vector(vector.array, reg_coord);
+                    if let Some((vector, reg_coord, steps, mask)) = derive_opt {
+                        let object = T::expr_vector(vector.array, reg_coord);
 
-                            Some((
-                                CircuitValue::Single(object),
-                                CircuitValue::Single(steps),
-                                CircuitValue::Single(mask),
-                            ))
-
-                        } else  {
-                            return None
-                        }
-                    },
-
-                    CircuitValue::Single(src_vector) => {
-                        if let Some((steps, mask)) = src_vector.derive(dst_vector) {
-                            let object = T::expr_vector(src_vector.array.clone(), im::Vector::new());
-
-                            Some((
-                                CircuitValue::Single(object),
-                                CircuitValue::Single(steps),
-                                CircuitValue::Single(mask),
-                            ))
-
-                        } else {
-                            None
-                        }
+                        Some((
+                            CircuitValue::Single(object),
+                            CircuitValue::Single(steps),
+                            CircuitValue::Single(mask),
+                        ))
+                    } else {
+                        return None;
                     }
                 }
-            }
+
+                CircuitValue::Single(src_vector) => {
+                    if let Some((steps, mask)) = src_vector.derive(dst_vector) {
+                        let object = T::expr_vector(src_vector.array.clone(), im::Vector::new());
+
+                        Some((
+                            CircuitValue::Single(object),
+                            CircuitValue::Single(steps),
+                            CircuitValue::Single(mask),
+                        ))
+                    } else {
+                        None
+                    }
+                }
+            },
         }
     }
 
@@ -257,7 +255,7 @@ impl VectorDeriver {
     // valid_coords and processed_index_vars
     pub fn compute_linear_offset(
         step_map: &IndexCoordinateMap<isize>,
-        valid_coords: impl Iterator<Item=IndexCoord>,
+        valid_coords: impl Iterator<Item = IndexCoord>,
         index_vars_to_process: Vec<DimName>,
     ) -> Option<OffsetExpr> {
         let index_vars = step_map.index_vars();
@@ -278,24 +276,22 @@ impl VectorDeriver {
         }
 
         // build offset expr from base offset and coefficients
-        let offset_expr =
-            coefficients.iter()
-            .zip(index_vars.clone())
-            .fold(OffsetExpr::Literal(base_offset), |acc, (coeff, index_var)| {
+        let offset_expr = coefficients.iter().zip(index_vars.clone()).fold(
+            OffsetExpr::Literal(base_offset),
+            |acc, (coeff, index_var)| {
                 if *coeff != 0 {
                     OffsetExpr::Add(
                         Box::new(acc),
-                        Box::new(
-                            OffsetExpr::Mul(
-                                Box::new(OffsetExpr::Literal(*coeff)),
-                                Box::new(OffsetExpr::Var(index_var.clone()))
-                            )
-                        )
+                        Box::new(OffsetExpr::Mul(
+                            Box::new(OffsetExpr::Literal(*coeff)),
+                            Box::new(OffsetExpr::Var(index_var.clone())),
+                        )),
                     )
                 } else {
                     acc
                 }
-            });
+            },
+        );
 
         // validate computed offset expr
         for coord in valid_coords {
@@ -306,7 +302,7 @@ impl VectorDeriver {
             let offset_env = OffsetEnvironment::new(index_map);
             let predicted_value = offset_expr.eval(&offset_env);
             if value != predicted_value {
-                return None
+                return None;
             }
         }
 
@@ -320,85 +316,73 @@ impl VectorDeriver {
         mask_val: CircuitValue<PlaintextObject>,
         registry: &mut CircuitObjectRegistry,
     ) -> CircuitId
-        where
+    where
         CircuitObjectRegistry: CanRegisterObject<'a, T>,
-        ParamCircuitExpr: CanCreateObjectVar<T>
+        ParamCircuitExpr: CanCreateObjectVar<T>,
     {
         let obj_var = registry.fresh_obj_var();
-        let mask_is_nonconst =
-            match &mask_val {
-                CircuitValue::CoordMap(mask_map) => {
-                    mask_map.value_iter().any(|(_, mask)| {
-                        if let Some(PlaintextObject::Const(_)) = mask {
-                            false
-
-                        } else {
-                            true
-                        }
-                    })
-                },
-
-                CircuitValue::Single(obj) => {
-                    if let PlaintextObject::Const(_) = obj {
-                        false
-
-                    } else {
-                        true
-                    }
+        let mask_is_nonconst = match &mask_val {
+            CircuitValue::CoordMap(mask_map) => mask_map.value_iter().any(|(_, mask)| {
+                if let Some(PlaintextObject::Const(_)) = mask {
+                    false
+                } else {
+                    true
                 }
-            };
+            }),
 
-        let masked_expr =
-            if mask_is_nonconst {
-                let pt_var = registry.fresh_pt_var();
-                registry.set_obj_var_value(obj_var.clone(), obj_val);
-                registry.set_pt_var_value(pt_var.clone(), mask_val);
+            CircuitValue::Single(obj) => {
+                if let PlaintextObject::Const(_) = obj {
+                    false
+                } else {
+                    true
+                }
+            }
+        };
 
-                let var_id = registry.register_circuit(ParamCircuitExpr::obj_var(obj_var));
-                let mask_id = registry.register_circuit(ParamCircuitExpr::PlaintextVar(pt_var));
+        let masked_expr = if mask_is_nonconst {
+            let pt_var = registry.fresh_pt_var();
+            registry.set_obj_var_value(obj_var.clone(), obj_val);
+            registry.set_pt_var_value(pt_var.clone(), mask_val);
 
-                ParamCircuitExpr::Op(Operator::Mul, var_id, mask_id)
+            let var_id = registry.register_circuit(ParamCircuitExpr::obj_var(obj_var));
+            let mask_id = registry.register_circuit(ParamCircuitExpr::PlaintextVar(pt_var));
 
-            } else {
-                registry.set_obj_var_value(obj_var.clone(), obj_val);
-                ParamCircuitExpr::obj_var(obj_var)
-            };
+            ParamCircuitExpr::Op(Operator::Mul, var_id, mask_id)
+        } else {
+            registry.set_obj_var_value(obj_var.clone(), obj_val);
+            ParamCircuitExpr::obj_var(obj_var)
+        };
 
         let masked_expr_id = registry.register_circuit(masked_expr.clone());
 
-        let offset_expr_opt =
-            match &step_val {
-                // a vector map derived from a vector map
-                CircuitValue::CoordMap(step_map) => {
-                    // attempt to compute offset expr
-                    VectorDeriver::compute_linear_offset(
-                        &step_map, 
-                        step_map.coord_iter(), 
-                        step_map.coord_system.index_vars()
-                    )
-                },
+        let offset_expr_opt = match &step_val {
+            // a vector map derived from a vector map
+            CircuitValue::CoordMap(step_map) => {
+                // attempt to compute offset expr
+                VectorDeriver::compute_linear_offset(
+                    &step_map,
+                    step_map.coord_iter(),
+                    step_map.coord_system.index_vars(),
+                )
+            }
 
-                // a single vector derived from a either a single vector or a vector map
-                CircuitValue::Single(step) => {
-                    Some(OffsetExpr::Literal(*step))
-                },
-            };
+            // a single vector derived from a either a single vector or a vector map
+            CircuitValue::Single(step) => Some(OffsetExpr::Literal(*step)),
+        };
 
-        let output_expr = 
-            if let Some(linear_offset_expr) = offset_expr_opt {
-                if let Some(0) = linear_offset_expr.const_value() {
-                    masked_expr
+        let output_expr = if let Some(linear_offset_expr) = offset_expr_opt {
+            if let Some(0) = linear_offset_expr.const_value() {
+                masked_expr
+            } else {
+                ParamCircuitExpr::Rotate(linear_offset_expr, masked_expr_id)
+            }
+        } else {
+            // introduce new offset variable, since we can't create an offset expr
+            let offset_var = registry.fresh_offset_fvar();
+            registry.set_offset_var_value(offset_var.clone(), step_val);
 
-                } else {
-                    ParamCircuitExpr::Rotate(linear_offset_expr, masked_expr_id)
-                }
-
-            } else { // introduce new offset variable, since we can't create an offset expr
-                let offset_var = registry.fresh_offset_fvar();
-                registry.set_offset_var_value(offset_var.clone(), step_val);
-
-                ParamCircuitExpr::Rotate(OffsetExpr::Var(offset_var), masked_expr_id)
-            };
+            ParamCircuitExpr::Rotate(OffsetExpr::Var(offset_var), masked_expr_id)
+        };
 
         registry.register_circuit(output_expr)
     }
@@ -412,14 +396,15 @@ impl VectorDeriver {
         preprocessing: Option<ClientPreprocessing>,
         registry: &mut CircuitObjectRegistry,
     ) -> CircuitId
-        where
+    where
         CircuitObjectRegistry: CanRegisterObject<'a, T>,
-        ParamCircuitExpr: CanCreateObjectVar<T>
+        ParamCircuitExpr: CanCreateObjectVar<T>,
     {
         let mut obj_map: IndexCoordinateMap<T> =
             IndexCoordinateMap::new(schedule.exploded_dims.iter());
 
-        if !obj_map.is_empty() { // there is an array of vectors
+        if !obj_map.is_empty() {
+            // there is an array of vectors
             let mut mask_map: IndexCoordinateMap<PlaintextObject> =
                 IndexCoordinateMap::new(schedule.exploded_dims.iter());
             let mut step_map: IndexCoordinateMap<isize> =
@@ -434,32 +419,31 @@ impl VectorDeriver {
                 coords.clone(),
                 &mut obj_map,
                 &mut mask_map,
-                &mut step_map
+                &mut step_map,
             );
 
             VectorDeriver::gen_circuit_expr(
                 CircuitValue::CoordMap(obj_map),
                 CircuitValue::CoordMap(step_map),
                 CircuitValue::CoordMap(mask_map),
-                registry
+                registry,
             )
-
-        } else { // there is only a single vector
+        } else {
+            // there is only a single vector
             let index_map: HashMap<DimName, usize> = HashMap::new();
-            let vector =
-                VectorInfo::get_input_vector_at_coord(
-                    index_map,
-                    array_shape,
-                    schedule, 
-                    transform,
-                    preprocessing
-                );
+            let vector = VectorInfo::get_input_vector_at_coord(
+                index_map,
+                array_shape,
+                schedule,
+                transform,
+                preprocessing,
+            );
 
             VectorDeriver::gen_circuit_expr(
                 CircuitValue::Single(T::input_vector(vector)),
                 CircuitValue::Single(0),
                 CircuitValue::Single(PlaintextObject::Const(1)),
-                registry
+                registry,
             )
         }
     }
