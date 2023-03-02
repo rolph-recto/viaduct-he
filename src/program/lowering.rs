@@ -27,13 +27,13 @@ impl CircuitLowering {
     fn resolve_ciphertext_object(obj: &CiphertextObject, input: &HEProgramContext) -> HERef {
         match obj {
             CiphertextObject::InputVector(vector) => {
-                let vector_var = input.vector_map.get(vector).unwrap().clone();
-                HERef::Ciphertext(vector_var, vec![])
+                let vector_var = input.ct_vector_map.get(vector).unwrap().clone();
+                HERef::Array(vector_var, vec![])
             }
 
             CiphertextObject::ExprVector(array, coords) => {
                 let coord_index = coords.iter().map(|coord| HEIndex::Literal(*coord as isize));
-                HERef::Ciphertext(array.clone(), Vec::from_iter(coord_index))
+                HERef::Array(array.clone(), Vec::from_iter(coord_index))
             }
         }
     }
@@ -59,7 +59,7 @@ impl CircuitLowering {
                     let obj = obj_opt.unwrap();
                     match obj {
                         CiphertextObject::InputVector(vector) => {
-                            vector_var_set.insert(input.vector_map.get(vector).unwrap().clone());
+                            vector_var_set.insert(input.ct_vector_map.get(vector).unwrap().clone());
                         }
 
                         CiphertextObject::ExprVector(ref_vector, ref_coord) => {
@@ -72,13 +72,13 @@ impl CircuitLowering {
                 if vector_var_set.len() == 1 {
                     let vector_var = vector_var_set.into_iter().next().unwrap();
                     if coord_val_map.len() == 0 {
-                        Some(HERef::Ciphertext(vector_var, vec![]))
+                        Some(HERef::Array(vector_var, vec![]))
                     } else {
                         let index_opt =
                             Self::compute_coord_relationship(coord_map.index_vars(), coord_val_map);
 
                         if let Some(index) = index_opt {
-                            Some(HERef::Ciphertext(vector_var, index))
+                            Some(HERef::Array(vector_var, index))
                         } else {
                             None
                         }
@@ -105,7 +105,7 @@ impl CircuitLowering {
                     let obj = obj_opt.unwrap();
                     match obj {
                         PlaintextObject::InputVector(vector) => {
-                            vector_var_set.insert(input.vector_map.get(vector).unwrap().clone());
+                            vector_var_set.insert(input.ct_vector_map.get(vector).unwrap().clone());
                         }
 
                         PlaintextObject::ExprVector(ref_vector, ref_coord) => {
@@ -126,13 +126,13 @@ impl CircuitLowering {
                 if vector_var_set.len() == 1 {
                     let vector_var = vector_var_set.into_iter().next().unwrap();
                     if coord_val_map.len() == 0 {
-                        Some(HERef::Plaintext(vector_var, vec![]))
+                        Some(HERef::Array(vector_var, vec![]))
                     } else {
                         let index_opt =
                             Self::compute_coord_relationship(coord_map.index_vars(), coord_val_map);
 
                         if let Some(index) = index_opt {
-                            Some(HERef::Plaintext(vector_var, index))
+                            Some(HERef::Array(vector_var, index))
                         } else {
                             None
                         }
@@ -149,23 +149,23 @@ impl CircuitLowering {
     fn resolve_plaintext_object(obj: &PlaintextObject, input: &HEProgramContext) -> HERef {
         match obj {
             PlaintextObject::InputVector(vector) => {
-                let vector_var = input.vector_map.get(vector).unwrap().clone();
-                HERef::Plaintext(vector_var, vec![])
+                let vector_var = input.pt_vector_map.get(vector).unwrap().clone();
+                HERef::Array(vector_var, vec![])
             }
 
             PlaintextObject::ExprVector(array, coords) => {
                 let coord_index = coords.iter().map(|coord| HEIndex::Literal(*coord as isize));
-                HERef::Plaintext(array.clone(), Vec::from_iter(coord_index))
+                HERef::Array(array.clone(), Vec::from_iter(coord_index))
             }
 
             PlaintextObject::Const(val) => {
                 let const_var = input.const_map.get(val).unwrap().clone();
-                HERef::Plaintext(const_var, vec![])
+                HERef::Array(const_var, vec![])
             }
 
             PlaintextObject::Mask(mask) => {
                 let mask_var = input.mask_map.get(mask).unwrap().clone();
-                HERef::Plaintext(mask_var, vec![])
+                HERef::Array(mask_var, vec![])
             }
         }
     }
@@ -175,13 +175,19 @@ impl CircuitLowering {
     }
 
     fn gen_program_context(&mut self, registry: &CircuitObjectRegistry) -> HEProgramContext {
-        let mut vector_map = HashMap::new();
+        let mut ct_vector_map = HashMap::new();
+        let mut pt_vector_map = HashMap::new();
         let mut mask_map = HashMap::new();
         let mut const_map = HashMap::new();
 
-        for vector in registry.get_vectors() {
-            let vector_name = self.name_generator.get_fresh_name("vector");
-            vector_map.insert(vector, vector_name);
+        for vector in registry.get_ciphertext_vectors() {
+            let vector_name = self.name_generator.get_fresh_name("ct");
+            ct_vector_map.insert(vector, vector_name);
+        }
+
+        for vector in registry.get_plaintext_vectors() {
+            let vector_name = self.name_generator.get_fresh_name("pt");
+            pt_vector_map.insert(vector, vector_name);
         }
 
         for mask in registry.get_masks() {
@@ -194,7 +200,8 @@ impl CircuitLowering {
         }
 
         HEProgramContext {
-            vector_map,
+            ct_vector_map,
+            pt_vector_map,
             mask_map,
             const_map,
         }
@@ -226,7 +233,7 @@ impl CircuitLowering {
         }
     }
 
-    pub fn lower(&mut self, program: ParamCircuitProgram) -> HEProgram {
+    pub fn run(&mut self, program: ParamCircuitProgram) -> HEProgram {
         let mut statements: Vec<HEStatement> = Vec::new();
         let context = self.gen_program_context(&program.registry);
 
@@ -282,13 +289,15 @@ impl CircuitLowering {
                 );
             }
 
-            let dim_vars: Vec<String> = dims.iter().map(|(var, _)| var.clone()).collect();
+            let dim_vars: Vec<DimName> =
+                dims.iter().map(|(var, _)| var.clone()).collect();
 
-            let dim_extents = dims.iter().map(|(_, extent)| *extent).collect();
+            let dim_extents: Vec<Extent> =
+                dims.iter().map(|(_, extent)| *extent).collect();
 
             // generate statements for array expr
             // first, declare array
-            statements.push(HEStatement::DeclareVar(array.clone(), dim_extents));
+            statements.push(HEStatement::DeclareVar(array.clone(), HEType::Ciphertext, dim_extents));
 
             // generate statements in the array expr's body
             let mut body_statements: Vec<HEStatement> = Vec::new();
@@ -339,7 +348,7 @@ impl CircuitLowering {
         indices: &Vec<(String, usize)>,
         ct_inline_map: &HashMap<VarName, HERef>,
         pt_inline_map: &HashMap<VarName, HERef>,
-        ref_map: &mut HashMap<usize, HERef>,
+        ref_map: &mut HashMap<usize, (HERef, HEType)>,
         stmts: &mut Vec<HEStatement>,
     ) -> InstructionId {
         if let Some(instr_id) = self.circuit_instr_map.get(&expr_id) {
@@ -349,14 +358,14 @@ impl CircuitLowering {
                 ParamCircuitExpr::CiphertextVar(var) => {
                     let instr_id = self.fresh_instr_id();
                     if let Some(var_ref) = ct_inline_map.get(var) {
-                        ref_map.insert(instr_id, var_ref.clone());
+                        ref_map.insert(instr_id, (var_ref.clone(), HEType::Ciphertext));
                     } else {
                         let index_vars = indices
                             .iter()
                             .map(|(var, _)| HEIndex::Var(var.clone()))
                             .collect();
-                        let var_ref = HERef::Ciphertext(var.clone(), index_vars);
-                        ref_map.insert(instr_id, var_ref);
+                        let var_ref = HERef::Array(var.clone(), index_vars);
+                        ref_map.insert(instr_id, (var_ref, HEType::Ciphertext));
                     }
 
                     self.circuit_instr_map.insert(expr_id, instr_id);
@@ -366,14 +375,14 @@ impl CircuitLowering {
                 ParamCircuitExpr::PlaintextVar(var) => {
                     let instr_id = self.fresh_instr_id();
                     if let Some(var_ref) = pt_inline_map.get(var) {
-                        ref_map.insert(instr_id, var_ref.clone());
+                        ref_map.insert(instr_id, (var_ref.clone(), HEType::Plaintext));
                     } else {
                         let index_vars = indices
                             .iter()
                             .map(|(var, _)| HEIndex::Var(var.clone()))
                             .collect();
-                        let var_ref = HERef::Plaintext(var.clone(), index_vars);
-                        ref_map.insert(instr_id, var_ref);
+                        let var_ref = HERef::Array(var.clone(), index_vars);
+                        ref_map.insert(instr_id, (var_ref, HEType::Plaintext));
                     }
 
                     instr_id
@@ -382,8 +391,8 @@ impl CircuitLowering {
                 ParamCircuitExpr::Literal(val) => {
                     let lit_ref = context.const_map.get(val).unwrap();
                     let instr_id = self.fresh_instr_id();
-                    let lit_ref = HERef::Plaintext(lit_ref.clone(), vec![]);
-                    ref_map.insert(instr_id, lit_ref);
+                    let lit_ref = HERef::Array(lit_ref.clone(), vec![]);
+                    ref_map.insert(instr_id, (lit_ref, HEType::Plaintext));
                     self.circuit_instr_map.insert(expr_id, instr_id);
                     instr_id
                 }
@@ -411,18 +420,35 @@ impl CircuitLowering {
                         stmts,
                     );
 
-                    let ref1 = ref_map.get(&id1).unwrap().clone();
-                    let ref2 = ref_map.get(&id2).unwrap().clone();
+                    let (ref1, type1) = ref_map.get(&id1).unwrap().clone();
+                    let (ref2, type2) = ref_map.get(&id2).unwrap().clone();
+
+                    // make sure that operand 1 is always ciphertext
+                    let (optype, ref1_final, ref2_final) =
+                        match (type1, type2) {
+                            (HEType::Ciphertext, HEType::Ciphertext) =>
+                                (HEInstructionType::CipherCipher, ref1, ref2),
+
+                            (HEType::Plaintext, HEType::Ciphertext) =>
+                                (HEInstructionType::CipherPlain, ref2, ref1),
+
+                            (HEType::Ciphertext, HEType::Plaintext) =>
+                                (HEInstructionType::CipherPlain, ref1, ref2),
+
+                            (HEType::Native, _) | (_, HEType::Native) |
+                            (HEType::Plaintext, HEType::Plaintext) =>
+                                unreachable!()
+                        };
 
                     let id = self.fresh_instr_id();
                     let instr = match op {
-                        Operator::Add => HEInstruction::Add(id, ref1, ref2),
-                        Operator::Sub => HEInstruction::Sub(id, ref1, ref2),
-                        Operator::Mul => HEInstruction::Mul(id, ref1, ref2),
+                        Operator::Add => HEInstruction::Add(optype, id, ref1_final, ref2_final),
+                        Operator::Sub => HEInstruction::Sub(optype, id, ref1_final, ref2_final),
+                        Operator::Mul => HEInstruction::Mul(optype, id, ref1_final, ref2_final),
                     };
 
                     stmts.push(HEStatement::Instruction(instr));
-                    ref_map.insert(id, HERef::Instruction(id));
+                    ref_map.insert(id, (HERef::Instruction(id), HEType::Ciphertext));
                     id
                 }
 
@@ -440,18 +466,23 @@ impl CircuitLowering {
 
                     let id = self.fresh_instr_id();
 
-                    let body_operand = ref_map.get(&body_id).unwrap().clone();
+                    let (body_operand, body_type) = ref_map.get(&body_id).unwrap().clone();
+
+                    // plaintext rotations should have been partially evaluated
+                    assert!(body_type == HEType::Ciphertext);
+
                     stmts.push(HEStatement::Instruction(HEInstruction::Rot(
+                        HEInstructionType::CipherCipher,
                         id,
                         steps.clone(),
                         body_operand,
                     )));
-                    ref_map.insert(id, HERef::Instruction(id));
+                    ref_map.insert(id, (HERef::Instruction(id), HEType::Ciphertext));
 
                     id
                 }
 
-                ParamCircuitExpr::ReduceVectors(dim, extent, op, body) => {
+                ParamCircuitExpr::ReduceDim(dim, extent, op, body) => {
                     let mut body_indices = indices.clone();
                     body_indices.push((dim.clone(), *extent));
 
@@ -468,25 +499,31 @@ impl CircuitLowering {
                         &mut body_stmts,
                     );
 
-                    let body_operand = ref_map.get(&body_id).unwrap().clone();
+                    let (body_operand, body_type) = ref_map.get(&body_id).unwrap().clone();
+
+                    // the body must be ciphertext, or else
+                    // it would've been partially evaluated
+                    assert!(body_type == HEType::Ciphertext);
 
                     let reduce_var = self.name_generator.get_fresh_name("reduce");
 
-                    let reduce_var_ref = HERef::Ciphertext(reduce_var.clone(), vec![]);
+                    let reduce_var_ref = HERef::Array(reduce_var.clone(), vec![]);
 
                     let reduce_id = self.fresh_instr_id();
 
+                    let reduce_type = HEInstructionType::CipherCipher;
+
                     let reduce_stmt = match op {
                         Operator::Add => {
-                            HEInstruction::Add(reduce_id, reduce_var_ref.clone(), body_operand)
+                            HEInstruction::Add(reduce_type, reduce_id, reduce_var_ref.clone(), body_operand)
                         }
 
                         Operator::Sub => {
-                            HEInstruction::Sub(reduce_id, reduce_var_ref.clone(), body_operand)
+                            HEInstruction::Sub(reduce_type, reduce_id, reduce_var_ref.clone(), body_operand)
                         }
 
                         Operator::Mul => {
-                            HEInstruction::Mul(reduce_id, reduce_var_ref.clone(), body_operand)
+                            HEInstruction::Mul(reduce_type, reduce_id, reduce_var_ref.clone(), body_operand)
                         }
                     };
 
@@ -498,16 +535,84 @@ impl CircuitLowering {
                     ));
 
                     stmts.extend([
-                        HEStatement::DeclareVar(reduce_var.clone(), vec![]),
+                        HEStatement::DeclareVar(reduce_var.clone(), HEType::Ciphertext, vec![]),
                         HEStatement::ForNode(dim.clone(), *extent, body_stmts),
                     ]);
 
                     let id = self.fresh_instr_id();
-                    ref_map.insert(id, reduce_var_ref);
+                    ref_map.insert(id, (reduce_var_ref, HEType::Ciphertext));
 
                     id
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        circ::{
+            CiphertextObject, CircuitObjectRegistry, CircuitValue, IndexCoordinateMap,
+            IndexCoordinateSystem, ParamCircuitExpr, ParamCircuitProgram,
+        },
+        lang::{BaseOffsetMap, Operator},
+        program::lowering::CircuitLowering,
+    };
+
+    use super::*;
+
+    fn test_lowering(program: ParamCircuitProgram) {
+        let mut lowering = CircuitLowering::new();
+        let lowered_program = lowering.run(program);
+        println!("{}", lowered_program);
+    }
+
+    #[test]
+    fn test_reduce() {
+        let mut coord_map =
+            IndexCoordinateMap::from_coord_system(IndexCoordinateSystem::from_dim_list(vec![
+                (String::from("i"), 2),
+                (String::from("j"), 2),
+            ]));
+
+        let vector = VectorInfo {
+            array: String::from("arr"),
+            preprocessing: None,
+            offset_map: BaseOffsetMap::new(2),
+            dims: im::Vector::new(),
+        };
+
+        let ct_obj = CiphertextObject::InputVector(vector);
+
+        coord_map.set(im::vector![0, 0], ct_obj.clone());
+        coord_map.set(im::vector![0, 1], ct_obj.clone());
+        coord_map.set(im::vector![1, 0], ct_obj.clone());
+        coord_map.set(im::vector![1, 1], ct_obj.clone());
+
+        let mut registry = CircuitObjectRegistry::new();
+
+        let lit_2 = registry.register_circuit(ParamCircuitExpr::Literal(2));
+        let ct = registry.register_circuit(ParamCircuitExpr::CiphertextVar(String::from("ct")));
+        let reduce_vec = registry.register_circuit(ParamCircuitExpr::ReduceDim(
+            String::from("j"),
+            2,
+            Operator::Add,
+            ct,
+        ));
+
+        let circuit =
+            registry.register_circuit(ParamCircuitExpr::Op(Operator::Add, reduce_vec, lit_2));
+
+        registry
+            .ct_var_values
+            .insert(String::from("ct"), CircuitValue::CoordMap(coord_map));
+
+        let circuit_program = ParamCircuitProgram {
+            registry,
+            expr_list: vec![(String::from("out"), vec![(String::from("i"), 2)], circuit)],
+        };
+
+        test_lowering(circuit_program);
     }
 }

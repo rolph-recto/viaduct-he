@@ -328,7 +328,7 @@ mod tests {
 
         let materializer = Materializer::new(vec![Box::new(DummyArrayMaterializer {})], tprogram);
 
-        let res_mat = materializer.materialize(&init_schedule);
+        let res_mat = materializer.run(&init_schedule);
         assert!(res_mat.is_ok());
 
         let param_circ = res_mat.unwrap();

@@ -45,7 +45,7 @@ pub enum ParamCircuitExpr {
     Literal(isize),
     Op(Operator, CircuitId, CircuitId),
     Rotate(OffsetExpr, CircuitId),
-    ReduceVectors(DimName, Extent, Operator, CircuitId),
+    ReduceDim(DimName, Extent, Operator, CircuitId),
 }
 
 impl ParamCircuitExpr {
@@ -59,7 +59,7 @@ impl ParamCircuitExpr {
 
             ParamCircuitExpr::Rotate(_, id) => vec![*id],
 
-            ParamCircuitExpr::ReduceVectors(_, _, _, id) => vec![*id],
+            ParamCircuitExpr::ReduceDim(_, _, _, id) => vec![*id],
         }
     }
 
@@ -132,7 +132,7 @@ impl Display for ParamCircuitExpr {
                 write!(f, "rot({}, {})", offset, expr)
             }
 
-            ParamCircuitExpr::ReduceVectors(index, _, op, expr) => {
+            ParamCircuitExpr::ReduceDim(index, _, op, expr) => {
                 write!(f, "reduce({}, {}, {})", index, op, expr)
             }
         }
@@ -383,6 +383,12 @@ impl Display for CiphertextObject {
 
 pub type MaskVector = im::Vector<(usize, usize, usize)>;
 
+pub enum PlaintextExpr {
+    Op(Operator, Box<PlaintextExpr>, Box<PlaintextExpr>),
+    Reduce(DimName, Operator, Box<PlaintextExpr>, Box<PlaintextExpr>),
+    Object(PlaintextObject),
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PlaintextObject {
     InputVector(VectorInfo),
@@ -558,7 +564,7 @@ impl CircuitObjectRegistry {
         self.offset_fvar_values.get(offset_fvar).unwrap()
     }
 
-    pub fn get_vectors(&self) -> HashSet<VectorInfo> {
+    pub fn get_ciphertext_vectors(&self) -> HashSet<VectorInfo> {
         let mut set = HashSet::new();
         for (_, val) in self.ct_var_values.iter() {
             match val {
@@ -572,6 +578,29 @@ impl CircuitObjectRegistry {
 
                 CircuitValue::Single(obj) => {
                     if let CiphertextObject::InputVector(vector) = obj {
+                        set.insert(vector.clone());
+                    }
+                }
+            }
+        }
+
+        set
+    }
+
+    pub fn get_plaintext_vectors(&self) -> HashSet<VectorInfo> {
+        let mut set = HashSet::new();
+        for (_, val) in self.pt_var_values.iter() {
+            match val {
+                CircuitValue::CoordMap(coord_map) => {
+                    for (_, obj) in coord_map.value_iter() {
+                        if let Some(PlaintextObject::InputVector(vector)) = obj {
+                            set.insert(vector.clone());
+                        }
+                    }
+                }
+
+                CircuitValue::Single(obj) => {
+                    if let PlaintextObject::InputVector(vector) = obj {
                         set.insert(vector.clone());
                     }
                 }
@@ -684,6 +713,33 @@ impl CircuitObjectRegistry {
         }
 
         offset_fvars
+    }
+
+    /// remove circuits not reachable from a set of roots
+    pub fn collect_garbage(&mut self, roots: HashSet<CircuitId>) {
+        let reachable: HashSet<CircuitId> =
+            roots.into_iter()
+            .flat_map(|root| {
+                HashSet::<CircuitId>::from_iter(
+                    self.expr_list(root).into_iter()
+                )
+            })
+            .collect();
+
+        let unreachable: HashSet<CircuitId> =
+            self.circuit_map.keys()
+            .filter_map(|id|
+                if !reachable.contains(id) {
+                    Some(*id)
+                } else {
+                    None
+                }
+            )
+            .collect();
+
+        for id in unreachable {
+            self.circuit_map.remove(&id);
+        }
     }
 }
 

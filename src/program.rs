@@ -11,6 +11,52 @@ pub type InstructionId = usize;
 
 pub mod lowering;
 
+/// data types for arrays in an HE program.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum HEType {
+    // machine-native data and operation
+    Native,
+
+    // native data encoded into a plaintext
+    Plaintext,
+
+    // ciphertext encrypted by the client
+    Ciphertext, 
+}
+
+impl Display for HEType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            HEType::Native => write!(f, "N"),
+            HEType::Plaintext => write!(f, "P"),
+            HEType::Ciphertext => write!(f, "C"),
+        }
+    }
+}
+
+/// instructions types in an HE program.
+#[derive(Copy, Clone, Debug)]
+pub enum HEInstructionType {
+    // native (cleartext) operations
+    Native,
+
+    // ciphertext-plaintext operations
+    CipherPlain,
+
+    // ciphertext-ciphertext operations
+    CipherCipher,
+}
+
+impl Display for HEInstructionType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            HEInstructionType::Native => write!(f, "N"),
+            HEInstructionType::CipherPlain => write!(f, "CP"),
+            HEInstructionType::CipherCipher => write!(f, "CC"),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum HEIndex {
     Var(String),
@@ -33,10 +79,7 @@ pub enum HERef {
     Instruction(InstructionId),
 
     // index to a ciphertext array (variable if no indices)
-    Ciphertext(ArrayName, Vec<HEIndex>),
-
-    // index to a plaintext array (variable if no indices)
-    Plaintext(ArrayName, Vec<HEIndex>),
+    Array(ArrayName, Vec<HEIndex>),
 }
 
 impl Display for HERef {
@@ -44,17 +87,7 @@ impl Display for HERef {
         match self {
             HERef::Instruction(id) => write!(f, "i{}", id),
 
-            HERef::Ciphertext(vector, indices) => {
-                let index_str = indices
-                    .iter()
-                    .map(|i| format!("[{}]", i))
-                    .collect::<Vec<String>>()
-                    .join("");
-
-                write!(f, "{}{}", vector, index_str)
-            }
-
-            HERef::Plaintext(vector, indices) => {
+            HERef::Array(vector, indices) => {
                 let index_str = indices
                     .iter()
                     .map(|i| format!("[{}]", i))
@@ -89,22 +122,26 @@ impl fmt::Display for HEOperand {
 
 #[derive(Clone, Debug)]
 pub enum HEInstruction {
-    Add(usize, HERef, HERef),
-    Sub(usize, HERef, HERef),
-    Mul(usize, HERef, HERef),
-    Rot(usize, OffsetExpr, HERef),
+    Add(HEInstructionType, usize, HERef, HERef),
+    Sub(HEInstructionType, usize, HERef, HERef),
+    Mul(HEInstructionType, usize, HERef, HERef),
+    Rot(HEInstructionType, usize, OffsetExpr, HERef),
 }
 
 impl fmt::Display for HEInstruction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            HEInstruction::Add(id, op1, op2) => write!(f, "i{} = {} + {}", id, op1, op2),
+            HEInstruction::Add(optype, id, op1, op2) =>
+                write!(f, "{:<2}: i{} = {} + {}", optype, id, op1, op2),
 
-            HEInstruction::Sub(id, op1, op2) => write!(f, "i{} = {} - {}", id, op1, op2),
+            HEInstruction::Sub(optype, id, op1, op2) =>
+                write!(f, "{:<2}: i{} = {} - {}", optype, id, op1, op2),
 
-            HEInstruction::Mul(id, op1, op2) => write!(f, "i{} = {} * {}", id, op1, op2),
+            HEInstruction::Mul(optype, id, op1, op2) =>
+                write!(f, "{:<2}: i{} = {} * {}", optype, id, op1, op2),
 
-            HEInstruction::Rot(id, op1, op2) => write!(f, "i{} = rot {} {}", id, op1, op2),
+            HEInstruction::Rot(optype, id, op1, op2) =>
+                write!(f, "{:<2}: i{} = rot {} {}", optype, id, op1, op2),
         }
     }
 }
@@ -112,7 +149,7 @@ impl fmt::Display for HEInstruction {
 #[derive(Clone, Debug)]
 pub enum HEStatement {
     ForNode(String, usize, Vec<HEStatement>),
-    DeclareVar(String, Vec<Extent>),
+    DeclareVar(String, HEType, Vec<Extent>),
     SetVar(String, Vec<HEIndex>, HEOperand),
     Instruction(HEInstruction),
 }
@@ -130,14 +167,14 @@ impl HEStatement {
                     .append(RcDoc::text("}"))
             }
 
-            HEStatement::DeclareVar(var, extents) => {
+            HEStatement::DeclareVar(var, ty, extents) => {
                 let extent_str = extents
                     .iter()
                     .map(|i| format!("[{}]", i))
                     .collect::<Vec<String>>()
                     .join("");
 
-                RcDoc::text(format!("var {}{}", var, extent_str))
+                RcDoc::text(format!("var {}: {}{}", var, ty, extent_str))
             }
 
             HEStatement::SetVar(var, indices, val) => {
@@ -162,7 +199,8 @@ impl Display for HEStatement {
 }
 
 pub struct HEProgramContext {
-    vector_map: HashMap<VectorInfo, String>,
+    ct_vector_map: HashMap<VectorInfo, String>,
+    pt_vector_map: HashMap<VectorInfo, String>,
     mask_map: HashMap<MaskVector, String>,
     const_map: HashMap<isize, String>,
 }
@@ -174,34 +212,81 @@ pub struct HEProgram {
 
 impl HEProgram {
     pub fn to_doc(&self) -> RcDoc<()> {
-        RcDoc::intersperse(
-            self.context
-                .vector_map
-                .iter()
-                .map(|(vector, name)| RcDoc::text(format!("{} = vector({})", name, vector))),
-            RcDoc::hardline(),
-        )
-        .append(RcDoc::hardline())
-        .append(RcDoc::intersperse(
-            self.context
-                .mask_map
-                .iter()
-                .map(|(mask, name)| RcDoc::text(format!("{} = mask({:?})", name, mask))),
-            RcDoc::hardline(),
-        ))
-        .append(RcDoc::hardline())
-        .append(RcDoc::intersperse(
-            self.context
-                .const_map
-                .iter()
-                .map(|(constval, name)| RcDoc::text(format!("{} = const({})", name, constval))),
-            RcDoc::hardline(),
-        ))
-        .append(RcDoc::hardline())
-        .append(RcDoc::intersperse(
-            self.statements.iter().map(|s| s.to_doc()),
-            RcDoc::hardline(),
-        ))
+        let ct_vector_doc =
+            if self.context.ct_vector_map.len() > 0 {
+                RcDoc::intersperse(
+                    self.context
+                        .ct_vector_map
+                        .iter()
+                        .map(|(vector, name)| {
+                            RcDoc::text(format!("val {}: C = vector({})", name, vector))
+                        }),
+                    RcDoc::hardline(),
+                )
+            } else {
+                RcDoc::nil()
+            };
+        
+        let pt_vector_doc =
+            if self.context.pt_vector_map.len() > 0 {
+                RcDoc::hardline()
+                .append(RcDoc::intersperse(
+                    self.context
+                        .pt_vector_map
+                        .iter()
+                        .map(|(mask, name)| {
+                            RcDoc::text(format!("val {}: P = vector({:?})", name, mask))
+                        }),
+                    RcDoc::hardline(),
+                ))
+            } else {
+                RcDoc::nil()
+            };
+        
+        let mask_doc =
+            if self.context.mask_map.len() > 0 {
+                RcDoc::hardline()
+                .append(RcDoc::intersperse(
+                    self.context
+                        .mask_map
+                        .iter()
+                        .map(|(mask, name)| {
+                            RcDoc::text(format!("val {}: P = mask({:?})", name, mask))
+                        }),
+                    RcDoc::hardline(),
+                ))
+            } else {
+                RcDoc::nil()
+            };
+
+        let const_doc =
+            if self.context.const_map.len() > 0 {
+                RcDoc::hardline()
+                .append(RcDoc::intersperse(
+                    self.context
+                        .const_map
+                        .iter()
+                        .map(|(constval, name)| {
+                            RcDoc::text(format!("val {}: P = const({})", name, constval))
+                        }),
+                    RcDoc::hardline(),
+                ))
+            } else {
+                RcDoc::nil()
+            };
+
+        let stmts_doc =
+            RcDoc::hardline()
+            .append(RcDoc::intersperse(
+                self.statements.iter().map(|s| s.to_doc()),
+                RcDoc::hardline(),
+            ));
+
+        ct_vector_doc
+        .append(pt_vector_doc)
+        .append(mask_doc)
+        .append(const_doc)
+        .append(stmts_doc)
     }
 }
 
@@ -596,71 +681,3 @@ impl HEProgramInterpreter {
     }
 }
 */
-
-#[cfg(test)]
-mod tests {
-    use crate::{
-        circ::{
-            CiphertextObject, CircuitObjectRegistry, CircuitValue, IndexCoordinateMap,
-            IndexCoordinateSystem, ParamCircuitExpr, ParamCircuitProgram,
-        },
-        lang::{BaseOffsetMap, Operator},
-        program::lowering::CircuitLowering,
-    };
-
-    use super::*;
-
-    fn test_lowering(program: ParamCircuitProgram) {
-        let mut lowering = CircuitLowering::new();
-        let lowered_program = lowering.lower(program);
-        println!("{}", lowered_program);
-    }
-
-    #[test]
-    fn test_reduce() {
-        let mut coord_map =
-            IndexCoordinateMap::from_coord_system(IndexCoordinateSystem::from_dim_list(vec![
-                (String::from("i"), 2),
-                (String::from("j"), 2),
-            ]));
-
-        let vector = VectorInfo {
-            array: String::from("arr"),
-            preprocessing: None,
-            offset_map: BaseOffsetMap::new(2),
-            dims: im::Vector::new(),
-        };
-
-        let ct_obj = CiphertextObject::InputVector(vector);
-
-        coord_map.set(im::vector![0, 0], ct_obj.clone());
-        coord_map.set(im::vector![0, 1], ct_obj.clone());
-        coord_map.set(im::vector![1, 0], ct_obj.clone());
-        coord_map.set(im::vector![1, 1], ct_obj.clone());
-
-        let mut registry = CircuitObjectRegistry::new();
-
-        let lit_2 = registry.register_circuit(ParamCircuitExpr::Literal(2));
-        let ct = registry.register_circuit(ParamCircuitExpr::CiphertextVar(String::from("ct")));
-        let reduce_vec = registry.register_circuit(ParamCircuitExpr::ReduceVectors(
-            String::from("j"),
-            2,
-            Operator::Add,
-            ct,
-        ));
-
-        let circuit =
-            registry.register_circuit(ParamCircuitExpr::Op(Operator::Add, reduce_vec, lit_2));
-
-        registry
-            .ct_var_values
-            .insert(String::from("ct"), CircuitValue::CoordMap(coord_map));
-
-        let circuit_program = ParamCircuitProgram {
-            registry,
-            expr_list: vec![(String::from("out"), vec![(String::from("i"), 2)], circuit)],
-        };
-
-        test_lowering(circuit_program);
-    }
-}

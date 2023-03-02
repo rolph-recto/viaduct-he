@@ -52,7 +52,7 @@ impl Materializer {
     }
 
     /// packages the materialized expr with the vector registry
-    pub fn materialize(mut self, schedule: &Schedule) -> Result<ParamCircuitProgram, String> {
+    pub fn run(mut self, schedule: &Schedule) -> Result<ParamCircuitProgram, String> {
         let mut circuit_list: Vec<(String, Vec<(DimName, Extent)>, CircuitId)> = vec![];
 
         // need to clone expr_map here because the iteration through it is mutating
@@ -193,7 +193,7 @@ impl Materializer {
                             .into_iter()
                             .fold(mat_body, |acc, (var, extent)| {
                                 let reduce_id = self.registry.register_circuit(
-                                    ParamCircuitExpr::ReduceVectors(var, extent, op.clone(), acc),
+                                    ParamCircuitExpr::ReduceDim(var, extent, op.clone(), acc),
                                 );
 
                                 reduce_id
@@ -671,7 +671,7 @@ mod tests {
         let materializer =
             Materializer::new(vec![Box::new(DefaultArrayMaterializer::new())], program);
 
-        let res_mat = materializer.materialize(&schedule);
+        let res_mat = materializer.run(&schedule);
         assert!(res_mat.is_ok());
 
         let param_circ = res_mat.unwrap();
