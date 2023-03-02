@@ -88,7 +88,8 @@ impl Materializer {
 
         Ok(ParamCircuitProgram {
             registry: self.registry,
-            expr_list: circuit_list,
+            native_expr_list: vec![],
+            circuit_expr_list: circuit_list,
         })
     }
 

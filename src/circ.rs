@@ -564,10 +564,18 @@ impl CircuitObjectRegistry {
         self.offset_fvar_values.get(offset_fvar).unwrap()
     }
 
-    pub fn get_ciphertext_vectors(&self) -> HashSet<VectorInfo> {
+    pub fn get_ciphertext_input_vectors(&self, root_vars: Option<&HashSet<VarName>>) -> HashSet<VectorInfo> {
+        let processed_ct_vars: HashSet<&VarName> =
+            if let Some(roots) = root_vars {
+                roots.iter().collect()
+
+            } else {
+                self.ct_var_values.keys().collect()
+            };
+        
         let mut set = HashSet::new();
-        for (_, val) in self.ct_var_values.iter() {
-            match val {
+        for ct_var in processed_ct_vars {
+            match self.get_ct_var_value(ct_var) {
                 CircuitValue::CoordMap(coord_map) => {
                     for (_, obj) in coord_map.value_iter() {
                         if let Some(CiphertextObject::InputVector(vector)) = obj {
@@ -587,10 +595,18 @@ impl CircuitObjectRegistry {
         set
     }
 
-    pub fn get_plaintext_vectors(&self) -> HashSet<VectorInfo> {
+    pub fn get_plaintext_input_vectors(&self, root_vars: Option<&HashSet<VarName>>) -> HashSet<VectorInfo> {
+        let processed_pt_vars: HashSet<&VarName> =
+            if let Some(roots) = root_vars {
+                roots.iter().collect()
+
+            } else {
+                self.pt_var_values.keys().collect()
+            };
+        
         let mut set = HashSet::new();
-        for (_, val) in self.pt_var_values.iter() {
-            match val {
+        for pt_var in processed_pt_vars {
+            match self.get_pt_var_value(pt_var) {
                 CircuitValue::CoordMap(coord_map) => {
                     for (_, obj) in coord_map.value_iter() {
                         if let Some(PlaintextObject::InputVector(vector)) = obj {
@@ -610,10 +626,49 @@ impl CircuitObjectRegistry {
         set
     }
 
-    pub fn get_masks(&self) -> HashSet<MaskVector> {
+    pub fn get_plaintext_expr_vectors(&self, root_vars: Option<&HashSet<VarName>>) -> HashSet<ArrayName> {
+        let processed_pt_vars: HashSet<&VarName> =
+            if let Some(roots) = root_vars {
+                roots.iter().collect()
+
+            } else {
+                self.pt_var_values.keys().collect()
+            };
+        
         let mut set = HashSet::new();
-        for (_, val) in self.pt_var_values.iter() {
-            match val {
+        for pt_var in processed_pt_vars {
+            match self.get_pt_var_value(pt_var) {
+                CircuitValue::CoordMap(coord_map) => {
+                    for (_, obj) in coord_map.value_iter() {
+                        if let Some(PlaintextObject::ExprVector(vector, _)) = obj {
+                            set.insert(vector.clone());
+                        }
+                    }
+                }
+
+                CircuitValue::Single(obj) => {
+                    if let PlaintextObject::ExprVector(vector, _) = obj {
+                        set.insert(vector.clone());
+                    }
+                }
+            }
+        }
+
+        set
+    }
+
+    pub fn get_masks(&self, root_vars: Option<&HashSet<VarName>>) -> HashSet<MaskVector> {
+        let processed_pt_vars: HashSet<&VarName> =
+            if let Some(roots) = root_vars {
+                roots.iter().collect()
+
+            } else {
+                self.pt_var_values.keys().collect()
+            };
+        
+        let mut set = HashSet::new();
+        for pt_var in processed_pt_vars {
+            match self.get_pt_var_value(pt_var) {
                 CircuitValue::CoordMap(coord_map) => {
                     for (_, obj) in coord_map.value_iter() {
                         if let Some(PlaintextObject::Mask(vector)) = obj {
@@ -633,10 +688,11 @@ impl CircuitObjectRegistry {
         set
     }
 
-    pub fn get_constants(&self) -> HashSet<isize> {
+    pub fn get_constants(&self, root_vars: Option<&HashSet<VarName>>) -> HashSet<isize> {
         let mut set = HashSet::new();
         for (_, val) in self.pt_var_values.iter() {
             match val {
+
                 CircuitValue::CoordMap(coord_map) => {
                     for (_, obj) in coord_map.value_iter() {
                         if let Some(PlaintextObject::Const(constval)) = obj {
@@ -793,14 +849,19 @@ impl Display for CircuitObjectRegistry {
 #[derive(Debug)]
 pub struct ParamCircuitProgram {
     pub registry: CircuitObjectRegistry,
-    pub expr_list: Vec<(String, Vec<(DimName, Extent)>, CircuitId)>,
+
+    // the expressions that will be executed natively by the server
+    pub native_expr_list: Vec<(String, Vec<(DimName, Extent)>, CircuitId)>,
+
+    // the expressions that will be executed in HE
+    pub circuit_expr_list: Vec<(String, Vec<(DimName, Extent)>, CircuitId)>,
 }
 
 impl Display for ParamCircuitProgram {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.registry)?;
 
-        self.expr_list.iter().try_for_each(|(name, dims, circuit)| {
+        self.circuit_expr_list.iter().try_for_each(|(name, dims, circuit)| {
             let mut dims_str = String::new();
             for dim in dims.iter() {
                 dims_str.push_str(&format!("[{}: {}]", dim.0, dim.1))
