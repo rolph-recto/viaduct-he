@@ -62,51 +62,6 @@ impl ParamCircuitExpr {
             ParamCircuitExpr::ReduceDim(_, _, _, id) => vec![*id],
         }
     }
-
-    fn to_opt_circuit_recur(&self, opt_expr: &mut RecExpr<HEOptCircuit>) -> egg::Id {
-        todo!()
-        /*
-        match self {
-            ParamCircuitExpr::CiphertextVar(var) => {
-                opt_expr.add(HEOptCircuit::CiphertextRef(Symbol::from(var)))
-            },
-
-            ParamCircuitExpr::PlaintextVar(var) => {
-                opt_expr.add(HEOptCircuit::CiphertextRef(Symbol::from(var)))
-            },
-
-            ParamCircuitExpr::Literal(lit) => {
-                opt_expr.add(HEOptCircuit::Num(*lit))
-            },
-
-            ParamCircuitExpr::Op(op, expr1, expr2) => {
-                let id1 = expr1.to_opt_circuit_recur(opt_expr);
-                let id2 = expr2.to_opt_circuit_recur(opt_expr);
-                match op {
-                    Operator::Add => opt_expr.add(HEOptCircuit::Add([id1, id2])),
-
-                    Operator::Sub => opt_expr.add(HEOptCircuit::Sub([id1, id2])),
-
-                    Operator::Mul => opt_expr.add(HEOptCircuit::Mul([id1, id2])),
-                }
-            },
-
-            ParamCircuitExpr::Rotate(steps, body) => {
-                let steps_id = steps.to_opt_circuit_recur(opt_expr);
-                let body_id = body.to_opt_circuit_recur(opt_expr);
-                opt_expr.add(HEOptCircuit::Rot([steps_id, body_id]))
-            },
-
-            ParamCircuitExpr::ReduceVectors(_, _, _, _) => todo!(),
-        }
-        */
-    }
-
-    pub fn to_opt_circuit(&self) -> RecExpr<HEOptCircuit> {
-        let mut opt_expr: RecExpr<HEOptCircuit> = RecExpr::default();
-        self.to_opt_circuit_recur(&mut opt_expr);
-        opt_expr
-    }
 }
 
 impl Display for ParamCircuitExpr {
@@ -759,6 +714,7 @@ impl CircuitObjectRegistry {
             }
         }
 
+        expr_ids.reverse();
         expr_ids
     }
 
@@ -881,6 +837,160 @@ pub struct ParamCircuitProgram {
     pub circuit_expr_list: Vec<(String, Vec<(DimName, Extent)>, CircuitId)>,
 }
 
+impl ParamCircuitProgram {
+    pub fn to_opt_circuit(&self) -> Vec<RecExpr<HEOptCircuit>> {
+        let mut expr_eclasses: Vec<egg::Id> = Vec::new();
+        let mut rec_exprs: Vec<RecExpr<HEOptCircuit>> = Vec::new();
+
+        for (_, _, expr_id) in self.circuit_expr_list.iter() {
+            let mut circuit_ids: Vec<CircuitId> = Vec::new();
+            let mut eclasses: Vec<egg::Id> = Vec::new();
+            let mut rec_expr: RecExpr<HEOptCircuit> = RecExpr::default();
+            for id in self.registry.expr_list(*expr_id) {
+                circuit_ids.push(id);
+
+                match self.registry.get_circuit(id) {
+                    ParamCircuitExpr::CiphertextVar(var) => {
+                        let eclass =
+                            rec_expr.add(HEOptCircuit::CiphertextVar(Symbol::from(var)));
+
+                        eclasses.push(eclass);
+                    },
+
+                    ParamCircuitExpr::PlaintextVar(var) => {
+                        let eclass =
+                            rec_expr.add(HEOptCircuit::PlaintextVar(Symbol::from(var)));
+
+                        eclasses.push(eclass);
+                    },
+
+                    ParamCircuitExpr::Literal(lit) => {
+                        let eclass =
+                            rec_expr.add(HEOptCircuit::Literal(*lit));
+
+                        eclasses.push(eclass);
+                    },
+
+                    ParamCircuitExpr::Op(op, id1, id2) => {
+                        let index1 =
+                            circuit_ids.iter()
+                            .position(|cid| cid == id1).unwrap();
+
+                        let index2 =
+                            circuit_ids.iter()
+                            .position(|cid| cid == id2).unwrap();
+
+                        let eclass1 = eclasses[index1];
+                        let eclass2 = eclasses[index2];
+                        let opt_expr = 
+                            match op {
+                                Operator::Add =>
+                                    HEOptCircuit::Add([eclass1, eclass2]),
+
+                                Operator::Sub =>
+                                    HEOptCircuit::Sub([eclass1, eclass2]),
+
+                                Operator::Mul =>
+                                    HEOptCircuit::Mul([eclass1, eclass2])
+                            };
+
+                        let eclass = rec_expr.add(opt_expr);
+                        eclasses.push(eclass);
+                    },
+
+                    ParamCircuitExpr::Rotate(offset, body_id) => {
+                        let offset_eclass =
+                            self.offset_to_opt_circuit(offset, &mut rec_expr);
+
+                        let body_index =
+                            circuit_ids.iter()
+                            .position(|cid| cid == body_id).unwrap();
+
+                        let body_eclass = eclasses[body_index];
+
+                        let eclass =
+                            rec_expr.add(HEOptCircuit::Rot([offset_eclass, body_eclass]));
+
+                        eclasses.push(eclass);
+                    },
+                    
+                    ParamCircuitExpr::ReduceDim(dim, _, op, body_id) => {
+                        let dim_eclass =
+                            rec_expr.add(HEOptCircuit::IndexVar(Symbol::from(dim)));
+
+                        let body_index =
+                            circuit_ids.iter()
+                            .position(|cid| cid == body_id).unwrap();
+
+                        let body_eclass = eclasses[body_index];
+
+                        let opt_expr =
+                            match op {
+                                Operator::Add =>
+                                    HEOptCircuit::SumVectors([dim_eclass, body_eclass]),
+
+                                Operator::Mul =>
+                                    HEOptCircuit::ProductVectors([dim_eclass, body_eclass]),
+
+                                Operator::Sub =>
+                                    panic!("reducing with subtraction not supported yet")
+                            };
+
+                        let eclass = rec_expr.add(opt_expr);
+                        eclasses.push(eclass);
+                    },
+                }
+            }
+
+            rec_exprs.push(rec_expr);
+        }
+
+        rec_exprs
+    }
+
+    fn offset_to_opt_circuit(&self, offset: &OffsetExpr, rec_expr: &mut RecExpr<HEOptCircuit>) -> egg::Id {
+        match offset {
+            OffsetExpr::Add(expr1, expr2) => {
+                let id1 = self.offset_to_opt_circuit(expr1, rec_expr);
+                let id2 = self.offset_to_opt_circuit(expr2, rec_expr); 
+                let id = rec_expr.add(HEOptCircuit::Add([id1,id2]));
+                id
+            },
+            
+            OffsetExpr::Mul(expr1, expr2) => {
+                let id1 = self.offset_to_opt_circuit(expr1, rec_expr);
+                let id2 = self.offset_to_opt_circuit(expr2, rec_expr); 
+                let id = rec_expr.add(HEOptCircuit::Mul([id1,id2]));
+                id
+            },
+
+            OffsetExpr::Literal(lit) => {
+                let id = rec_expr.add(HEOptCircuit::Literal(*lit));
+                id
+            },
+
+            OffsetExpr::Var(var) => {
+                let id = rec_expr.add(HEOptCircuit::IndexVar(Symbol::from(var)));
+                id
+            },
+
+            OffsetExpr::FunctionVar(fv, indices) => {
+                let index_ids =
+                    indices.iter().map(|index|
+                        rec_expr.add(HEOptCircuit::IndexVar(Symbol::from(index)))
+                    ).collect();
+
+                let id =
+                    rec_expr.add(
+                        HEOptCircuit::FunctionVar(Symbol::from(fv), index_ids)
+                    );
+
+                id
+            },
+        }
+    }
+}
+
 impl Display for ParamCircuitProgram {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.registry)?;
@@ -892,5 +1002,37 @@ impl Display for ParamCircuitProgram {
             }
             write!(f, "let {}{} = {}\n", name, dims_str, circuit)
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_to_opt_circuit() {
+        let mut registry = CircuitObjectRegistry::new();
+        let pt = registry.register_circuit(ParamCircuitExpr::PlaintextVar(String::from("pt")));
+        let add_pt = registry.register_circuit(ParamCircuitExpr::Op(Operator::Add, pt, pt));
+        let ct = registry.register_circuit(ParamCircuitExpr::CiphertextVar(String::from("ct")));
+        let reduce_vec = registry.register_circuit(ParamCircuitExpr::ReduceDim(
+            String::from("j"),
+            2,
+            Operator::Add,
+            ct,
+        ));
+
+        let circuit =
+            registry.register_circuit(ParamCircuitExpr::Op(Operator::Add, reduce_vec, add_pt));
+
+        let circuit_program = ParamCircuitProgram {
+            registry,
+            native_expr_list: vec![],
+            circuit_expr_list: vec![(String::from("out"), vec![(String::from("i"), 2)], circuit)],
+        };
+
+        for expr in circuit_program.to_opt_circuit() {
+            println!("{}", expr);
+        }
     }
 }

@@ -14,16 +14,17 @@ pub mod lp_extractor;
 define_language! {
     /// The language used by egg e-graph engine.
     pub enum HEOptCircuit {
-        Num(isize),
+        Literal(isize),
         "+" = Add([Id; 2]),
         "-" = Sub([Id; 2]),
         "*" = Mul([Id; 2]),
         "rot" = Rot([Id; 2]),
-        CiphertextRef(Symbol),
-        PlaintextRef(Symbol),
-        // FunctionVar(Symbol),
-        // IndexVar(Symbol),
-        // ReduceVectors(Symbol, Id),
+        "sumvec" = SumVectors([Id; 2]),
+        "prodvec" = ProductVectors([Id; 2]),
+        CiphertextVar(Symbol),
+        PlaintextVar(Symbol),
+        IndexVar(Symbol),
+        FunctionVar(Symbol, Vec<Id>),
     }
 }
 
@@ -110,7 +111,7 @@ impl Analysis<HEOptCircuit> for HEData {
         let data = |id: &Id| egraph[*id].data;
 
         match enode {
-            HEOptCircuit::Num(n) => HEData {
+            HEOptCircuit::Literal(n) => HEData {
                 constval: Some(*n),
                 muldepth: 0,
             },
@@ -165,14 +166,14 @@ impl Analysis<HEOptCircuit> for HEData {
                 }
             }
 
-            HEOptCircuit::CiphertextRef(_) => HEData {
-                constval: None,
-                muldepth: 0,
-            },
-
-            HEOptCircuit::PlaintextRef(_) => HEData {
-                constval: None,
-                muldepth: 0,
+            HEOptCircuit::CiphertextVar(_) | HEOptCircuit::PlaintextVar(_) |
+            HEOptCircuit::FunctionVar(_, _) | HEOptCircuit::IndexVar(_) |
+            HEOptCircuit::ProductVectors(_) |
+            HEOptCircuit::SumVectors(_) => {
+                HEData {
+                    constval: None,
+                    muldepth: 0,
+                }
             },
         }
     }
@@ -181,14 +182,14 @@ impl Analysis<HEOptCircuit> for HEData {
 // This returns a function that implements Condition
 fn is_zero(var: &'static str) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
     let var = var.parse().unwrap();
-    let zero = HEOptCircuit::Num(0);
+    let zero = HEOptCircuit::Literal(0);
     move |egraph, _, subst| egraph[subst[var]].nodes.contains(&zero)
 }
 
 // This returns a function that implements Condition
 fn is_const_nonzero(var: &'static str) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
     let var = var.parse().unwrap();
-    let zero = HEOptCircuit::Num(0);
+    let zero = HEOptCircuit::Literal(0);
     move |egraph, _, subst| match egraph[subst[var]].data.constval {
         Some(x) => x != 0,
         None => false,
@@ -262,7 +263,7 @@ impl Applier<HEOptCircuit, HEData> for AddToMul {
 
         let mut changed = false;
         if bval != -1 {
-            let b_inc_id = egraph.add(HEOptCircuit::Num(bval + 1));
+            let b_inc_id = egraph.add(HEOptCircuit::Literal(bval + 1));
             let mul_id = egraph.add(HEOptCircuit::Mul([a_id, b_inc_id]));
             changed = changed || egraph.union(matched_id, mul_id);
         }
@@ -298,7 +299,7 @@ impl Applier<HEOptCircuit, HEData> for MulToAdd {
         if bval != 0 {
             for i in 1..bval.abs() {
                 let cur_b = if bval > 0 { bval - i } else { bval + i };
-                let cur_b_id = egraph.add(HEOptCircuit::Num(cur_b));
+                let cur_b_id = egraph.add(HEOptCircuit::Literal(cur_b));
 
                 let mut acc = egraph.add(HEOptCircuit::Mul([a_id, cur_b_id]));
                 for _ in 0..i {
@@ -339,7 +340,7 @@ impl Applier<HEOptCircuit, HEData> for SubInverse {
         let a_id = subst[self.a];
         let b_id = subst[self.b];
 
-        let neg_one = egraph.add(HEOptCircuit::Num(-1));
+        let neg_one = egraph.add(HEOptCircuit::Literal(-1));
         let neg_b = egraph.add(HEOptCircuit::Mul([neg_one, b_id]));
         let a_plus_neg_b = egraph.add(HEOptCircuit::Add([a_id, neg_b]));
 
@@ -376,7 +377,7 @@ impl Applier<HEOptCircuit, HEData> for ConstantFold {
             RewriteOp::Mul => aval * bval,
         };
 
-        let folded_id = egraph.add(HEOptCircuit::Num(folded_val));
+        let folded_id = egraph.add(HEOptCircuit::Literal(folded_val));
 
         if egraph.union(matched_id, folded_id) {
             vec![matched_id]
@@ -403,11 +404,11 @@ impl Applier<HEOptCircuit, HEData> for FactorSplit {
     ) -> Vec<Id> {
         let factor: isize = egraph[subst[self.a]].data.constval.unwrap();
 
-        let mut acc: Id = egraph.add(HEOptCircuit::Num(0));
+        let mut acc: Id = egraph.add(HEOptCircuit::Literal(0));
         let mut cur_val = factor;
 
         let dir = if cur_val > 0 { 1 } else { -1 };
-        let dir_id = egraph.add(HEOptCircuit::Num(dir));
+        let dir_id = egraph.add(HEOptCircuit::Literal(dir));
 
         let chunk = egraph.add(HEOptCircuit::Mul([dir_id, subst[self.b]]));
 
@@ -443,7 +444,7 @@ impl Applier<HEOptCircuit, HEData> for RotateWrap {
         let xclass: Id = subst[self.x];
         let lval = egraph[subst[self.l]].data.constval.unwrap();
 
-        let wrapped_lval = egraph.add(HEOptCircuit::Num(lval % self.size));
+        let wrapped_lval = egraph.add(HEOptCircuit::Literal(lval % self.size));
         let wrapped_rot: Id = egraph.add(HEOptCircuit::Rot([xclass, wrapped_lval]));
         if egraph.union(matched_id, wrapped_rot) {
             vec![matched_id]
@@ -474,7 +475,7 @@ impl Applier<HEOptCircuit, HEData> for RotateSquash {
         let l1_val = egraph[subst[self.l1]].data.constval.unwrap();
         let l2_val = egraph[subst[self.l2]].data.constval.unwrap();
 
-        let lval_sum = egraph.add(HEOptCircuit::Num((l1_val + l2_val) % (self.size as isize)));
+        let lval_sum = egraph.add(HEOptCircuit::Literal((l1_val + l2_val) % (self.size as isize)));
         let rot_sum: Id = egraph.add(HEOptCircuit::Rot([xclass, lval_sum]));
 
         if egraph.union(matched_id, rot_sum) {
@@ -520,14 +521,14 @@ impl Applier<HEOptCircuit, HEData> for RotateSplit {
 
             // recall that (rot x 0 ) = x
             let rot_in1 = if cur_l1 != 0 {
-                let cur_l1_class = egraph.add(HEOptCircuit::Num(cur_l1));
+                let cur_l1_class = egraph.add(HEOptCircuit::Literal(cur_l1));
                 egraph.add(HEOptCircuit::Rot([x1_class, cur_l1_class]))
             } else {
                 x1_class
             };
 
             let rot_in2 = if cur_l2 != 0 {
-                let cur_l2_class = egraph.add(HEOptCircuit::Num(cur_l2));
+                let cur_l2_class = egraph.add(HEOptCircuit::Literal(cur_l2));
                 egraph.add(HEOptCircuit::Rot([x2_class, cur_l2_class]))
             } else {
                 x2_class
@@ -550,7 +551,7 @@ impl Applier<HEOptCircuit, HEData> for RotateSplit {
             // dbg!(&egraph[x1_class].nodes.first());
             // dbg!(x1_children);
             let op_class = egraph.add(op);
-            let outer_rot_class = egraph.add(HEOptCircuit::Num(i as isize));
+            let outer_rot_class = egraph.add(HEOptCircuit::Literal(i as isize));
             let rot_outer = egraph.add(HEOptCircuit::Rot([op_class, outer_rot_class]));
             has_split = has_split || egraph.union(matched_id, rot_outer);
         }

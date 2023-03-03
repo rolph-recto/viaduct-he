@@ -57,7 +57,7 @@ impl<'a> CostFunction<HEOptCircuit> for HECostFunction<'a> {
         let mut muldepth = child_muldepth;
         let latency = child_latency
             + match enode {
-                HEOptCircuit::Num(_) => self.latency.num,
+                HEOptCircuit::Literal(_) => self.latency.num,
 
                 HEOptCircuit::Add(_) => {
                     if is_plainop {
@@ -86,9 +86,14 @@ impl<'a> CostFunction<HEOptCircuit> for HECostFunction<'a> {
 
                 HEOptCircuit::Rot(_) => self.latency.rot,
 
-                HEOptCircuit::CiphertextRef(_) => self.latency.sym,
+                HEOptCircuit::CiphertextVar(_) => self.latency.sym,
 
-                HEOptCircuit::PlaintextRef(_) => self.latency.sym,
+                HEOptCircuit::PlaintextVar(_) => self.latency.sym,
+
+                HEOptCircuit::SumVectors(_) |
+                HEOptCircuit::ProductVectors(_) |
+                HEOptCircuit::IndexVar(_) |
+                HEOptCircuit::FunctionVar(_, _) => 0.0
             };
 
         HECost { muldepth, latency }

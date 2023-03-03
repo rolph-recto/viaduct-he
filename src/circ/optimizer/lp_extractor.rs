@@ -21,7 +21,7 @@ impl LpCostFunction<HEOptCircuit, HEData> for OpSizeFunction {
 
         let mut muldepth = child_muldepth;
         let latency = match enode {
-            HEOptCircuit::Num(_) => self.latency.num,
+            HEOptCircuit::Literal(_) => self.latency.num,
 
             HEOptCircuit::Add(_) => {
                 if is_plainop {
@@ -50,9 +50,14 @@ impl LpCostFunction<HEOptCircuit, HEData> for OpSizeFunction {
 
             HEOptCircuit::Rot(_) => self.latency.rot,
 
-            HEOptCircuit::CiphertextRef(_) => self.latency.sym,
+            HEOptCircuit::CiphertextVar(_) => self.latency.sym,
 
-            HEOptCircuit::PlaintextRef(_) => self.latency.sym,
+            HEOptCircuit::PlaintextVar(_) => self.latency.sym,
+
+            HEOptCircuit::SumVectors(_) |
+            HEOptCircuit::ProductVectors(_) |
+            HEOptCircuit::IndexVar(_) |
+            HEOptCircuit::FunctionVar(_, _) => 0.0
         };
 
         ((muldepth + 1) as f64) * latency
@@ -350,7 +355,7 @@ impl<'a> HEExtractor<'a> {
                 }
 
                 let op_latency = match node {
-                    HEOptCircuit::Num(_) => latency.num,
+                    HEOptCircuit::Literal(_) => latency.num,
 
                     HEOptCircuit::Add(_) => {
                         if is_plainop {
@@ -378,7 +383,12 @@ impl<'a> HEExtractor<'a> {
 
                     HEOptCircuit::Rot(_) => latency.rot,
 
-                    HEOptCircuit::CiphertextRef(_) | HEOptCircuit::PlaintextRef(_) => latency.sym,
+                    HEOptCircuit::CiphertextVar(_) | HEOptCircuit::PlaintextVar(_) => latency.sym,
+
+                    HEOptCircuit::SumVectors(_) |
+                    HEOptCircuit::ProductVectors(_) |
+                    HEOptCircuit::IndexVar(_) |
+                    HEOptCircuit::FunctionVar(_, _) => 0.0
                 };
 
                 model.set_obj_coeff(node_active, op_latency);
