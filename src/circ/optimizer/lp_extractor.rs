@@ -9,10 +9,7 @@ pub struct OpSizeFunction {
 
 impl LpCostFunction<HEOptCircuit, HEData> for OpSizeFunction {
     fn node_cost(&mut self, egraph: &HEGraph, _: Id, enode: &HEOptCircuit) -> f64 {
-        let child_muldepth = enode
-            .children()
-            .iter()
-            .fold(0, |acc, child| max(acc, egraph[*child].data.muldepth));
+        let child_muldepth = 0;
 
         let is_plainop = enode
             .children()

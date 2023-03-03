@@ -3,10 +3,9 @@ use egg::*;
 use log::*;
 use std::{
     cmp::{max, min},
+    collections::{HashMap, HashSet},
     time::*,
 };
-
-use self::{greedy_extractor::*, lp_extractor::*};
 
 mod greedy_extractor;
 pub mod lp_extractor;
@@ -71,111 +70,149 @@ impl Default for HELatencyModel {
 
 pub type HEGraph = egg::EGraph<HEOptCircuit, HEData>;
 
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct HEData {
     constval: Option<isize>,
-    muldepth: usize,
+    index_vars: HashSet<String>,
 }
 
 impl Analysis<HEOptCircuit> for HEData {
     type Data = HEData;
 
     fn merge(&mut self, to: &mut Self::Data, from: Self::Data) -> DidMerge {
-        if to.constval == from.constval {
-            merge_min(&mut to.muldepth, from.muldepth)
-        } else {
-            panic!(
-                "attmepting to merge numeric exprs with different values: {:?} and {:?} ",
-                to.constval, from.constval
-            );
-        }
-        /*
-        match (to.constval, from.constval) {
-            (None, None) | (Some(_), None) => {},
-            (None, Some(from_val)) => {
-                to.constval = Some(from_val);
-            },
-            (Some(to_val), Some(from_val)) => {
-                if to_val != from_val {
-                    panic!("attmepting to merge numeric exprs with different values: {:?} and {:?} ", to_val, from_val);
-                }
-            }
-        }
+        let constval_merge = 
+            merge_option(&mut to.constval, from.constval, |l, r| {
+                if *l == r {
+                    DidMerge(false, false)
 
-        to.muldepth = min(to.muldepth, from.muldepth);
-        DidMerge(true, true)
-        */
+                } else {
+                    panic!("attempting to merge two eclasses with different constvals: {} and {}", l, r)
+                }
+            });
+
+        let to_numvars = to.index_vars.len();
+        to.index_vars.retain(|var| from.index_vars.contains(var));
+
+        let vars_merge =
+            DidMerge(
+                to_numvars != to.index_vars.len(),
+                to.index_vars != from.index_vars
+            );
+
+        constval_merge
     }
 
     fn make(egraph: &HEGraph, enode: &HEOptCircuit) -> Self::Data {
-        let data = |id: &Id| egraph[*id].data;
+        let data = |id: &Id| &egraph[*id].data;
 
         match enode {
-            HEOptCircuit::Literal(n) => HEData {
-                constval: Some(*n),
-                muldepth: 0,
-            },
+            HEOptCircuit::Literal(n) =>
+                HEData {
+                    constval: Some(*n),
+                    index_vars: HashSet::new(),
+                },
 
             HEOptCircuit::Add([id1, id2]) => {
-                let constval: Option<isize> = data(id1)
-                    .constval
-                    .and_then(|d1| data(id2).constval.map(|d2| d1 + d2));
+                let data1 = data(id1);
+                let data2 = data(id2);
 
-                let muldepth = max(data(id1).muldepth, data(id2).muldepth);
+                let constval: Option<isize> =
+                    data1.constval.and_then(|d1| {
+                        data2.constval.map(|d2| d1 + d2)
+                    });
 
-                HEData { constval, muldepth }
-            }
+                let mut index_vars: HashSet<String> = HashSet::new();
+                index_vars.extend(data1.index_vars.clone());
+                index_vars.extend(data2.index_vars.clone());
+                HEData { constval, index_vars }
+            },
 
             HEOptCircuit::Sub([id1, id2]) => {
-                let constval: Option<isize> = data(id1)
-                    .constval
-                    .and_then(|d1| data(id2).constval.map(|d2| d1 - d2));
+                let data1 = data(id1);
+                let data2 = data(id2);
 
-                let muldepth = max(data(id1).muldepth, data(id2).muldepth);
+                let constval: Option<isize> =
+                    data1.constval.and_then(|d1| {
+                        data2.constval.map(|d2| d1 - d2)
+                    });
 
-                HEData { constval, muldepth }
-            }
+                let mut index_vars: HashSet<String> = HashSet::new();
+                index_vars.extend(data1.index_vars.clone());
+                index_vars.extend(data2.index_vars.clone());
+                HEData { constval, index_vars }
+            },
 
             HEOptCircuit::Mul([id1, id2]) => {
-                let v1 = data(id1).constval;
-                let v2 = data(id2).constval;
+                let data1 = data(id1);
+                let data2 = data(id2);
 
-                // special case multiplicative annihilator (0)
-                let constval: Option<isize> = match (v1, v2) {
-                    (Some(0), _) => Some(0),
-                    (_, Some(0)) => Some(0),
-                    (Some(d1), Some(d2)) => Some(d1 * d2),
-                    _ => None,
-                };
+                let constval: Option<isize> =
+                    data1.constval.and_then(|d1| {
+                        data2.constval.map(|d2| d1 * d2)
+                    });
 
-                // don't count scalar multiplication as muldepth
-                let muldepth = if constval.is_none() {
-                    max(data(id1).muldepth, data(id2).muldepth) + 1
-                } else {
-                    0
-                };
-
-                HEData { constval, muldepth }
-            }
+                let mut index_vars: HashSet<String> = HashSet::new();
+                index_vars.extend(data1.index_vars.clone());
+                index_vars.extend(data2.index_vars.clone());
+                HEData { constval, index_vars }
+            },
 
             HEOptCircuit::Rot([id1, id2]) => {
-                let muldepth = max(data(id1).muldepth, data(id2).muldepth);
-                HEData {
-                    constval: egraph[*id1].data.constval,
-                    muldepth,
-                }
-            }
+                let data1 = data(id1);
+                let data2 = data(id2);
 
-            HEOptCircuit::CiphertextVar(_) | HEOptCircuit::PlaintextVar(_) |
-            HEOptCircuit::FunctionVar(_, _) | HEOptCircuit::IndexVar(_) |
-            HEOptCircuit::ProductVectors(_) |
-            HEOptCircuit::SumVectors(_) => {
                 HEData {
-                    constval: None,
-                    muldepth: 0,
+                    constval: data2.constval,
+                    index_vars: data1.index_vars.clone(),
                 }
             },
+
+            HEOptCircuit::ProductVectors([id1, id2]) |
+            HEOptCircuit::SumVectors([id1, id2]) => {
+                let data1 = data(id1);
+
+                HEData {
+                    constval: None,
+                    index_vars: data1.index_vars.clone(),
+                }
+            },
+
+            HEOptCircuit::IndexVar(var) => {
+                HEData {
+                    constval: None,
+                    index_vars: HashSet::from([var.to_string()])
+                }
+            },
+
+            HEOptCircuit::CiphertextVar(_) | HEOptCircuit::PlaintextVar(_) |
+            HEOptCircuit::FunctionVar(_, _) => {
+                HEData {
+                    constval: None,
+                    index_vars: HashSet::new(),
+                }
+            }
         }
+    }
+
+    fn modify(egraph: &mut EGraph<HEOptCircuit, Self>, id: Id) {
+        // do constant folding
+        if let Some(val) = egraph[id].data.constval {
+            let val_id = egraph.add(HEOptCircuit::Literal(val));
+            egraph.union(id, val_id);
+        }
+    }
+}
+
+fn is_not_index_var(var: &'static str) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
+    let var = var.parse().unwrap();
+    let zero = HEOptCircuit::Literal(0);
+    move |egraph, _, subst| {
+        egraph[subst[var]].nodes.iter().all(|node| {
+            match node {
+                HEOptCircuit::IndexVar(_) => false,
+                _ => true,
+            }
+        })
     }
 }
 
@@ -183,7 +220,9 @@ impl Analysis<HEOptCircuit> for HEData {
 fn is_zero(var: &'static str) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
     let var = var.parse().unwrap();
     let zero = HEOptCircuit::Literal(0);
-    move |egraph, _, subst| egraph[subst[var]].nodes.contains(&zero)
+    move |egraph, _, subst| {
+        egraph[subst[var]].nodes.contains(&zero)
+    }
 }
 
 // This returns a function that implements Condition
@@ -345,41 +384,6 @@ impl Applier<HEOptCircuit, HEData> for SubInverse {
         let a_plus_neg_b = egraph.add(HEOptCircuit::Add([a_id, neg_b]));
 
         if egraph.union(matched_id, a_plus_neg_b) {
-            vec![matched_id]
-        } else {
-            vec![]
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct ConstantFold {
-    op: RewriteOp,
-    a: Var,
-    b: Var,
-}
-
-impl Applier<HEOptCircuit, HEData> for ConstantFold {
-    fn apply_one(
-        &self,
-        egraph: &mut HEGraph,
-        matched_id: Id,
-        subst: &Subst,
-        _: Option<&PatternAst<HEOptCircuit>>,
-        _: Symbol,
-    ) -> Vec<Id> {
-        let aval: isize = egraph[subst[self.a]].data.constval.unwrap();
-        let bval: isize = egraph[subst[self.b]].data.constval.unwrap();
-
-        let folded_val = match self.op {
-            RewriteOp::Add => aval + bval,
-            RewriteOp::Sub => aval - bval,
-            RewriteOp::Mul => aval * bval,
-        };
-
-        let folded_id = egraph.add(HEOptCircuit::Literal(folded_val));
-
-        if egraph.union(matched_id, folded_id) {
             vec![matched_id]
         } else {
             vec![]
@@ -572,24 +576,27 @@ impl Optimizer {
     pub fn new(size: usize) -> Self {
         let mut rules: Vec<Rewrite<HEOptCircuit, HEData>> = vec![
             // bidirectional addition rules
-            rewrite!("add-identity"; "(+ ?a 0)" <=> "?a"),
             rewrite!("add-assoc"; "(+ ?a (+ ?b ?c))" <=> "(+ (+ ?a ?b) ?c)"),
             rewrite!("add-commute"; "(+ ?a ?b)" <=> "(+ ?b ?a)"),
+
             // bidirectional multiplication rules
-            rewrite!("mul-identity"; "(* ?a 1)" <=> "?a"),
             rewrite!("mul-assoc"; "(* ?a (* ?b ?c))" <=> "(* (* ?a ?b) ?c)"),
             rewrite!("mul-commute"; "(* ?a ?b)" <=> "(* ?b ?a)"),
             rewrite!("mul-distribute"; "(* (+ ?a ?b) ?c)" <=> "(+ (* ?a ?c) (* ?b ?c))"),
+
             // bidirectional rotation rules
-            rewrite!("rot-distribute-mul"; "(rot (* ?a ?b) ?l)" <=> "(* (rot ?a ?l) (rot ?b ?l))"),
-            rewrite!("rot-distribute-add"; "(rot (+ ?a ?b) ?l)" <=> "(+ (rot ?a ?l) (rot ?b ?l))"),
-            rewrite!("rot-distribute-sub"; "(rot (- ?a ?b) ?l)" <=> "(- (rot ?a ?l) (rot ?b ?l))"),
+            rewrite!("rot-distribute-mul"; "(rot ?o (* ?a ?b))" <=> "(* (rot ?o ?a) (rot ?o ?b))"),
+            rewrite!("rot-distribute-add"; "(rot ?o (+ ?a ?b))" <=> "(+ (rot ?o ?a) (rot ?o ?b))"),
+            rewrite!("rot-distribute-sub"; "(rot ?o (- ?a ?b))" <=> "(- (rot ?o ?a) (rot ?o ?b))"),
         ]
         .concat();
 
         rules.extend(vec![
             // unidirectional rules
+            rewrite!("add-identity"; "(+ ?a 0)" => "?a" if is_not_index_var("?a")),
+            rewrite!("mul-identity"; "(* ?a 1)" => "?a" if is_not_index_var("?a")),
             rewrite!("mul-annihilator"; "(* ?a 0)" => "0"),
+
             // a - b = a + (-1 * b)
             rewrite!("sub-inverse"; "(- ?a ?b)" => {
                 SubInverse {
@@ -597,18 +604,7 @@ impl Optimizer {
                     b: "?b".parse().unwrap(),
                 }
             }),
-            rewrite!("rot-distribute1-mul";
-                "(* (rot ?a ?l) (rot ?b ?l))" => "(rot (* (rot ?a (- ?l 1)) (rot ?b (- ?l 1))) 1)"
-                if is_const_nonzero("?l")
-            ),
-            rewrite!("rot-distribute1-add";
-                "(+ (rot ?a ?l) (rot ?b ?l))" => "(rot (+ (rot ?a (- ?l 1)) (rot ?b (- ?l 1))) 1)"
-                if is_const_nonzero("?l")
-            ),
-            rewrite!("rot-distribute1-sub";
-                "(- (rot ?a ?l) (rot ?b ?l))" => "(rot (- (rot ?a (- ?l 1)) (rot ?b (- ?l 1))) 1)"
-                if is_const_nonzero("?l")
-            ),
+
             // x + (x * c) = x * (c + 1), where c is a constant
             rewrite!("add-to-mul"; "(+ ?a (* ?a ?b))" => {
                 AddToMul {
@@ -616,6 +612,7 @@ impl Optimizer {
                     b: "?b".parse().unwrap()
                 }
             } if has_constant_factor("?a", "?b")),
+
             // x * c = x + (x * (c - 1)), where c is a constant
             rewrite!("mul-to-add"; "(* ?a ?b)" => {
                 MulToAdd {
@@ -623,36 +620,10 @@ impl Optimizer {
                     b: "?b".parse().unwrap()
                 }
             } if has_constant_factor("?a", "?b")),
-            // constant folding
-            rewrite!("add-fold"; "(+ ?a ?b)" => {
-                ConstantFold {
-                    op: RewriteOp::Add,
-                    a: "?a".parse().unwrap(),
-                    b: "?b".parse().unwrap()
-                }
-            } if can_fold("?a", "?b")),
-            rewrite!("sub-fold"; "(- ?a ?b)" => {
-                ConstantFold {
-                    op: RewriteOp::Sub,
-                    a: "?a".parse().unwrap(),
-                    b: "?b".parse().unwrap()
-                }
-            } if can_fold("?a", "?b")),
-            rewrite!("mul-fold"; "(* ?a ?b)" => {
-                ConstantFold {
-                    op: RewriteOp::Mul,
-                    a: "?a".parse().unwrap(),
-                    b: "?b".parse().unwrap()
-                }
-            } if can_fold("?a", "?b")),
+
             // rotation of 0 doesn't do anything
             rewrite!("rot-none"; "(rot ?x ?l)" => "?x" if is_zero("?l")),
-            // wrap rotation according to vector length
-            /*
-            rewrite!("rot-wrap"; "(rot ?x ?l)" => {
-                RotateWrap { x: "?x".parse().unwrap(), l: "?l".parse().unwrap() }
-            } if beyond_vec_length("?l")),
-            */
+
             // squash nested rotations into a single rotation
             rewrite!("rot-squash"; "(rot (rot ?x ?l1) ?l2)" => {
                 RotateSquash {
@@ -662,37 +633,59 @@ impl Optimizer {
                     l2: "?l2".parse().unwrap()
                 }
             }),
+
             // given an operation on rotated vectors,
             // split rotation before and after the operation
-            // rewrite!("rot-add-split"; "(+ (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
-            //     RotateSplit {
-            //         op: RewriteOp::Add,
-            //         x1: "?x1".parse().unwrap(),
-            //         l1: "?l1".parse().unwrap(),
-            //         x2: "?x2".parse().unwrap(),
-            //         l2: "?l2".parse().unwrap(),
-            //     }
-            // } if can_split_rot("?l1", "?l2")),
+            rewrite!("rot-add-split"; "(+ (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
+                RotateSplit {
+                    op: RewriteOp::Add,
+                    x1: "?x1".parse().unwrap(),
+                    l1: "?l1".parse().unwrap(),
+                    x2: "?x2".parse().unwrap(),
+                    l2: "?l2".parse().unwrap(),
+                }
+            } if can_split_rot("?l1", "?l2")),
 
-            // rewrite!("rot-sub-split"; "(- (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
-            //     RotateSplit {
-            //         op: RewriteOp::Sub,
-            //         x1: "?x1".parse().unwrap(),
-            //         l1: "?l1".parse().unwrap(),
-            //         x2: "?x2".parse().unwrap(),
-            //         l2: "?l2".parse().unwrap(),
-            //     }
-            // } if can_split_rot("?l1", "?l2")),
+            rewrite!("rot-sub-split"; "(- (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
+                RotateSplit {
+                    op: RewriteOp::Sub,
+                    x1: "?x1".parse().unwrap(),
+                    l1: "?l1".parse().unwrap(),
+                    x2: "?x2".parse().unwrap(),
+                    l2: "?l2".parse().unwrap(),
+                }
+            } if can_split_rot("?l1", "?l2")),
 
-            // rewrite!("rot-mul-split"; "(* (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
-            //     RotateSplit {
-            //         op: RewriteOp::Mul,
-            //         x1: "?x1".parse().unwrap(),
-            //         l1: "?l1".parse().unwrap(),
-            //         x2: "?x2".parse().unwrap(),
-            //         l2: "?l2".parse().unwrap(),
-            //     }
-            // } if can_split_rot("?l1", "?l2")),
+            rewrite!("rot-mul-split"; "(* (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
+                RotateSplit {
+                    op: RewriteOp::Mul,
+                    x1: "?x1".parse().unwrap(),
+                    l1: "?l1".parse().unwrap(),
+                    x2: "?x2".parse().unwrap(),
+                    l2: "?l2".parse().unwrap(),
+                }
+            } if can_split_rot("?l1", "?l2")),
+
+            // wrap rotation according to vector length
+            /*
+            rewrite!("rot-wrap"; "(rot ?x ?l)" => {
+                RotateWrap { x: "?x".parse().unwrap(), l: "?l".parse().unwrap() }
+            } if beyond_vec_length("?l")),
+            */
+
+            // these rules are identical to rotate split
+            // rewrite!("rot-distribute1-mul";
+            //     "(* (rot ?o ?a) (rot ?o ?b))" => "(rot 1 (* (rot (- ?o 1) ?a) (rot (- ?o 1) ?b)))"
+            //     if is_const_nonzero("?o")
+            // ),
+            // rewrite!("rot-distribute1-add";
+            //     "(+ (rot ?o ?a) (rot ?o ?b))" => "(rot 1 (+ (rot (- ?o 1) ?a) (rot (- ?o 1) ?b)))"
+            //     if is_const_nonzero("?o")
+            // ),
+            // rewrite!("rot-distribute1-sub";
+            //     "(- (rot ?o ?a) (rot ?o ?b))" => "(rot 1 (- (rot (- ?o 1) ?a) (rot (- ?o 1)) ?b))"
+            //     if is_const_nonzero("?o")
+            // ),
         ]);
 
         Optimizer { rules }
@@ -729,6 +722,7 @@ impl Optimizer {
 
         let extraction_time = Instant::now();
 
+        /*
         let opt_expr = match extractor_type {
             ExtractorType::Greedy => {
                 info!("using greedy extractor to derive optimized program...");
@@ -756,28 +750,42 @@ impl Optimizer {
                 solution
             }
         };
+        */
 
         info!(
             "Extraction time: {}ms",
             extraction_time.elapsed().as_millis()
         );
 
-        opt_expr
+        todo!()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{circ::{*, partial_eval::HEPartialEvaluator}, program::lowering::CircuitLowering};
+
+    fn run_optimizer(expr: &RecExpr<HEOptCircuit>) -> Runner<HEOptCircuit, HEData> {
+        let optimizer = Optimizer::new(16);
+        let runner = Runner::default()
+            .with_explanations_enabled()
+            .with_expr(expr)
+            .with_time_limit(Duration::from_millis(5000))
+            .with_hook(|runner: &mut Runner<HEOptCircuit, HEData>| {
+                println!("iteration: {}", runner.iterations.len());
+                println!("nodes: {}", runner.egraph.total_number_of_nodes());
+                Ok(())
+            }).run(optimizer.rules());
+
+        runner
+    }
 
     fn run_equiv(s1: &str, s2: &str) -> (bool, String) {
-        let optimizer = Optimizer::new(16);
-        let expr1 = s1.parse().unwrap();
-        let expr2 = s2.parse().unwrap();
-        let mut runner = Runner::default()
-            .with_explanations_enabled()
-            .with_expr(&expr1)
-            .run(optimizer.rules());
+        let expr1: RecExpr<HEOptCircuit> = s1.parse().unwrap();
+        let expr2: RecExpr<HEOptCircuit> = s2.parse().unwrap();
+
+        let mut runner = run_optimizer(&expr1);
 
         let equiv = runner.egraph.equivs(&expr1, &expr2).len() > 0;
         if equiv {
@@ -802,6 +810,7 @@ mod tests {
         // let mut extractor = HEExtractor::new(&runner.egraph, root);
         // extractor.solve().unwrap()
 
+        /*
         let mut extractor = LpExtractor::new(
             &runner.egraph,
             OpSizeFunction {
@@ -809,10 +818,19 @@ mod tests {
             },
         );
         extractor.solve(root)
+        */
+
+        RecExpr::default()
     }
 
     // #[ignore] ensures that these long-running equality saturation tests
     // don't run when calling `cargo test`.
+
+    #[test]
+    #[ignore]
+    fn test_add_identity() {
+        assert!(run_equiv("(+ x 0)", "x").0);
+    }
 
     #[test]
     #[ignore]
@@ -857,5 +875,79 @@ mod tests {
     fn test_extract() {
         let res = run_extractor("(+ (* x x) (* 2 x))");
         println!("{}", res);
+    }
+
+    #[test]
+    fn test_circuit_roundtrip() {
+        let mut registry = CircuitObjectRegistry::new();
+
+        let ct_var = registry.fresh_ct_var();
+        let vector = VectorInfo {
+            array: String::from("arr"),
+            preprocessing: None,
+            offset_map: BaseOffsetMap::new(2),
+            dims: im::Vector::new(),
+        };
+
+        let ct_obj = CiphertextObject::InputVector(vector);
+
+        let mut coord_map =
+            IndexCoordinateMap::from_coord_system(IndexCoordinateSystem::from_dim_list(vec![
+                (String::from("i"), 2),
+                (String::from("j"), 2),
+            ]));
+
+        coord_map.set(im::vector![0, 0], ct_obj.clone());
+        coord_map.set(im::vector![0, 1], ct_obj.clone());
+        coord_map.set(im::vector![1, 0], ct_obj.clone());
+        coord_map.set(im::vector![1, 1], ct_obj.clone());
+
+        registry.set_ct_var_value(ct_var.clone(), CircuitValue::CoordMap(coord_map));
+
+        let lit_2 = registry.register_circuit(ParamCircuitExpr::Literal(2));
+        let add_2 = registry.register_circuit(ParamCircuitExpr::Op(Operator::Add, lit_2, lit_2));
+        let ct = registry.register_circuit(ParamCircuitExpr::CiphertextVar(ct_var));
+        let reduce_vec =
+            registry.register_circuit(
+                ParamCircuitExpr::ReduceDim(String::from("j"), 2, Operator::Add, ct)
+            );
+
+        let circuit =
+            registry.register_circuit(ParamCircuitExpr::Op(Operator::Add, reduce_vec, add_2));
+
+        let circuit_program = ParamCircuitProgram {
+            registry,
+            native_expr_list: vec![],
+            circuit_expr_list: vec![(String::from("out"), vec![(String::from("i"), 2)], circuit)],
+        };
+
+        let rec_exprs = circuit_program.to_opt_circuit();
+        let rec_expr = rec_exprs.first().unwrap();
+
+        let runner = run_optimizer(&rec_expr);
+        let root = *runner.roots.first().unwrap();
+
+        let get_first_enode = |id| {
+            println!("fetching from eclass {}", id);
+            runner.egraph[id].nodes[0].clone()
+        };
+        let new_expr =
+            get_first_enode(root)
+            .build_recexpr(get_first_enode);
+
+        println!("{}", new_expr);
+
+        let new_circuit_program = circuit_program.from_opt_circuit(vec![new_expr]);
+
+        println!("old circuit:\n{}",
+            CircuitLowering::new().run(
+                HEPartialEvaluator::new().run(circuit_program)
+            )
+        );
+        println!("new circuit:\n{}", 
+            CircuitLowering::new().run(
+                HEPartialEvaluator::new().run(new_circuit_program)
+            )
+        );
     }
 }

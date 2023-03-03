@@ -192,7 +192,7 @@ impl HEPartialEvaluator {
         &mut self,
         circuit_id: CircuitId,
         dims: &Vec<(DimName,Extent)>,
-        registry: &CircuitObjectRegistry,
+        old_registry: &CircuitObjectRegistry,
         new_registry: &mut CircuitObjectRegistry,
         native_expr_list: &mut Vec<(ArrayName, Vec<(DimName, Extent)>, CircuitId)>,
         cache: &mut HashMap<CircuitId, (PartialCircuit, CircuitId)>,
@@ -201,11 +201,11 @@ impl HEPartialEvaluator {
             return (partial_circ.clone(), *new_id);
         }
 
-        let circuit = registry.get_circuit(circuit_id);
+        let circuit = old_registry.get_circuit(circuit_id);
         match circuit {
             ParamCircuitExpr::CiphertextVar(var) => {
                 let new_var = new_registry.fresh_ct_var();
-                let circval = registry.get_ct_var_value(var);
+                let circval = old_registry.get_ct_var_value(var);
                 new_registry.set_ct_var_value(new_var.clone(), circval.clone());
 
                 let new_circuit = ParamCircuitExpr::CiphertextVar(new_var);
@@ -217,7 +217,7 @@ impl HEPartialEvaluator {
 
             ParamCircuitExpr::PlaintextVar(var) => {
                 let new_var = new_registry.fresh_pt_var();
-                let circval = registry.get_pt_var_value(var);
+                let circval = old_registry.get_pt_var_value(var);
                 new_registry.set_pt_var_value(new_var.clone(), circval.clone());
 
                 let new_circuit = ParamCircuitExpr::PlaintextVar(new_var);
@@ -239,7 +239,7 @@ impl HEPartialEvaluator {
                     self.partial_eval(
                         *expr1, 
                         dims,
-                        registry,
+                        old_registry,
                         new_registry, 
                         native_expr_list, 
                         cache
@@ -249,7 +249,7 @@ impl HEPartialEvaluator {
                     self.partial_eval(
                         *expr2, 
                         dims,
-                        registry, new_registry,
+                        old_registry, new_registry,
                         native_expr_list,
                         cache
                     );
@@ -271,7 +271,7 @@ impl HEPartialEvaluator {
                     self.partial_eval(
                         *body,
                         dims,
-                         registry,
+                         old_registry,
                          new_registry,
                          native_expr_list,
                          cache,
@@ -279,6 +279,16 @@ impl HEPartialEvaluator {
 
                 let new_circuit =
                     ParamCircuitExpr::Rotate(steps.clone(), new_body_id);
+
+                // TODO registry old fvars in new registry?
+                for fvar in steps.function_vars() {
+                    let fvar_circval =
+                        old_registry.get_offset_fvar_value(&fvar);
+
+                    new_registry.offset_fvar_values.insert(
+                        fvar, fvar_circval.clone()
+                    );
+                }
 
                 let new_id = new_registry.register_circuit(new_circuit.clone());
                 let partial_circ =
@@ -300,7 +310,7 @@ impl HEPartialEvaluator {
                     self.partial_eval(
                         *body,
                         dims,
-                         registry,
+                         old_registry,
                          new_registry,
                          native_expr_list,
                          cache,
