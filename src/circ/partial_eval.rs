@@ -39,17 +39,14 @@ impl HEPartialEvaluator {
 
     fn partial_eval_op(
         &mut self,
-        circuit_id: CircuitId,
         op: Operator,
         circ1: PartialCircuit,
         new_id1: CircuitId,
         circ2: PartialCircuit,
         new_id2: CircuitId,
         dims: &Vec<(DimName,Extent)>,
-        registry: &CircuitObjectRegistry,
         new_registry: &mut CircuitObjectRegistry,
         native_expr_list: &mut Vec<(ArrayName, Vec<(DimName, Extent)>, CircuitId)>,
-        cache: &mut HashMap<CircuitId, (PartialCircuit, CircuitId)>,
     ) -> (PartialCircuit, CircuitId) {
         match (circ1, circ2) {
             (PartialCircuit::Ciphertext(_), PartialCircuit::Ciphertext(_)) => {
@@ -164,9 +161,23 @@ impl HEPartialEvaluator {
                 }
             },
 
-            (PartialCircuit::Plaintext(_), PartialCircuit::Plaintext(_)) => {
+            (PartialCircuit::Plaintext(p1), PartialCircuit::Plaintext(p2)) => {
                 let new_circuit =
-                    ParamCircuitExpr::Op(op, new_id1, new_id2);
+                    if let (ParamCircuitExpr::Literal(lit1), ParamCircuitExpr::Literal(lit2)) = (p1, p2) {
+                        match op {
+                            Operator::Add =>
+                                ParamCircuitExpr::Literal(lit1 + lit2),
+
+                            Operator::Sub => 
+                                ParamCircuitExpr::Literal(lit1 - lit2),
+
+                            Operator::Mul =>
+                                ParamCircuitExpr::Literal(lit1 * lit2),
+                        }
+
+                    } else {
+                        ParamCircuitExpr::Op(op, new_id1, new_id2)
+                    };
 
                 let new_id =
                     new_registry.register_circuit(new_circuit.clone());
@@ -245,12 +256,10 @@ impl HEPartialEvaluator {
 
                 let (partial_circ, new_id) =
                     self.partial_eval_op(
-                        circuit_id,
                         *op, circ1, new_id1, circ2, new_id2,
                         dims,
-                        registry, new_registry,
+                        new_registry,
                         native_expr_list,
-                        cache
                     );
 
                 cache.insert(circuit_id, (partial_circ.clone(), new_id));

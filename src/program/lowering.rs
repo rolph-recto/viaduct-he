@@ -38,12 +38,20 @@ impl CircuitLowering {
         }
     }
 
-    // TODO finish this
+    // TODO do this properly, similar to the linear probing trick
     fn compute_coord_relationship(
         index_vars: Vec<DimName>,
         coord_val_map: HashMap<IndexCoord, IndexCoord>,
     ) -> Option<Vec<HEIndex>> {
-        None
+        let same_indices =
+            coord_val_map.iter().all(|(coord1, coord2)| coord1 == coord2);
+
+        if same_indices {
+            Some(index_vars.into_iter().map(|var| HEIndex::Var(var)).collect())
+
+        } else {
+            None
+        }
     }
 
     fn inline_ciphertext_object(
@@ -105,7 +113,7 @@ impl CircuitLowering {
                     let obj = obj_opt.unwrap();
                     match obj {
                         PlaintextObject::InputVector(vector) => {
-                            vector_var_set.insert(input.ct_vector_map.get(vector).unwrap().clone());
+                            vector_var_set.insert(input.pt_vector_map.get(vector).unwrap().clone());
                         }
 
                         PlaintextObject::ExprVector(ref_vector, ref_coord) => {
@@ -1001,6 +1009,82 @@ mod tests {
         registry
             .ct_var_values
             .insert(String::from("ct"), CircuitValue::CoordMap(coord_map));
+
+        let circuit_program = ParamCircuitProgram {
+            registry,
+            native_expr_list: vec![],
+            circuit_expr_list: vec![(String::from("out"), vec![(String::from("i"), 2)], circuit)],
+        };
+
+        let circuit_program2 = HEPartialEvaluator::new().run(circuit_program);
+
+        test_lowering(circuit_program2);
+    }
+
+    #[test]
+    fn test_partial_eval2() {
+        let mut registry = CircuitObjectRegistry::new();
+
+        let vector = VectorInfo {
+            array: String::from("arr"),
+            preprocessing: None,
+            offset_map: BaseOffsetMap::new(2),
+            dims: im::Vector::new(),
+        };
+
+        let ct_obj = CiphertextObject::InputVector(vector);
+
+        let mut coord_map =
+            IndexCoordinateMap::from_coord_system(IndexCoordinateSystem::from_dim_list(vec![
+                (String::from("i"), 2),
+                (String::from("j"), 2),
+            ]));
+
+        coord_map.set(im::vector![0, 0], ct_obj.clone());
+        coord_map.set(im::vector![0, 1], ct_obj.clone());
+        coord_map.set(im::vector![1, 0], ct_obj.clone());
+        coord_map.set(im::vector![1, 1], ct_obj.clone());
+
+        registry
+            .ct_var_values
+            .insert(String::from("ct"), CircuitValue::CoordMap(coord_map));
+
+        let vector2 = VectorInfo {
+            array: String::from("parr"),
+            preprocessing: None,
+            offset_map: BaseOffsetMap::new(2),
+            dims: im::Vector::new(),
+        };
+
+        let pt_obj = PlaintextObject::InputVector(vector2);
+
+        let mut coord_map2 =
+            IndexCoordinateMap::from_coord_system(IndexCoordinateSystem::from_dim_list(vec![
+                (String::from("i"), 2),
+                (String::from("j"), 2),
+            ]));
+
+        coord_map2.set(im::vector![0, 0], pt_obj.clone());
+        coord_map2.set(im::vector![0, 1], pt_obj.clone());
+        coord_map2.set(im::vector![1, 0], pt_obj.clone());
+        coord_map2.set(im::vector![1, 1], pt_obj.clone());
+
+        registry
+            .pt_var_values
+            .insert(String::from("pt"), CircuitValue::CoordMap(coord_map2));
+
+        let pt = registry.register_circuit(ParamCircuitExpr::PlaintextVar(String::from("pt")));
+        let add_pt = registry.register_circuit(ParamCircuitExpr::Op(Operator::Add, pt, pt));
+        let ct = registry.register_circuit(ParamCircuitExpr::CiphertextVar(String::from("ct")));
+        let reduce_vec = registry.register_circuit(ParamCircuitExpr::ReduceDim(
+            String::from("j"),
+            2,
+            Operator::Add,
+            ct,
+        ));
+
+        let circuit =
+            registry.register_circuit(ParamCircuitExpr::Op(Operator::Add, reduce_vec, add_pt));
 
         let circuit_program = ParamCircuitProgram {
             registry,

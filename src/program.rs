@@ -258,7 +258,7 @@ impl HEProgram {
                         .pt_vector_map
                         .iter()
                         .map(|(mask, name)| {
-                            RcDoc::text(format!("val {}: N = vector({:?})", name, mask))
+                            RcDoc::text(format!("val {}: N = vector({})", name, mask))
                         }),
                     RcDoc::hardline(),
                 ))
