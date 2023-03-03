@@ -231,13 +231,13 @@ impl IndexCoordinateSystem {
 }
 
 // map from index variable coordinates to values
-#[derive(Debug)]
-pub struct IndexCoordinateMap<T> {
+#[derive(Clone, Debug)]
+pub struct IndexCoordinateMap<T: Clone> {
     coord_system: IndexCoordinateSystem,
     coord_map: HashMap<IndexCoord, T>,
 }
 
-impl<T> IndexCoordinateMap<T> {
+impl<T: Clone> IndexCoordinateMap<T> {
     pub fn new<'a, A: Iterator<Item = &'a ScheduleDim>>(dims: A) -> Self {
         let coord_system = IndexCoordinateSystem::new(dims);
         let coord_map: HashMap<IndexCoord, T> = HashMap::new();
@@ -296,7 +296,7 @@ impl<T> IndexCoordinateMap<T> {
 
     pub fn map<F, U>(&self, f: F) -> IndexCoordinateMap<U>
     where
-        F: Fn(&IndexCoord, &T) -> U,
+        U: Clone, F: Fn(&IndexCoord, &T) -> U,
     {
         let mut coord_map = IndexCoordinateMap::from_coord_system(self.coord_system.clone());
         for (coord, value_opt) in self.value_iter() {
@@ -330,7 +330,7 @@ impl<T> IndexCoordinateMap<T> {
     }
 }
 
-impl<T: Display> Display for IndexCoordinateMap<T> {
+impl<T: Clone+Display> Display for IndexCoordinateMap<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.value_iter().try_for_each(|(coord, value_opt)| {
             if let Some(value) = value_opt {
@@ -342,7 +342,7 @@ impl<T: Display> Display for IndexCoordinateMap<T> {
     }
 }
 
-pub trait CircuitObject {
+pub trait CircuitObject: Clone {
     fn input_vector(vector: VectorInfo) -> Self;
     fn expr_vector(array: String, coord: IndexCoord) -> Self;
 }
@@ -444,16 +444,16 @@ impl Display for PlaintextObject {
 }
 
 /// objects that are referenced in a param circuit
-#[derive(Debug)]
-pub enum CircuitValue<T> {
+#[derive(Clone, Debug)]
+pub enum CircuitValue<T: Clone> {
     CoordMap(IndexCoordinateMap<T>),
     Single(T),
 }
 
-impl<T> CircuitValue<T> {
+impl<T: Clone> CircuitValue<T> {
     pub fn map<U, F>(&self, f: F) -> CircuitValue<U>
     where
-        F: Fn(&IndexCoord, &T) -> U,
+        U: Clone, F: Fn(&IndexCoord, &T) -> U,
     {
         match self {
             CircuitValue::CoordMap(coord_map) => CircuitValue::CoordMap(coord_map.map(f)),
@@ -463,7 +463,7 @@ impl<T> CircuitValue<T> {
     }
 }
 
-impl<T: Display> Display for CircuitValue<T>
+impl<T: Clone+Display> Display for CircuitValue<T>
 where
     T: Display,
 {
@@ -689,10 +689,17 @@ impl CircuitObjectRegistry {
     }
 
     pub fn get_constants(&self, root_vars: Option<&HashSet<VarName>>) -> HashSet<isize> {
-        let mut set = HashSet::new();
-        for (_, val) in self.pt_var_values.iter() {
-            match val {
+        let processed_pt_vars: HashSet<&VarName> =
+            if let Some(roots) = root_vars {
+                roots.iter().collect()
 
+            } else {
+                self.pt_var_values.keys().collect()
+            };
+        
+        let mut set = HashSet::new();
+        for pt_var in processed_pt_vars {
+            match self.get_pt_var_value(pt_var) {
                 CircuitValue::CoordMap(coord_map) => {
                     for (_, obj) in coord_map.value_iter() {
                         if let Some(PlaintextObject::Const(constval)) = obj {
@@ -720,6 +727,7 @@ impl CircuitObjectRegistry {
     }
 
     // get a list of expressions reachable from a circuit root
+    // this starts from children and proceeds to the circuit root
     pub fn expr_list(&self, id: CircuitId) -> Vec<CircuitId> {
         let mut expr_ids: Vec<CircuitId> = vec![id];
         let mut worklist: LinkedList<CircuitId> = LinkedList::from([id]);

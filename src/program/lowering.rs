@@ -174,7 +174,7 @@ impl CircuitLowering {
         HEOperand::Literal(*offset)
     }
 
-    fn process_circuit_val<T>(
+    fn process_circuit_val<T: Clone>(
         value: &CircuitValue<T>,
         var: String,
         input: &HEProgramContext,
@@ -189,13 +189,17 @@ impl CircuitLowering {
                         coords.iter().map(|coord| HEIndex::Literal(*coord as isize)),
                     );
 
-                    statements.push(HEStatement::AssignVar(var.clone(), coord_index, operand));
+                    let assign_stmt = HEStatement::AssignVar(var.clone(), coord_index, operand);
+                    println!("adding {}", assign_stmt);
+                    statements.push(assign_stmt);
                 }
             }
 
             CircuitValue::Single(obj) => {
                 let operand = f(obj, &input);
-                statements.push(HEStatement::AssignVar(var, vec![], operand));
+                let assign_stmt = HEStatement::AssignVar(var, vec![], operand);
+                println!("adding {}", assign_stmt);
+                statements.push(assign_stmt);
             }
         }
     }
@@ -207,12 +211,12 @@ impl CircuitLowering {
         let mut const_map = HashMap::new();
 
         for vector in registry.get_ciphertext_input_vectors(None) {
-            let vector_name = self.name_generator.get_fresh_name("ct");
+            let vector_name = self.name_generator.get_fresh_name(&vector.array);
             ct_vector_map.insert(vector, vector_name);
         }
 
         for vector in registry.get_plaintext_input_vectors(None) {
-            let vector_name = self.name_generator.get_fresh_name("pt");
+            let vector_name = self.name_generator.get_fresh_name(&vector.array);
             pt_vector_map.insert(vector, vector_name);
         }
 
@@ -263,6 +267,16 @@ impl CircuitLowering {
             }
         }
 
+        for offset_fvar in registry.circuit_offset_fvars(circuit_id) {
+            CircuitLowering::process_circuit_val(
+                registry.get_offset_fvar_value(&offset_fvar),
+                offset_fvar,
+                &context,
+                CircuitLowering::resolve_offset,
+                &mut statements,
+            );
+        }
+
         let mut body_statements: Vec<HEStatement> = Vec::new();
         let body_id = self.gen_native_expr_instrs(
             circuit_id,
@@ -274,14 +288,18 @@ impl CircuitLowering {
             &mut body_statements,
         );
         
-        self.gen_array_statements(
-            array,
-            dims,
-            HEType::Native,
-            body_id,
-            body_statements
-        )
-    }
+        statements.extend(
+            self.gen_array_statements(
+                array,
+                dims,
+                HEType::Native,
+                body_id,
+                body_statements
+            )
+        );
+
+        statements
+   }
 
     fn process_circuit_expr(
         &mut self,
@@ -355,13 +373,17 @@ impl CircuitLowering {
             &mut body_statements,
         );
         
-        self.gen_array_statements(
-            array,
-            dims,
-            HEType::Ciphertext,
-            body_id,
-            body_statements
-        )
+        statements.extend(
+            self.gen_array_statements(
+                array,
+                dims,
+                HEType::Ciphertext,
+                body_id,
+                body_statements
+            )
+        );
+
+        statements
     }
 
     fn gen_array_statements(
@@ -876,7 +898,7 @@ mod tests {
     use crate::{
         circ::{
             CiphertextObject, CircuitObjectRegistry, CircuitValue, IndexCoordinateMap,
-            IndexCoordinateSystem, ParamCircuitExpr, ParamCircuitProgram,
+            IndexCoordinateSystem, ParamCircuitExpr, ParamCircuitProgram, partial_eval::HEPartialEvaluator,
         },
         lang::{BaseOffsetMap, Operator},
         program::lowering::CircuitLowering,
@@ -939,4 +961,55 @@ mod tests {
         test_lowering(circuit_program);
     }
 
+    #[test]
+    fn test_partial_eval() {
+        let mut coord_map =
+            IndexCoordinateMap::from_coord_system(IndexCoordinateSystem::from_dim_list(vec![
+                (String::from("i"), 2),
+                (String::from("j"), 2),
+            ]));
+
+        let vector = VectorInfo {
+            array: String::from("arr"),
+            preprocessing: None,
+            offset_map: BaseOffsetMap::new(2),
+            dims: im::Vector::new(),
+        };
+
+        let ct_obj = CiphertextObject::InputVector(vector);
+
+        coord_map.set(im::vector![0, 0], ct_obj.clone());
+        coord_map.set(im::vector![0, 1], ct_obj.clone());
+        coord_map.set(im::vector![1, 0], ct_obj.clone());
+        coord_map.set(im::vector![1, 1], ct_obj.clone());
+
+        let mut registry = CircuitObjectRegistry::new();
+
+        let lit_2 = registry.register_circuit(ParamCircuitExpr::Literal(2));
+        let add_2 = registry.register_circuit(ParamCircuitExpr::Op(Operator::Add, lit_2, lit_2));
+        let ct = registry.register_circuit(ParamCircuitExpr::CiphertextVar(String::from("ct")));
+        let reduce_vec = registry.register_circuit(ParamCircuitExpr::ReduceDim(
+            String::from("j"),
+            2,
+            Operator::Add,
+            ct,
+        ));
+
+        let circuit =
+            registry.register_circuit(ParamCircuitExpr::Op(Operator::Add, reduce_vec, add_2));
+
+        registry
+            .ct_var_values
+            .insert(String::from("ct"), CircuitValue::CoordMap(coord_map));
+
+        let circuit_program = ParamCircuitProgram {
+            registry,
+            native_expr_list: vec![],
+            circuit_expr_list: vec![(String::from("out"), vec![(String::from("i"), 2)], circuit)],
+        };
+
+        let circuit_program2 = HEPartialEvaluator::new().run(circuit_program);
+
+        test_lowering(circuit_program2);
+    }
 }
