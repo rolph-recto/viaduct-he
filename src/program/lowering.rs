@@ -600,7 +600,7 @@ impl CircuitLowering {
                     // it would've been partially evaluated
                     assert!(body_type == HEType::Ciphertext);
 
-                    let reduce_var = self.name_generator.get_fresh_name("reduce");
+                    let reduce_var = self.name_generator.get_fresh_name("__reduce");
 
                     let reduce_var_ref = HERef::Array(reduce_var.clone(), vec![]);
 
