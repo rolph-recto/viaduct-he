@@ -233,7 +233,7 @@ impl CircuitLowering {
             mask_map.insert(mask, mask_name);
         }
 
-        for constval in registry.get_constants(None) {
+        for constval in registry.get_constants(None, None) {
             const_map.insert(constval, format!("const_{}", constval));
         }
 
@@ -841,18 +841,26 @@ impl CircuitLowering {
         }
 
         let mut encoded_names: Vec<ArrayName> =
-            program.registry.get_plaintext_input_vectors(Some(&encoded_pt_vars))
+            program.registry
+            .get_plaintext_input_vectors(Some(&encoded_pt_vars))
             .iter().map(|vec| context.pt_vector_map.get(vec).unwrap().clone())
             .collect();
 
         encoded_names.extend(
-            program.registry.get_masks(Some(&encoded_pt_vars))
+            program.registry
+            .get_masks(Some(&encoded_pt_vars))
             .iter().map(|vec| context.mask_map.get(vec).unwrap().clone())
             .collect::<Vec<ArrayName>>()
         );
 
+        let circuit_ids: HashSet<CircuitId> =
+            program.circuit_expr_list.iter()
+            .flat_map(|(_, _, id)| program.registry.expr_list(*id))
+            .collect();
+
         encoded_names.extend(
-            program.registry.get_constants(Some(&encoded_pt_vars))
+            program.registry
+            .get_constants(Some(&encoded_pt_vars), Some(&circuit_ids))
             .iter().map(|vec| context.const_map.get(vec).unwrap().clone())
             .collect::<Vec<ArrayName>>()
         );

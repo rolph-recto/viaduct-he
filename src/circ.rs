@@ -688,7 +688,11 @@ impl CircuitObjectRegistry {
         set
     }
 
-    pub fn get_constants(&self, root_vars: Option<&HashSet<VarName>>) -> HashSet<isize> {
+    pub fn get_constants(
+        &self,
+        root_vars: Option<&HashSet<VarName>>,
+        root_circuits: Option<&HashSet<CircuitId>>,
+    ) -> HashSet<isize> {
         let processed_pt_vars: HashSet<&VarName> =
             if let Some(roots) = root_vars {
                 roots.iter().collect()
@@ -716,8 +720,20 @@ impl CircuitObjectRegistry {
             }
         }
 
+        let relevant_circuits: Vec<&ParamCircuitExpr> =
+            if let Some(ids) = root_circuits {
+                ids.iter()
+                .map(|id| self.get_circuit(*id))
+                .collect()
+
+            } else {
+                self.circuit_map.iter()
+                .map(|(_, circuit)| circuit)
+                .collect()
+            };
+
         // must look for literals in circuits as well
-        for (_, circuit) in self.circuit_map.iter() {
+        for circuit in relevant_circuits {
             if let ParamCircuitExpr::Literal(lit) = circuit {
                 set.insert(*lit);
             }
