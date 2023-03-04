@@ -2,8 +2,8 @@ use clap::ValueEnum;
 use egg::*;
 use log::*;
 use std::{
-    cmp::{max, min},
-    collections::{HashMap, HashSet},
+    cmp::max,
+    collections::HashSet,
     time::*,
 };
 
@@ -25,13 +25,6 @@ define_language! {
         IndexVar(Symbol),
         FunctionVar(Symbol, Vec<Id>),
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum RewriteOp {
-    Add,
-    Sub,
-    Mul,
 }
 
 #[derive(Clone, ValueEnum)]
@@ -203,9 +196,8 @@ impl Analysis<HEOptCircuit> for HEData {
     }
 }
 
-fn is_not_index_var(var: &'static str) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
-    let var = var.parse().unwrap();
-    let zero = HEOptCircuit::Literal(0);
+fn is_not_index_var(var_str: &'static str) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
+    let var = var_str.parse().unwrap();
     move |egraph, _, subst| {
         egraph[subst[var]].nodes.iter().all(|node| {
             match node {
@@ -216,222 +208,74 @@ fn is_not_index_var(var: &'static str) -> impl Fn(&mut HEGraph, Id, &Subst) -> b
     }
 }
 
-// This returns a function that implements Condition
-fn is_zero(var: &'static str) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
-    let var = var.parse().unwrap();
-    let zero = HEOptCircuit::Literal(0);
+fn index_var_free(var1_str: &'static str, var2_str: &'static str) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
+    let var1: Var = var1_str.parse().unwrap();
+    let var2: Var = var2_str.parse().unwrap();
     move |egraph, _, subst| {
-        egraph[subst[var]].nodes.contains(&zero)
+        let index_vars1 = &egraph[subst[var1]].data.index_vars;
+        let index_vars2= &egraph[subst[var2]].data.index_vars;
+        index_vars2.iter().all(|ivar| !index_vars1.contains(ivar))
     }
 }
 
-// This returns a function that implements Condition
+// eclass has a nonzero constant value
 fn is_const_nonzero(var: &'static str) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
     let var = var.parse().unwrap();
-    let zero = HEOptCircuit::Literal(0);
-    move |egraph, _, subst| match egraph[subst[var]].data.constval {
-        Some(x) => x != 0,
-        None => false,
-    }
-}
-
-fn is_constant(str: &'static str) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
-    let var = str.parse().unwrap();
-    move |egraph, _, subst| egraph[subst[var]].data.constval.is_some()
-}
-
-fn has_constant_factor(
-    astr: &'static str,
-    bstr: &'static str,
-) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
-    let avar = astr.parse().unwrap();
-    let bvar = bstr.parse().unwrap();
     move |egraph, _, subst| {
-        let a_id = egraph.find(subst[avar]);
-        let b_id = egraph.find(subst[bvar]);
-        match (egraph[a_id].data.constval, egraph[b_id].data.constval) {
-            (None, Some(bval)) => true,
-            _ => false,
+        match egraph[subst[var]].data.constval {
+            Some(x) => x != 0,
+            None => false,
         }
     }
 }
 
-// This returns a function that implements Condition
-fn can_fold(astr: &'static str, bstr: &'static str) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
-    let avar = astr.parse().unwrap();
-    let bvar = bstr.parse().unwrap();
-    move |egraph, _, subst| {
-        egraph[subst[avar]].data.constval.is_some() && egraph[subst[bvar]].data.constval.is_some()
-    }
-}
+struct ConstSplit {}
 
-fn can_split_rot(
-    l1_str: &'static str,
-    l2_str: &'static str,
-) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
-    let l1: Var = l1_str.parse().unwrap();
-    let l2: Var = l2_str.parse().unwrap();
-    move |egraph: &mut HEGraph, _, subst: &Subst| match (
-        egraph[subst[l1]].data.constval,
-        egraph[subst[l2]].data.constval,
-    ) {
-        (Some(l1_val), Some(l2_val)) => (l1_val < 0 && l2_val < 0) || (l1_val > 0 && l2_val > 0),
-
-        _ => false,
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct AddToMul {
-    a: Var,
-    b: Var,
-}
-
-impl Applier<HEOptCircuit, HEData> for AddToMul {
+impl Applier<HEOptCircuit, HEData> for ConstSplit {
     fn apply_one(
         &self,
-        egraph: &mut HEGraph,
-        matched_id: Id,
-        subst: &Subst,
-        _: Option<&PatternAst<HEOptCircuit>>,
-        _: Symbol,
+        egraph: &mut EGraph<HEOptCircuit, HEData>,
+        eclass: Id,
+        _subst: &Subst,
+        _searcher_ast: Option<&PatternAst<HEOptCircuit>>,
+        _rule_name: Symbol,
     ) -> Vec<Id> {
-        let a_id = subst[self.a];
-        let b_id = egraph.find(subst[self.b]);
-        let bval = egraph[b_id].data.constval.unwrap();
+        let mut changed: Vec<Id> = Vec::new();
+        let constval = egraph[eclass].data.constval.unwrap();
 
-        let mut changed = false;
-        if bval != -1 {
-            let b_inc_id = egraph.add(HEOptCircuit::Literal(bval + 1));
-            let mul_id = egraph.add(HEOptCircuit::Mul([a_id, b_inc_id]));
-            changed = changed || egraph.union(matched_id, mul_id);
-        }
+        if constval > 0 {
+            let mut counter = 1;
+            while counter <= constval {
+                let op1_id = egraph.add(HEOptCircuit::Literal(counter));
+                let op2_id = egraph.add(HEOptCircuit::Literal(constval - counter));
+                let add_id = egraph.add(HEOptCircuit::Add([op1_id, op2_id]));
+                egraph.union(eclass, add_id);
+                changed.push(add_id);
+                counter += 1;
+            }
 
-        if changed {
-            vec![matched_id]
-        } else {
-            vec![]
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct MulToAdd {
-    a: Var,
-    b: Var,
-}
-
-impl Applier<HEOptCircuit, HEData> for MulToAdd {
-    fn apply_one(
-        &self,
-        egraph: &mut HEGraph,
-        matched_id: Id,
-        subst: &Subst,
-        _: Option<&PatternAst<HEOptCircuit>>,
-        _: Symbol,
-    ) -> Vec<Id> {
-        let a_id = subst[self.a];
-        let b_id = subst[self.b];
-        let bval = egraph[b_id].data.constval.unwrap();
-
-        let mut changed = false;
-        if bval != 0 {
-            for i in 1..bval.abs() {
-                let cur_b = if bval > 0 { bval - i } else { bval + i };
-                let cur_b_id = egraph.add(HEOptCircuit::Literal(cur_b));
-
-                let mut acc = egraph.add(HEOptCircuit::Mul([a_id, cur_b_id]));
-                for _ in 0..i {
-                    if bval > 0 {
-                        acc = egraph.add(HEOptCircuit::Add([acc, a_id]));
-                    } else {
-                        acc = egraph.add(HEOptCircuit::Sub([acc, a_id]));
-                    }
-                }
-
-                changed = changed || egraph.union(matched_id, acc);
+        } else if constval < 0 {
+            let mut counter = -1;
+            while counter >= constval {
+                let op1_id = egraph.add(HEOptCircuit::Literal(counter));
+                let op2_id = egraph.add(HEOptCircuit::Literal(constval - counter));
+                let add_id = egraph.add(HEOptCircuit::Add([op1_id, op2_id]));
+                egraph.union(eclass, add_id);
+                changed.push(add_id);
+                counter -= 1;
             }
         }
 
-        if changed {
-            vec![matched_id]
-        } else {
-            vec![]
+        if changed.len() > 0 {
+            changed.push(eclass);
         }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct SubInverse {
-    a: Var,
-    b: Var,
-}
-
-impl Applier<HEOptCircuit, HEData> for SubInverse {
-    fn apply_one(
-        &self,
-        egraph: &mut HEGraph,
-        matched_id: Id,
-        subst: &Subst,
-        _: Option<&PatternAst<HEOptCircuit>>,
-        _: Symbol,
-    ) -> Vec<Id> {
-        let a_id = subst[self.a];
-        let b_id = subst[self.b];
-
-        let neg_one = egraph.add(HEOptCircuit::Literal(-1));
-        let neg_b = egraph.add(HEOptCircuit::Mul([neg_one, b_id]));
-        let a_plus_neg_b = egraph.add(HEOptCircuit::Add([a_id, neg_b]));
-
-        if egraph.union(matched_id, a_plus_neg_b) {
-            vec![matched_id]
-        } else {
-            vec![]
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct FactorSplit {
-    a: Var,
-    b: Var,
-}
-
-impl Applier<HEOptCircuit, HEData> for FactorSplit {
-    fn apply_one(
-        &self,
-        egraph: &mut HEGraph,
-        matched_id: Id,
-        subst: &Subst,
-        _: Option<&PatternAst<HEOptCircuit>>,
-        _: Symbol,
-    ) -> Vec<Id> {
-        let factor: isize = egraph[subst[self.a]].data.constval.unwrap();
-
-        let mut acc: Id = egraph.add(HEOptCircuit::Literal(0));
-        let mut cur_val = factor;
-
-        let dir = if cur_val > 0 { 1 } else { -1 };
-        let dir_id = egraph.add(HEOptCircuit::Literal(dir));
-
-        let chunk = egraph.add(HEOptCircuit::Mul([dir_id, subst[self.b]]));
-
-        while cur_val != 0 {
-            acc = egraph.add(HEOptCircuit::Add([chunk, acc]));
-            cur_val -= dir
-        }
-
-        if egraph.union(matched_id, acc) {
-            vec![matched_id]
-        } else {
-            vec![]
-        }
+        changed
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RotateWrap {
-    size: isize,
+    size: usize,
     x: Var,
     l: Var,
 }
@@ -448,120 +292,11 @@ impl Applier<HEOptCircuit, HEData> for RotateWrap {
         let xclass: Id = subst[self.x];
         let lval = egraph[subst[self.l]].data.constval.unwrap();
 
-        let wrapped_lval = egraph.add(HEOptCircuit::Literal(lval % self.size));
+        let wrapped_lval = egraph.add(HEOptCircuit::Literal(lval % (self.size as isize)));
         let wrapped_rot: Id = egraph.add(HEOptCircuit::Rot([xclass, wrapped_lval]));
         if egraph.union(matched_id, wrapped_rot) {
             vec![matched_id]
-        } else {
-            vec![]
-        }
-    }
-}
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct RotateSquash {
-    size: usize,
-    x: Var,
-    l1: Var,
-    l2: Var,
-}
-
-impl Applier<HEOptCircuit, HEData> for RotateSquash {
-    fn apply_one(
-        &self,
-        egraph: &mut HEGraph,
-        matched_id: Id,
-        subst: &Subst,
-        _: Option<&PatternAst<HEOptCircuit>>,
-        _: Symbol,
-    ) -> Vec<Id> {
-        let xclass: Id = subst[self.x];
-        let l1_val = egraph[subst[self.l1]].data.constval.unwrap();
-        let l2_val = egraph[subst[self.l2]].data.constval.unwrap();
-
-        let lval_sum = egraph.add(HEOptCircuit::Literal((l1_val + l2_val) % (self.size as isize)));
-        let rot_sum: Id = egraph.add(HEOptCircuit::Rot([xclass, lval_sum]));
-
-        if egraph.union(matched_id, rot_sum) {
-            vec![matched_id]
-        } else {
-            vec![]
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct RotateSplit {
-    op: RewriteOp,
-    x1: Var,
-    l1: Var,
-    x2: Var,
-    l2: Var,
-}
-
-impl Applier<HEOptCircuit, HEData> for RotateSplit {
-    fn apply_one(
-        &self,
-        egraph: &mut HEGraph,
-        matched_id: Id,
-        subst: &Subst,
-        _pattern: Option<&PatternAst<HEOptCircuit>>,
-        _rule: Symbol,
-    ) -> Vec<Id> {
-        let x1_class: Id = subst[self.x1];
-        let x2_class: Id = subst[self.x2];
-
-        let l1_val = egraph[subst[self.l1]].data.constval.unwrap();
-        let l2_val = egraph[subst[self.l2]].data.constval.unwrap();
-
-        assert!(l1_val >= 0, "l1_val is {}", l1_val);
-        assert!(l2_val >= 0, "l2_val is {}", l2_val);
-
-        let max_outer = min(l1_val as usize, l2_val as usize);
-        let mut has_split = false;
-        for i in 1..max_outer {
-            let cur_l1 = l1_val - (i as isize);
-            let cur_l2 = l2_val - (i as isize);
-
-            // recall that (rot x 0 ) = x
-            let rot_in1 = if cur_l1 != 0 {
-                let cur_l1_class = egraph.add(HEOptCircuit::Literal(cur_l1));
-                egraph.add(HEOptCircuit::Rot([x1_class, cur_l1_class]))
-            } else {
-                x1_class
-            };
-
-            let rot_in2 = if cur_l2 != 0 {
-                let cur_l2_class = egraph.add(HEOptCircuit::Literal(cur_l2));
-                egraph.add(HEOptCircuit::Rot([x2_class, cur_l2_class]))
-            } else {
-                x2_class
-            };
-
-            let op: HEOptCircuit = match self.op {
-                RewriteOp::Add => HEOptCircuit::Add([rot_in1, rot_in2]),
-
-                RewriteOp::Sub => HEOptCircuit::Sub([rot_in1, rot_in2]),
-
-                RewriteOp::Mul => HEOptCircuit::Add([rot_in1, rot_in2]),
-            };
-
-            // dbg!(&op, i, cur_l1, cur_l2, max_outer);
-            // let x1_children: Vec<&HEOptCircuit> =
-            //     egraph[x1_class].nodes.first().unwrap().children().iter().map(|c|
-            //         egraph[*c].nodes.first().unwrap()
-            //     ).collect();
-
-            // dbg!(&egraph[x1_class].nodes.first());
-            // dbg!(x1_children);
-            let op_class = egraph.add(op);
-            let outer_rot_class = egraph.add(HEOptCircuit::Literal(i as isize));
-            let rot_outer = egraph.add(HEOptCircuit::Rot([op_class, outer_rot_class]));
-            has_split = has_split || egraph.union(matched_id, rot_outer);
-        }
-
-        if has_split {
-            vec![matched_id]
         } else {
             vec![]
         }
@@ -576,10 +311,14 @@ impl Optimizer {
     pub fn new(size: usize) -> Self {
         let mut rules: Vec<Rewrite<HEOptCircuit, HEData>> = vec![
             // bidirectional addition rules
+            rewrite!("add-identity"; "(+ ?a 0)" <=> "?a" if is_not_index_var("?a")),
             rewrite!("add-assoc"; "(+ ?a (+ ?b ?c))" <=> "(+ (+ ?a ?b) ?c)"),
             rewrite!("add-commute"; "(+ ?a ?b)" <=> "(+ ?b ?a)"),
+            rewrite!("add-to-two"; "(+ ?a ?a)" <=> "(* 2 ?a)"),
+            rewrite!("sub-inverse"; "(- ?a ?b)" <=> "(+ ?a (* -1 ?b))"),
 
             // bidirectional multiplication rules
+            rewrite!("mul-identity"; "(* ?a 1)" <=> "?a" if is_not_index_var("?a")),
             rewrite!("mul-assoc"; "(* ?a (* ?b ?c))" <=> "(* (* ?a ?b) ?c)"),
             rewrite!("mul-commute"; "(* ?a ?b)" <=> "(* ?b ?a)"),
             rewrite!("mul-distribute"; "(* (+ ?a ?b) ?c)" <=> "(+ (* ?a ?c) (* ?b ?c))"),
@@ -588,104 +327,46 @@ impl Optimizer {
             rewrite!("rot-distribute-mul"; "(rot ?o (* ?a ?b))" <=> "(* (rot ?o ?a) (rot ?o ?b))"),
             rewrite!("rot-distribute-add"; "(rot ?o (+ ?a ?b))" <=> "(+ (rot ?o ?a) (rot ?o ?b))"),
             rewrite!("rot-distribute-sub"; "(rot ?o (- ?a ?b))" <=> "(- (rot ?o ?a) (rot ?o ?b))"),
+
+            rewrite!("sumvec-distribute-const-factor";
+                "(sumvec ?o (* ?c ?x))" <=> "(* ?c (sumvec ?o ?x))"
+                if is_const_nonzero("?c")
+            ),
         ]
         .concat();
 
         rules.extend(vec![
             // unidirectional rules
-            rewrite!("add-identity"; "(+ ?a 0)" => "?a" if is_not_index_var("?a")),
-            rewrite!("mul-identity"; "(* ?a 1)" => "?a" if is_not_index_var("?a")),
             rewrite!("mul-annihilator"; "(* ?a 0)" => "0"),
+            rewrite!("sub-to-zero"; "(- ?a ?a)" => "0"),
 
-            // a - b = a + (-1 * b)
-            rewrite!("sub-inverse"; "(- ?a ?b)" => {
-                SubInverse {
-                    a: "?a".parse().unwrap(),
-                    b: "?b".parse().unwrap(),
-                }
-            }),
-
-            // x + (x * c) = x * (c + 1), where c is a constant
-            rewrite!("add-to-mul"; "(+ ?a (* ?a ?b))" => {
-                AddToMul {
-                    a: "?a".parse().unwrap(),
-                    b: "?b".parse().unwrap()
-                }
-            } if has_constant_factor("?a", "?b")),
-
-            // x * c = x + (x * (c - 1)), where c is a constant
-            rewrite!("mul-to-add"; "(* ?a ?b)" => {
-                MulToAdd {
-                    a: "?a".parse().unwrap(),
-                    b: "?b".parse().unwrap()
-                }
-            } if has_constant_factor("?a", "?b")),
+            // split a constant value into a sum 
+            rewrite!("const-split"; "?x" => { ConstSplit {} } if is_const_nonzero("?x")),
 
             // rotation of 0 doesn't do anything
-            rewrite!("rot-none"; "(rot ?x ?l)" => "?x" if is_zero("?l")),
+            rewrite!("rot-none"; "(rot 0 ?x)" => "?x"),
 
             // squash nested rotations into a single rotation
-            rewrite!("rot-squash"; "(rot (rot ?x ?l1) ?l2)" => {
-                RotateSquash {
-                    size,
-                    x: "?x".parse().unwrap(),
-                    l1: "?l1".parse().unwrap(),
-                    l2: "?l2".parse().unwrap()
-                }
-            }),
+            rewrite!("rot-squash";
+                "(rot ?o1 (rot ?o2 ?x))" => "(rot (+ ?o1 o2) ?x)"),
 
-            // given an operation on rotated vectors,
-            // split rotation before and after the operation
-            rewrite!("rot-add-split"; "(+ (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
-                RotateSplit {
-                    op: RewriteOp::Add,
-                    x1: "?x1".parse().unwrap(),
-                    l1: "?l1".parse().unwrap(),
-                    x2: "?x2".parse().unwrap(),
-                    l2: "?l2".parse().unwrap(),
-                }
-            } if can_split_rot("?l1", "?l2")),
+            // split rotations for complex offset expressions
+            rewrite!("rot-offset-split-add";
+                "(rot (+ ?o1 ?o2) ?x)" => "(rot ?o1 (rot ?o2 ?x))"),
 
-            rewrite!("rot-sub-split"; "(- (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
-                RotateSplit {
-                    op: RewriteOp::Sub,
-                    x1: "?x1".parse().unwrap(),
-                    l1: "?l1".parse().unwrap(),
-                    x2: "?x2".parse().unwrap(),
-                    l2: "?l2".parse().unwrap(),
-                }
-            } if can_split_rot("?l1", "?l2")),
+            rewrite!("rot-offset-split-sub";
+                "(rot (- ?o1 ?o2) ?x)" => "(rot ?o1 (rot (- 0 ?o2) ?x))"),
 
-            rewrite!("rot-mul-split"; "(* (rot ?x1 ?l1) (rot ?x2 ?l2))" => {
-                RotateSplit {
-                    op: RewriteOp::Mul,
-                    x1: "?x1".parse().unwrap(),
-                    l1: "?l1".parse().unwrap(),
-                    x2: "?x2".parse().unwrap(),
-                    l2: "?l2".parse().unwrap(),
-                }
-            } if can_split_rot("?l1", "?l2")),
+            // distribute rotations from reduction of vectors
+            rewrite!("sumvec-distribute-rot";
+                "(sumvec ?o1 (rot ?o2 ?x))" => "(rot ?o2 (sumvec ?o1 x))"
+                if index_var_free("?o1", "?o2")
+            ),
 
-            // wrap rotation according to vector length
-            /*
-            rewrite!("rot-wrap"; "(rot ?x ?l)" => {
-                RotateWrap { x: "?x".parse().unwrap(), l: "?l".parse().unwrap() }
-            } if beyond_vec_length("?l")),
-            */
-
-            // these rules are identical to rotate split
-            // rewrite!("rot-distribute1-mul";
-            //     "(* (rot ?o ?a) (rot ?o ?b))" => "(rot 1 (* (rot (- ?o 1) ?a) (rot (- ?o 1) ?b)))"
-            //     if is_const_nonzero("?o")
-            // ),
-            // rewrite!("rot-distribute1-add";
-            //     "(+ (rot ?o ?a) (rot ?o ?b))" => "(rot 1 (+ (rot (- ?o 1) ?a) (rot (- ?o 1) ?b)))"
-            //     if is_const_nonzero("?o")
-            // ),
-            // rewrite!("rot-distribute1-sub";
-            //     "(- (rot ?o ?a) (rot ?o ?b))" => "(rot 1 (- (rot (- ?o 1) ?a) (rot (- ?o 1)) ?b))"
-            //     if is_const_nonzero("?o")
-            // ),
+            rewrite!("prodvec-distribute-rot";
+                "(prodvec ?o1 (rot ?o2 ?x))" => "(rot ?o2 (sumvec ?o1 x))"
+                if index_var_free("?o1", "?o2")
+            ),
         ]);
 
         Optimizer { rules }
@@ -766,26 +447,34 @@ mod tests {
     use super::*;
     use crate::{circ::{*, partial_eval::HEPartialEvaluator}, program::lowering::CircuitLowering};
 
-    fn run_optimizer(expr: &RecExpr<HEOptCircuit>) -> Runner<HEOptCircuit, HEData> {
+    fn run_optimizer(expr: &RecExpr<HEOptCircuit>, duration_opt: Option<Duration>) -> Runner<HEOptCircuit, HEData> {
         let optimizer = Optimizer::new(16);
-        let runner = Runner::default()
+        let mut runner = Runner::default()
             .with_explanations_enabled()
             .with_expr(expr)
-            .with_time_limit(Duration::from_millis(5000))
             .with_hook(|runner: &mut Runner<HEOptCircuit, HEData>| {
                 println!("iteration: {}", runner.iterations.len());
                 println!("nodes: {}", runner.egraph.total_number_of_nodes());
                 Ok(())
-            }).run(optimizer.rules());
+            });
+            
 
-        runner
+        let runner2 = 
+            if let Some(duration) = duration_opt {
+                runner.with_time_limit(duration)
+
+            } else {
+                runner
+            };
+
+        runner2.run(optimizer.rules())
     }
 
     fn run_equiv(s1: &str, s2: &str) -> (bool, String) {
         let expr1: RecExpr<HEOptCircuit> = s1.parse().unwrap();
         let expr2: RecExpr<HEOptCircuit> = s2.parse().unwrap();
 
-        let mut runner = run_optimizer(&expr1);
+        let mut runner = run_optimizer(&expr1, None);
 
         let equiv = runner.egraph.equivs(&expr1, &expr2).len() > 0;
         if equiv {
@@ -924,7 +613,9 @@ mod tests {
         let rec_exprs = circuit_program.to_opt_circuit();
         let rec_expr = rec_exprs.first().unwrap();
 
-        let runner = run_optimizer(&rec_expr);
+        let runner =
+            run_optimizer(&rec_expr, Some(Duration::from_millis(0)));
+
         let root = *runner.roots.first().unwrap();
 
         let get_first_enode = |id| {

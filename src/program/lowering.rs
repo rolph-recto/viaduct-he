@@ -537,9 +537,14 @@ impl CircuitLowering {
 
                     let id = self.fresh_instr_id();
                     let instr = match op {
-                        Operator::Add => HEInstruction::Add(optype, id, ref1_final, ref2_final),
-                        Operator::Sub => HEInstruction::Sub(optype, id, ref1_final, ref2_final),
-                        Operator::Mul => HEInstruction::Mul(optype, id, ref1_final, ref2_final),
+                        Operator::Add =>
+                            HEInstruction::Add(optype, id, ref1_final, ref2_final),
+
+                        Operator::Sub =>
+                            HEInstruction::Sub(optype, id, ref1_final, ref2_final),
+
+                        Operator::Mul =>
+                            HEInstruction::Mul(optype, id, ref1_final, ref2_final),
                     };
 
                     stmts.push(HEStatement::Instruction(instr));
