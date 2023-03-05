@@ -26,8 +26,8 @@ impl PartialOrd for HECost {
     }
 }
 
+/*
 pub(crate) struct HECostFunction<'a> {
-    pub latency: HELatencyModel,
     pub egraph: &'a HEGraph,
 }
 
@@ -99,3 +99,4 @@ impl<'a> CostFunction<HEOptCircuit> for HECostFunction<'a> {
         HECost { muldepth, latency }
     }
 }
+*/

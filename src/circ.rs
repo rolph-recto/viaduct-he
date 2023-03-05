@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    circ::{optimizer::HEOptCircuit, vector_info::VectorInfo},
+    circ::{optimizer::{cost::HECostContext, HEOptCircuit}, vector_info::VectorInfo},
     lang::*,
     scheduling::ScheduleDim,
 };
@@ -838,9 +838,15 @@ pub struct ParamCircuitProgram {
 }
 
 impl ParamCircuitProgram {
-    pub fn to_opt_circuit(&self) -> Vec<RecExpr<HEOptCircuit>> {
+    pub fn to_opt_circuit(&self) -> (Vec<RecExpr<HEOptCircuit>>, HECostContext) {
         // only run optimization *before* partial evaluation
         assert!(self.native_expr_list.len() == 0);
+        let mut cost_ctx =
+            HECostContext {
+                ct_multiplicity_map: HashMap::new(),
+                pt_multiplicity_map: HashMap::new(),
+                dim_extent_map: HashMap::new(),
+            };
 
         let mut rec_exprs: Vec<RecExpr<HEOptCircuit>> = Vec::new();
         for (_, _, expr_id) in self.circuit_expr_list.iter() {
@@ -855,6 +861,13 @@ impl ParamCircuitProgram {
                         let eclass =
                             rec_expr.add(HEOptCircuit::CiphertextVar(Symbol::from(var)));
 
+                        let mult =
+                            match self.registry.get_ct_var_value(var) {
+                                CircuitValue::CoordMap(coord_map) => coord_map.multiplicity(),
+                                CircuitValue::Single(_) => 1
+                            };
+
+                        cost_ctx.ct_multiplicity_map.insert(var.clone(), mult);
                         eclasses.push(eclass);
                     },
 
@@ -862,6 +875,13 @@ impl ParamCircuitProgram {
                         let eclass =
                             rec_expr.add(HEOptCircuit::PlaintextVar(Symbol::from(var)));
 
+                        let mult =
+                            match self.registry.get_pt_var_value(var) {
+                                CircuitValue::CoordMap(coord_map) => coord_map.multiplicity(),
+                                CircuitValue::Single(_) => 1
+                            };
+
+                        cost_ctx.pt_multiplicity_map.insert(var.clone(), mult);
                         eclasses.push(eclass);
                     },
 
@@ -915,7 +935,7 @@ impl ParamCircuitProgram {
                         eclasses.push(eclass);
                     },
                     
-                    ParamCircuitExpr::ReduceDim(dim, _, op, body_id) => {
+                    ParamCircuitExpr::ReduceDim(dim, extent, op, body_id) => {
                         let dim_eclass =
                             rec_expr.add(HEOptCircuit::IndexVar(Symbol::from(dim)));
 
@@ -936,7 +956,8 @@ impl ParamCircuitProgram {
                                 Operator::Sub =>
                                     panic!("reducing with subtraction not supported yet")
                             };
-
+                        
+                        cost_ctx.dim_extent_map.insert(dim.clone(), *extent);
                         let eclass = rec_expr.add(opt_expr);
                         eclasses.push(eclass);
                     },
@@ -946,7 +967,7 @@ impl ParamCircuitProgram {
             rec_exprs.push(rec_expr);
         }
 
-        rec_exprs
+        (rec_exprs, cost_ctx)
     }
 
     fn offset_to_opt_circuit(&self, offset: &OffsetExpr, rec_expr: &mut RecExpr<HEOptCircuit>) -> egg::Id {
