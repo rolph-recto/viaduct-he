@@ -442,7 +442,7 @@ impl CircuitLowering {
         indices: &Vec<(String, usize)>,
         ct_inline_map: &HashMap<VarName, HERef>,
         pt_inline_map: &HashMap<VarName, HERef>,
-        ref_map: &mut HashMap<usize, (HERef, HEType)>,
+        ref_map: &mut HashMap<InstructionId, (HERef, HEType)>,
         stmts: &mut Vec<HEStatement>,
     ) -> InstructionId {
         if let Some(instr_id) = self.circuit_instr_map.get(&expr_id) {
@@ -568,7 +568,6 @@ impl CircuitLowering {
 
                     let (body_operand, body_type) = ref_map.get(&body_id).unwrap().clone();
 
-                    // plaintext rotations should have been partially evaluated
                     assert!(body_type == HEType::Ciphertext);
 
                     stmts.push(HEStatement::Instruction(HEInstruction::Rot(

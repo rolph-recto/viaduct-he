@@ -1,595 +1,779 @@
 /// lowered_program.rs
 /// lowered program for generating output programs from templates
 
-use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-use crate::{circ::{*, lowering::program::*}, lang::HEClientStore};
+use crate::{program::*, lang::Operator};
 
-/*
- 
-type SEALNodeId = String;
-type SEALOperand = String;
+enum SEALOpType {
+    // HE operations
+    Add,
+    AddInplace,
+    AddPlain,
+    AddPlainInplace,
+    AddNative,
+    AddNativeInplace,
 
-#[derive(Clone, Deserialize, Serialize, Debug)]
-#[serde(tag = "op")]
-pub enum SEALInstr {
-    Add { id: SEALNodeId, op1: SEALOperand, op2: SEALOperand },
-    AddInplace { op1: SEALOperand, op2: SEALOperand },
-    AddPlain { id: SEALOperand, op1: SEALOperand, op2: SEALOperand },
-    AddPlainInplace { op1: SEALOperand, op2: SEALOperand },
-    Sub { id: SEALNodeId, op1: SEALOperand, op2: SEALOperand },
-    SubInplace { op1: SEALOperand, op2: SEALOperand },
-    SubPlain { id: SEALOperand, op1: SEALOperand, op2: SEALOperand },
-    SubPlainInplace { op1: SEALOperand, op2: SEALOperand },
-    Negate { id: SEALNodeId, op1: SEALOperand },
-    NegateInplace { op1: SEALOperand },
-    Mul { id: SEALNodeId, op1: SEALOperand, op2: SEALOperand },
-    MulInplace { op1: SEALOperand, op2: SEALOperand },
-    MulPlain { id: SEALOperand, op1: SEALOperand, op2: SEALOperand },
-    MulPlainInplace { op1: SEALOperand, op2: SEALOperand },
-    Rot { id: SEALNodeId, op1: SEALOperand, op2: SEALOperand },
-    RotInplace { op1: SEALOperand, op2: SEALOperand },
-    RelinearizeInplace { op1: SEALNodeId },
+    Sub,
+    SubInplace,
+    SubPlain,
+    SubPlainInplace,
+    SubNative,
+    SubNativeInplace,
+
+    Mul,
+    MulInplace,
+    MulPlain,
+    MulPlainInplace,
+    MulNative,
+    MulNativeInplace,
+    
+    Rot,
+    RotInplace,
+    RotNative,
+    RotNativeInplace,
+
+    // low-level HE operations
+    Encode,
+    RelinearizeInplace,
+
+    Assign,
+
+    // HE datatypes
+    DeclareNativeArray,
+    DeclareCiphertextArray,
+
+    DeclareMask,
+    DeclareConst,
+    ServerGetCiphertextInputVector,
+    ServerDeclarePlaintextInputVector,
+    ServerRecv,
 }
 
-impl SEALInstr {
-    pub fn is_inplace(&self) -> bool {
+impl SEALOpType {
+    pub fn to_doc(&self) -> RcDoc<()> {
         match self {
-            SEALInstr::Add { id: _, op1: _, op2: _} => false,
-            SEALInstr::AddInplace { op1: _, op2: _} => true,
-            SEALInstr::AddPlain { id: _, op1: _, op2: _ } => false,
-            SEALInstr::AddPlainInplace { op1: _, op2: _ } => true,
-            SEALInstr::Sub { id: _, op1: _, op2: _} => false,
-            SEALInstr::SubInplace { op1: _, op2: _} => true,
-            SEALInstr::SubPlain { id: _, op1: _, op2: _ } => false,
-            SEALInstr::SubPlainInplace { op1: _, op2: _ } => true,
-            SEALInstr::Negate { id: _, op1: _ } => false,
-            SEALInstr::NegateInplace { op1: _ } => true,
-            SEALInstr::Mul { id: _, op1: _, op2: _ } => false,
-            SEALInstr::MulInplace { op1: _, op2: _ } => true,
-            SEALInstr::MulPlain { id: _, op1: _, op2: _ } => false,
-            SEALInstr::MulPlainInplace { op1: _, op2: _ } => true,
-            SEALInstr::Rot { id: _, op1: _, op2: _ } => false,
-            SEALInstr::RotInplace { op1: _, op2: _ } => true,
-            SEALInstr::RelinearizeInplace { op1: _ } => true
-        }
-    }
+            SEALOpType::Add => RcDoc::text("seal.add"),
+            SEALOpType::AddInplace => RcDoc::text("seal.add_inplace"),
+            SEALOpType::AddPlain => RcDoc::text("seal.add_plain"),
+            SEALOpType::AddPlainInplace => RcDoc::text("seal.add_plain_inplace"),
+            SEALOpType::AddNative => RcDoc::text("seal.add_native"),
+            SEALOpType::AddNativeInplace => RcDoc::text("seal.add_native_inplace"),
 
-    pub fn is_binary(&self) -> bool {
-        match self {
-            SEALInstr::Add { id: _, op1: _, op2: _} => true,
-            SEALInstr::AddInplace { op1: _, op2: _} => true,
-            SEALInstr::AddPlain { id: _, op1: _, op2: _ } => true,
-            SEALInstr::AddPlainInplace { op1: _, op2: _ } => true,
-            SEALInstr::Sub { id: _, op1: _, op2: _} => true,
-            SEALInstr::SubInplace { op1: _, op2: _} => true,
-            SEALInstr::SubPlain { id: _, op1: _, op2: _ } => true,
-            SEALInstr::SubPlainInplace { op1: _, op2: _ } => true,
-            SEALInstr::Negate { id: _, op1: _ } => false,
-            SEALInstr::NegateInplace { op1: _ } => false,
-            SEALInstr::Mul { id: _, op1: _, op2: _ } => true,
-            SEALInstr::MulInplace { op1: _, op2: _ } => true,
-            SEALInstr::MulPlain { id: _, op1: _, op2: _ } => true,
-            SEALInstr::MulPlainInplace { op1: _, op2: _ } => true,
-            SEALInstr::Rot { id: _, op1: _, op2: _ } => true,
-            SEALInstr::RotInplace { op1: _, op2: _ } => true,
-            SEALInstr::RelinearizeInplace { op1: _ } => false
-        }
-    }
+            SEALOpType::Sub => RcDoc::text("seal.sub"),
+            SEALOpType::SubInplace => RcDoc::text("seal.sub_inplace"),
+            SEALOpType::SubPlain => RcDoc::text("seal.sub_plain"),
+            SEALOpType::SubPlainInplace => RcDoc::text("seal.sub_plain_inplace"),
+            SEALOpType::SubNative => RcDoc::text("seal.sub_native"),
+            SEALOpType::SubNativeInplace => RcDoc::text("seal.sub_native_inplace"),
 
-    pub fn name(&self) -> String {
-        match self {
-            SEALInstr::Add { id: _, op1: _, op2: _} => "add",
-            SEALInstr::AddInplace { op1: _, op2: _} => "add_inplace",
-            SEALInstr::AddPlain { id: _, op1: _, op2: _ } => "add_plain",
-            SEALInstr::AddPlainInplace { op1: _, op2: _ } => "add_plain_inplace",
-            SEALInstr::Sub { id: _, op1: _, op2: _} => "sub",
-            SEALInstr::SubInplace { op1: _, op2: _} => "sub_inplace",
-            SEALInstr::SubPlain { id: _, op1: _, op2: _ } => "sub_plain",
-            SEALInstr::SubPlainInplace { op1: _, op2: _ } => "sub_plain_inplace",
-            SEALInstr::Negate { id: _, op1: _ } => "negate",
-            SEALInstr::NegateInplace { op1: _ } => "negate_inplace",
-            SEALInstr::Mul { id: _, op1: _, op2: _ } => "multiply",
-            SEALInstr::MulInplace { op1: _, op2: _ } => "multiply_inplace",
-            SEALInstr::MulPlain { id: _, op1: _, op2: _ } => "multiply_plain",
-            SEALInstr::MulPlainInplace { op1: _, op2: _ } => "multiply_plain_inplace",
-            SEALInstr::Rot { id: _, op1: _, op2: _ } => "rotate_rows",
-            SEALInstr::RotInplace { op1: _, op2: _ } => "rotate_rows_inplace",
-            SEALInstr::RelinearizeInplace { op1: _ } => "relinearize_inplace"
-        }.to_string()
-    }
+            SEALOpType::Mul => RcDoc::text("seal.mul"),
+            SEALOpType::MulInplace => RcDoc::text("seal.mul_inplace"),
+            SEALOpType::MulPlain => RcDoc::text("seal.mul_plain"),
+            SEALOpType::MulPlainInplace => RcDoc::text("seal.mul_plain_inplace"),
+            SEALOpType::MulNative => RcDoc::text("seal.mul_native"),
+            SEALOpType::MulNativeInplace => RcDoc::text("seal.mul_native_inplace"),
 
-    pub fn operands(&self) -> Vec<SEALOperand> {
-        match self {
-            SEALInstr::Add { id: _, op1, op2 } |
-            SEALInstr::AddInplace { op1, op2 } |
-            SEALInstr::AddPlain { id: _, op1, op2 } |
-            SEALInstr::AddPlainInplace { op1, op2 } |
-            SEALInstr::Sub { id: _, op1, op2 } |
-            SEALInstr::SubInplace { op1, op2 } |
-            SEALInstr::SubPlain { id: _, op1, op2 } |
-            SEALInstr::SubPlainInplace { op1, op2 } |
-            SEALInstr::Mul { id: _, op1, op2 } |
-            SEALInstr::MulInplace { op1, op2 } |
-            SEALInstr::MulPlain { id: _, op1, op2 } |
-            SEALInstr::MulPlainInplace { op1, op2 } |
-            SEALInstr::Rot { id: _, op1, op2 } |
-            SEALInstr::RotInplace { op1, op2 } =>
-                vec![op1.to_string(),op2.to_string()],
+            SEALOpType::Rot => RcDoc::text("seal.rot"),
+            SEALOpType::RotInplace => RcDoc::text("seal.rot_inplace"),
+            SEALOpType::RotNative => RcDoc::text("seal.rot_native"),
+            SEALOpType::RotNativeInplace => RcDoc::text("seal.rot_native_inplace"),
 
-            SEALInstr::Negate { id: _, op1 } |
-            SEALInstr::NegateInplace { op1 } |
-            SEALInstr::RelinearizeInplace { op1 } =>
-                vec![op1.to_string()]
-        }
-    }
+            SEALOpType::Encode => RcDoc::text("seal.encode"),
+            SEALOpType::RelinearizeInplace => RcDoc::text("seal.relinearize_inplace"),
 
-    fn id(&self) -> String {
-        match self {
-            SEALInstr::Add { id, op1: _, op2: _ } |
-            SEALInstr::AddPlain { id, op1: _, op2: _ } |
-            SEALInstr::Sub { id, op1: _, op2: _ } |
-            SEALInstr::SubPlain { id, op1: _, op2: _ } |
-            SEALInstr::Negate { id, op1: _ } |
-            SEALInstr::Mul { id, op1: _, op2: _ } |
-            SEALInstr::MulPlain { id, op1: _, op2: _ } |
-            SEALInstr::Rot { id, op1: _, op2: _ } =>
-                id.to_string(),
+            SEALOpType::Assign => RcDoc::text("seal.set"),
 
-            _ => "".to_string(),
+            SEALOpType::DeclareNativeArray => RcDoc::text("NativeArray"),
+            SEALOpType::DeclareCiphertextArray => RcDoc::text("CiphertextArray"),
+
+            SEALOpType::DeclareMask => RcDoc::text("Mask"),
+            SEALOpType::DeclareConst => RcDoc::text("Const"),
+            SEALOpType::ServerGetCiphertextInputVector => RcDoc::text("seal.get_ct_input"),
+            SEALOpType::ServerDeclarePlaintextInputVector => RcDoc::text("PlaintextInput"),
+            SEALOpType::ServerRecv => RcDoc::text("seal.server_recv"),
         }
     }
 }
 
-impl Display for SEALInstr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let operands_str = self.operands().join(", ");
-        if self.is_inplace() {
-            write!(f, "{}({})", self.name(), operands_str)
+enum SEALInstruction {
+    Op(SEALOpType, String, Vec<String>),
+    OpInplace(SEALOpType, Vec<String>),
+}
+
+impl SEALInstruction {
+    pub fn to_doc(&self) -> RcDoc<()> {
+        match self {
+            SEALInstruction::Op(optype, id, ops) => {
+                let ops_str = ops.join(", ");
+                RcDoc::text(format!("{} = ", id))
+                .append(optype.to_doc())
+                .append(RcDoc::text(format!("({})", ops_str)))
+            },
+
+            SEALInstruction::OpInplace(optype, ops) => {
+                let ops_str = ops.join(", ");
+                optype.to_doc()
+                .append(RcDoc::text(format!("({})", ops_str)))
+            },
+        }
+    }
+}
+
+enum SEALStatement {
+    Instruction(SEALInstruction),
+    ForNode(String, usize, Vec<SEALStatement>),
+}
+
+impl SEALStatement {
+    pub fn to_doc(&self) -> RcDoc<()> {
+        match self {
+            SEALStatement::Instruction(instr) => {
+                instr.to_doc()
+            },
+
+            SEALStatement::ForNode(dim, extent, body) => {
+                let body_doc =
+                    RcDoc::intersperse(
+                        body.iter().map(|stmt| stmt.to_doc()),
+                        RcDoc::hardline()
+                    );
+
+                RcDoc::text(format!("for {} in range({}):", dim, extent))
+                    .append(RcDoc::hardline().append(body_doc).nest(4))
+                    .append(RcDoc::hardline())
+            }
+        }
+    }
+}
+
+struct SEALProgram {
+    client_code: Vec<SEALStatement>,
+    server_code: Vec<SEALStatement>,
+}
+
+impl SEALProgram {
+    pub fn to_doc(&self) -> RcDoc<()> {
+        let client_doc =
+            if self.client_code.len() > 0 {
+                RcDoc::intersperse(
+                    self.client_code.iter().map(|stmt| {
+                        stmt.to_doc()
+                    }),
+                    RcDoc::hardline()
+                ) 
+
+            } else {
+                RcDoc::text("pass")
+            };
+
+        let server_doc =
+            if self.server_code.len() > 0 {
+                RcDoc::intersperse(
+                    self.server_code.iter().map(|stmt| {
+                        stmt.to_doc()
+                    }),
+                    RcDoc::hardline()
+                )
+
+            } else {
+                RcDoc::text("pass")
+            };
+
+        RcDoc::text("def client(seal):")
+        .append(
+            RcDoc::hardline().append(client_doc).nest(4)
+        )
+        .append(RcDoc::hardline())
+        .append(RcDoc::hardline())
+        .append(RcDoc::text("def server(seal):"))
+        .append(
+            RcDoc::hardline().append(server_doc).nest(4)
+        )
+        .append(RcDoc::hardline())
+    }
+}
+
+impl Display for SEALProgram {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.to_doc().render_fmt(80, f)
+    }
+}
+
+// backwards analysis to determine if an instruction is live
+// at a particular program point
+struct UseAnalysis(HashMap<InstructionId, HashSet<InstructionId>>);
+
+impl UseAnalysis {
+    fn get_atomic_statements(stmt: &HEStatement) -> Vec<&HEStatement> {
+        match stmt {
+            HEStatement::ForNode(_, _, body) => {
+                body.iter().rev().flat_map(|bstmt| {
+                    Self::get_atomic_statements(bstmt)
+                })
+                .collect()
+            },
+
+            HEStatement::DeclareVar(_, _, _) |
+            HEStatement::AssignVar(_, _, _) |
+            HEStatement::Encode(_, _) |
+            HEStatement::Instruction(_) => {
+                vec![stmt]
+            },
+        }
+    }
+
+    pub fn can_reuse(&self, id: InstructionId, he_ref: &HERef) -> bool {
+        match he_ref {
+            HERef::Instruction(ref_id) => {
+                let use_map = self.0.get(&id).unwrap();
+                !use_map.contains(ref_id)
+            },
+
+            HERef::Array(_, _) => false,
+        }
+    }
+
+    fn _analyze(mut self, program: &HEProgram) -> Self {
+        let atomic_stmts: Vec<&HEStatement> =
+            program.statements.iter().rev().flat_map(|stmt| {
+                Self::get_atomic_statements(stmt)
+            })
+            .collect();
+
+        let mut out_set: HashSet<InstructionId> = HashSet::new();
+        for stmt in atomic_stmts {
+            match stmt {
+                HEStatement::DeclareVar(_, _, _) | HEStatement::Encode(_, _) => {},
+
+                HEStatement::ForNode(_, _, _) =>
+                    unreachable!(),
+
+                HEStatement::AssignVar(_, _, op) => {
+                    if let HEOperand::Ref(HERef::Instruction(instr)) = op {
+                        out_set.insert(*instr);
+                    }
+                },
+
+                HEStatement::Instruction(instr) => {
+                    self.0.insert(instr.get_id(), out_set.clone());
+                    out_set.extend(instr.get_instr_refs());
+                },
+            }
+        }
+
+        self
+    }
+
+    pub fn analyze(program: &HEProgram) -> Self {
+        Self(HashMap::new())._analyze(program)
+    }
+}
+
+struct SEALBackend {
+    use_analysis: UseAnalysis,
+    program: HEProgram,
+}
+
+impl SEALBackend {
+    fn new(program: HEProgram) -> Self {
+        let use_analysis = UseAnalysis::analyze(&program);
+        Self { use_analysis, program }
+    }
+
+    fn array_ref<T: Display>(array: ArrayName, indices: Vec<T>) -> String {
+        let index_str =
+            indices.into_iter()
+            .map(|i| format!("[{}]", i.to_string()))
+            .collect::<Vec<String>>()
+            .join("");
+
+        format!("{}{}", array, index_str)
+    }
+
+    fn vec<T: Display>(vec: Vec<T>) -> String {
+        format!(
+            "[{}]",
+            vec.into_iter()
+            .map(|x| x.to_string())
+            .collect::<Vec<String>>()
+            .join(", ")
+        )
+    }
+
+    fn instruction(id: InstructionId) -> String {
+        format!("instr{}", id)
+    }
+
+    fn he_ref(heref: HERef) -> String {
+        match heref {
+            HERef::Instruction(i) =>
+                Self::instruction(i),
+
+            HERef::Array(array, indices) =>
+                format!("{}.get({})", array, Self::vec(indices)),
+        }
+    }
+
+    fn operand(op: HEOperand) -> String {
+        match op {
+            HEOperand::Ref(heref) => Self::he_ref(heref),
+
+            HEOperand::Literal(lit) => lit.to_string(),
+        }
+    }
+
+    pub fn get_binop(
+        op: Operator,
+        optype: HEInstructionType,
+        inplace: bool,
+        id: InstructionId,
+        ref1: HERef,
+        ref2: HERef,
+    ) -> (SEALInstruction, String) {
+        if inplace {
+            let seal_optype = 
+                match (op, optype) {
+                    (Operator::Add, HEInstructionType::Native) =>
+                        SEALOpType::AddNativeInplace,
+
+                    (Operator::Add, HEInstructionType::CipherPlain) =>
+                        SEALOpType::AddPlainInplace,
+
+                    (Operator::Add, HEInstructionType::CipherCipher) =>
+                        SEALOpType::AddInplace,
+
+                    (Operator::Sub, HEInstructionType::Native) =>
+                        SEALOpType::SubNativeInplace,
+
+                    (Operator::Sub, HEInstructionType::CipherPlain) =>
+                        SEALOpType::SubPlainInplace,
+
+                    (Operator::Sub, HEInstructionType::CipherCipher) =>
+                        SEALOpType::SubInplace,
+
+                    (Operator::Mul, HEInstructionType::Native) =>
+                        SEALOpType::MulNativeInplace,
+
+                    (Operator::Mul, HEInstructionType::CipherPlain) =>
+                        SEALOpType::MulPlainInplace,
+
+                    (Operator::Mul, HEInstructionType::CipherCipher) =>
+                        SEALOpType::MulInplace,
+                };
+
+            let ref1_str = Self::he_ref(ref1);
+            let instr = 
+                SEALInstruction::OpInplace(
+                    seal_optype,
+                    vec![ref1_str.clone(), Self::he_ref(ref2)],
+                );
+
+            (instr, ref1_str)
 
         } else {
-            write!(f, "{} = {}({})", self.id(), self.name(), operands_str)
+            let seal_optype = 
+                match (op, optype) {
+                    (Operator::Add, HEInstructionType::Native) =>
+                        SEALOpType::AddNative,
+
+                    (Operator::Add, HEInstructionType::CipherPlain) =>
+                        SEALOpType::AddPlain,
+
+                    (Operator::Add, HEInstructionType::CipherCipher) =>
+                        SEALOpType::Add,
+
+                    (Operator::Sub, HEInstructionType::Native) =>
+                        SEALOpType::SubNative,
+
+                    (Operator::Sub, HEInstructionType::CipherPlain) =>
+                        SEALOpType::SubPlain,
+
+                    (Operator::Sub, HEInstructionType::CipherCipher) =>
+                        SEALOpType::Sub,
+
+                    (Operator::Mul, HEInstructionType::Native) =>
+                        SEALOpType::MulNative,
+
+                    (Operator::Mul, HEInstructionType::CipherPlain) =>
+                        SEALOpType::MulPlain,
+
+                    (Operator::Mul, HEInstructionType::CipherCipher) =>
+                        SEALOpType::Mul,
+                };
+
+            let id_str = Self::instruction(id);
+            let instr = 
+                SEALInstruction::Op(
+                    seal_optype,
+                    id_str.clone(),
+                    vec![Self::he_ref(ref1), Self::he_ref(ref2)]
+                );
+            
+            (instr, id_str)
         }
     }
-}
 
-#[derive(Serialize)]
-pub struct HELoweredProgram {
-    pub vec_size: usize,
-    pub literals: Vec<(isize, String)>,
-    pub constants: Vec<(Vec<isize>, String)>,
-    pub instrs: Vec<SEALInstr>,
-    pub output: SEALNodeId,
-    pub client_inputs: Vec<(String, im::Vector<usize>)>,
-    pub server_inputs: Vec<(String, im::Vector<usize>)>,
-    pub ciphertexts: HashSet<String>,
-    pub client_preprocess: Vec<(String, String)>,
-}
+    fn offset(offset: OffsetExpr) -> String {
+        match offset {
+            OffsetExpr::Add(op1, op2) => {
+                let str1 = Self::offset(*op1);
+                let str2 = Self::offset(*op2);
+                format!("({} + {})", str1, str2)
+            }
 
-impl HELoweredProgram {
-    fn resolve_inplace_indirection(inplace_map: &HashMap<NodeId,NodeId>, id: NodeId) -> NodeId {
-        let mut cur_id = id;
-        while inplace_map.contains_key(&cur_id) {
-            cur_id = inplace_map[&cur_id];
+            OffsetExpr::Mul(op1, op2) => {
+                let str1 = Self::offset(*op1);
+                let str2 = Self::offset(*op2);
+                format!("({} * {})", str1, str2)
+            }
+
+            OffsetExpr::Literal(lit) =>
+                lit.to_string(),
+
+            OffsetExpr::Var(var) =>
+                var.to_string(),
+
+            OffsetExpr::FunctionVar(fvar, indices) =>
+                Self::array_ref(fvar.clone(), indices.into_iter().collect())
         }
-        cur_id
     }
 
-    fn lower_operand(inplace_map: &HashMap<NodeId,NodeId>, const_map: &mut HashMap<isize, String>, op: &HEOperand) -> String {
-        match op {
-            HEOperand::Ref(HERef::Node(nr)) => {
-                let resolved_nr = Self::resolve_inplace_indirection(inplace_map, *nr);
-                format!("i{}", resolved_nr)
-            },
-
-            HEOperand::Ref(HERef::Ciphertext(sym)) |
-            HEOperand::Ref(HERef::Plaintext(sym)) => {
-                sym.clone()
-            },
-
-            HEOperand::Literal(n) => {
-                if const_map.contains_key(n) {
-                    const_map[n].clone()
-
-                } else {
-                    if *n >= 0 {
-                        const_map.insert(*n, format!("const_{}", n));
-
-                    } else {
-                        const_map.insert(*n, format!("const_neg{}", -n));
-                    }
-                    const_map[n].clone()
+    fn lower_recur(&self, stmt: HEStatement, seal_stmts: &mut Vec<SEALStatement>) {
+        match stmt {
+            HEStatement::ForNode(dim, extent, body) => {
+                let mut body_stmts = Vec::new();
+                for body_stmt in body {
+                    self.lower_recur(body_stmt, &mut body_stmts);
                 }
+
+                seal_stmts.push(
+                    SEALStatement::ForNode(dim, extent, body_stmts)
+                );
             },
-        }
-    }
 
-    pub fn lower_program(
-        vec_size: usize,
-        noinplace: bool,
-        prog: &HEProgram,
-        store: &HECircuitStore,
-        client_store: HEClientStore,
-        server_inputs: HashMap<HEObjectName,Dimensions>,
-        client_inputs: HashMap<HEObjectName,Dimensions>,
-    ) -> HELoweredProgram {
-        let uses = prog.analyze_use();
-        let mut inplace_map: HashMap<NodeId, NodeId> = HashMap::new();
-        let mut const_map: HashMap<isize, String> = HashMap::new();
-        let mut instrs: Vec<SEALInstr> = Vec::new();
+            HEStatement::DeclareVar(array, optype, extent) => {
+                let extent_str =
+                    extent.into_iter()
+                    .map(|e| e.to_string()).
+                    collect::<Vec<String>>()
+                    .join(", ");
 
-        for instr in prog.instrs.iter() {
-            match instr {
-                HEInstruction::Add(id, op1, op2)=> {
-                    let lid = format!("i{}", id);
-                    let lop1 = Self::lower_operand(&inplace_map, &mut const_map, op1);
-                    let lop2 = Self::lower_operand(&inplace_map, &mut const_map, op2);
-                    match (op1, op2) {
-                        (HEOperand::Ref(r1), HEOperand::Ref(r2)) => {
-                            match (r1, r2) {
-                                (HERef::Node(nr1), HERef::Node(_))
-                                if !uses[id+1].contains(nr1) && !noinplace => {
-                                    instrs.push(
-                                        SEALInstr::AddInplace { op1: lop1, op2: lop2 }
-                                    );
-                                    inplace_map.insert(*id, *nr1);
-                                },
+                let instr_type =
+                    match optype {
+                        HEType::Native => SEALOpType::DeclareNativeArray,
+                        HEType::Ciphertext => SEALOpType::DeclareCiphertextArray,
+                        HEType::Plaintext => unreachable!()
+                    };
 
-                                (HERef::Node(_), HERef::Node(nr2))
-                                if !uses[id+1].contains(nr2) && !noinplace => {
-                                    instrs.push(
-                                        SEALInstr::AddInplace { op1: lop2, op2: lop1 }
-                                    );
-                                    inplace_map.insert(*id, *nr2);
-                                },
+                seal_stmts.push(
+                    SEALStatement::Instruction(
+                        SEALInstruction::Op(
+                            instr_type,
+                            array,
+                            vec![format!("[{}]", extent_str)]
+                        )
+                    )
+                );
+            },
 
-                                (HERef::Plaintext(_), HERef::Plaintext(_)) => {
-                                    panic!("attempting to add two plaintexts: {:?} and {:?}", r1, r2)
-                                },
+            HEStatement::AssignVar(array, indices, op) => {
+                seal_stmts.push(
+                    SEALStatement::Instruction(
+                        SEALInstruction::OpInplace(
+                            SEALOpType::Assign,
+                            vec![array, Self::vec(indices), Self::operand(op)]
+                        )
+                    )
+                )
+            },
 
-                                (_, HERef::Plaintext(_)) => {
-                                    instrs.push(
-                                        SEALInstr::AddPlain { id: lid, op1: lop1, op2: lop2 }
+            HEStatement::Encode(array, indices) => {
+                seal_stmts.push(
+                    SEALStatement::Instruction(
+                        SEALInstruction::OpInplace(
+                            SEALOpType::Encode,
+                            vec![array, Self::vec(indices)]
+                        )
+                    )
+                );
+            },
+
+            HEStatement::Instruction(instr) => {
+                match instr {
+                    HEInstruction::Add(optype, id, ref1, ref2) => {
+                        let use1 = self.use_analysis.can_reuse(id, &ref1);
+                        let use2 = self.use_analysis.can_reuse(id, &ref2);
+                        let (instr, _) =
+                            match (use1, use2) {
+                                (false, false) => {
+                                    Self::get_binop(
+                                        Operator::Add, optype, false, id, ref1, ref2
                                     )
                                 },
 
-                                (HERef::Plaintext(_), _) => {
-                                    instrs.push(
-                                        SEALInstr::AddPlain { id: lid, op1: lop2, op2: lop1 }
+                                (false, true) => {
+                                    Self::get_binop(
+                                        Operator::Add, optype, true, id, ref2, ref1
                                     )
                                 },
 
-                                _ => {
-                                    instrs.push(
-                                        SEALInstr::Add { id: lid, op1: lop1, op2: lop2 }
+                                (true, false) | (true, true) => {
+                                    Self::get_binop(
+                                        Operator::Add, optype, true, id, ref1, ref2
                                     )
-                                }
-                            }
-                        },
-
-                        (HEOperand::Ref(r1), HEOperand::Literal(_)) => {
-                            match r1 {
-                                HERef::Node(nr1)
-                                if !uses[id+1].contains(nr1) && !noinplace => {
-                                    instrs.push(
-                                        SEALInstr::AddPlainInplace { op1: lop1, op2: lop2 }
-                                    );
-                                    inplace_map.insert(*id, *nr1);
                                 },
+                            };
 
-                                _ => {
-                                    instrs.push(
-                                        SEALInstr::AddPlain { id: lid, op1: lop1, op2: lop2 }
-                                    )
-                                }
-                            }
-                        },
-
-                        (HEOperand::Literal(_), HEOperand::Ref(r2)) => {
-                            match r2 {
-                                HERef::Node(nr2)
-                                if !uses[id+1].contains(nr2) && !noinplace => {
-                                    instrs.push(
-                                        SEALInstr::AddPlainInplace { op1: lop2, op2: lop1 }
-                                    );
-                                    inplace_map.insert(*id, *nr2);
-                                },
-
-                                _ => {
-                                    instrs.push(
-                                        SEALInstr::AddPlain { id: lid, op1: lop2, op2: lop1 }
-                                    )
-                                }
-                            }
-                        },
-
-                        (HEOperand::Literal(_), HEOperand::Literal(_)) => {
-                            panic!("attempting to add two constants---this should be constant folded")
-                        }
-                    }
-                },
-
-                HEInstruction::Sub(id, op1, op2) => {
-                    let lid = format!("i{}", id);
-                    let lop1 = Self::lower_operand(&inplace_map, &mut const_map, op1);
-                    let lop2 = Self::lower_operand(&inplace_map, &mut const_map, op2);
-                    match (op1, op2) {
-                        (HEOperand::Ref(r1), HEOperand::Ref(r2)) => {
-                            match (r1, r2) {
-                                (HERef::Node(nr1), HERef::Node(_))
-                                if !uses[id+1].contains(nr1) && !noinplace => {
-                                    instrs.push(
-                                        SEALInstr::SubInplace { op1: lop1, op2: lop2 }
-                                    );
-                                    inplace_map.insert(*id, *nr1);
-                                },
-
-                                (HERef::Plaintext(_), HERef::Plaintext(_)) => {
-                                    panic!("attempting to subtract two plaintexts: {:?} and {:?}", r1, r2)
-                                },
-
-                                (_, HERef::Plaintext(_)) => {
-                                    instrs.push(
-                                        SEALInstr::SubPlain { id: lid, op1: lop1, op2: lop2 }
+                        seal_stmts.push(SEALStatement::Instruction(instr));
+                    },
+ 
+                    HEInstruction::Sub(optype, id, ref1, ref2) => {
+                        let use1 = self.use_analysis.can_reuse(id, &ref1);
+                        let use2 = self.use_analysis.can_reuse(id, &ref2);
+                        let (instr, _) =
+                            match (use1, use2) {
+                                (false, false) | (false, true) => {
+                                    Self::get_binop(
+                                        Operator::Sub, optype, false, id, ref1, ref2
                                     )
                                 },
 
-                                (HERef::Plaintext(_), _) => {
-                                    instrs.push(
-                                        SEALInstr::Negate { id: lid.clone(), op1: lop2 }
-                                    );
-                                    instrs.push(
-                                        SEALInstr::AddPlainInplace { op1: lid, op2: lop1 }
+                                (true, false) | (true, true) => {
+                                    Self::get_binop(
+                                        Operator::Sub, optype, true, id, ref1, ref2
+                                    )
+                                },
+                            };
+
+                        seal_stmts.push(SEALStatement::Instruction(instr));
+                    },
+                    
+                    HEInstruction::Mul(optype, id, ref1, ref2) => {
+                        let use1 = self.use_analysis.can_reuse(id, &ref1);
+                        let use2 = self.use_analysis.can_reuse(id, &ref2);
+                        let (instr, res) =
+                            match (use1, use2) {
+                                (false, false) => {
+                                    Self::get_binop(
+                                        Operator::Mul, optype, false, id, ref1, ref2
                                     )
                                 },
 
-                                _ => {
-                                    instrs.push(
-                                        SEALInstr::Sub { id: lid, op1: lop1, op2: lop2 }
-                                    )
-                                }
-                            }
-                        },
-
-                        (HEOperand::Ref(r1), HEOperand::Literal(_)) => {
-                            match r1 {
-                                HERef::Node(nr1)
-                                if !uses[id+1].contains(nr1) && !noinplace => {
-                                    instrs.push(
-                                        SEALInstr::SubPlainInplace { op1: lop1, op2: lop2 }
-                                    );
-                                    inplace_map.insert(*id, *nr1);
-                                },
-
-                                _ => {
-                                    instrs.push(
-                                        SEALInstr::SubPlain { id: lid, op1: lop1, op2: lop2 }
-                                    )
-                                }
-                            }
-                        },
-
-                        (HEOperand::Literal(_), HEOperand::Ref(r2)) => {
-                            match r2 {
-                                HERef::Node(nr2)
-                                if !uses[id+1].contains(nr2) && !noinplace => {
-                                    instrs.push(
-                                        SEALInstr::NegateInplace { op1: lop2.clone() }
-                                    );
-                                    instrs.push(
-                                        SEALInstr::AddPlainInplace { op1: lop2, op2: lop1 }
-                                    );
-                                    inplace_map.insert(*id, *nr2);
-                                },
-
-                                _ => {
-                                    instrs.push(
-                                        SEALInstr::Negate { id: lid.clone(), op1: lop2.clone() }
-                                    );
-                                    instrs.push(
-                                        SEALInstr::AddPlainInplace { op1: lid, op2: lop1 }
-                                    )
-                                }
-                            }
-                        },
-
-                        (HEOperand::Literal(_), HEOperand::Literal(_)) => {
-                            panic!("attempting to subtract two constants---this should be constant folded")
-                        }
-                    }
-                },
-
-                HEInstruction::Mul(id, op1, op2) => {
-                    let lid = format!("i{}", id);
-                    let lop1 = Self::lower_operand(&inplace_map, &mut const_map, op1);
-                    let lop2 = Self::lower_operand(&inplace_map, &mut const_map, op2);
-                    let mut relin_id = lid.clone();
-                    match (op1, op2) {
-                        (HEOperand::Ref(r1), HEOperand::Ref(r2)) => {
-                            let mut cipher_cipher_op = false;
-                            match (r1, r2) {
-                                (HERef::Node(nr1), HERef::Node(_))
-                                if !uses[id+1].contains(nr1) && !noinplace => {
-                                    instrs.push(
-                                        SEALInstr::MulInplace { op1: lop1.clone(), op2: lop2 }
-                                    );
-                                    inplace_map.insert(*id, *nr1);
-                                    relin_id = lop1;
-                                    cipher_cipher_op = true;
-                                },
-
-                                (HERef::Node(_), HERef::Node(nr2))
-                                if !uses[id+1].contains(nr2) && !noinplace => {
-                                    instrs.push(
-                                        SEALInstr::MulInplace { op1: lop2.clone(), op2: lop1 }
-                                    );
-                                    inplace_map.insert(*id, *nr2);
-                                    relin_id = lop2;
-                                    cipher_cipher_op = true;
-                                },
-
-                                (HERef::Plaintext(_), HERef::Plaintext(_)) => {
-                                    panic!("attempting to add two plaintexts: {:?} and {:?}", r1, r2)
-                                },
-
-                                (_, HERef::Plaintext(_)) => {
-                                    instrs.push(
-                                        SEALInstr::MulPlain { id: lid, op1: lop1, op2: lop2 }
+                                (false, true) => {
+                                    Self::get_binop(
+                                        Operator::Mul, optype, true, id, ref2, ref1
                                     )
                                 },
 
-                                (HERef::Plaintext(_), _) => {
-                                    instrs.push(
-                                        SEALInstr::MulPlain { id: lid, op1: lop2, op2: lop1 }
+                                (true, false) | (true, true) => {
+                                    Self::get_binop(
+                                        Operator::Mul, optype, true, id, ref1, ref2
                                     )
                                 },
+                            };
 
-                                _ => {
-                                    instrs.push(
-                                        SEALInstr::Mul { id: lid, op1: lop1, op2: lop2 }
-                                    );
-                                    cipher_cipher_op = true;
-                                }
-                            }
+                        seal_stmts.push(SEALStatement::Instruction(instr));
 
-                            // relinearize at every ciphertext-ciphertext multiplication,
-                            // except for outputs, since these will not be used in the future
-                            // so there's no need to minimize noise for them
-                            // TODO: follow EVA and only relinearize if there will be
-                            // a future *multiplication* that will use the result
-                            if cipher_cipher_op && uses[id+1].contains(id) {
-                                instrs.push(
-                                    SEALInstr::RelinearizeInplace { op1: relin_id }
+                        // insert relinearization statement for cipher-cipher multiplies
+                        if let HEInstructionType::CipherCipher = optype {
+                            seal_stmts.push(
+                                SEALStatement::Instruction(
+                                    SEALInstruction::OpInplace(
+                                        SEALOpType::RelinearizeInplace,
+                                        vec![res]
+                                    )
                                 )
-                            }
-                        },
-
-                        (HEOperand::Ref(r1), HEOperand::Literal(_)) => {
-                            match r1 {
-                                HERef::Node(nr1)
-                                if !uses[id+1].contains(nr1) && !noinplace => {
-                                    instrs.push(
-                                        SEALInstr::MulPlainInplace { op1: lop1.clone(), op2: lop2 }
-                                    );
-                                    inplace_map.insert(*id, *nr1);
-                                },
-
-                                _ => {
-                                    instrs.push(
-                                        SEALInstr::MulPlain { id: lid.clone(), op1: lop1, op2: lop2 }
-                                    )
-                                }
-                            }
-                        },
-
-                        (HEOperand::Literal(_), HEOperand::Ref(r2)) => {
-                            match r2 {
-                                HERef::Node(nr2)
-                                if !uses[id+1].contains(nr2) && !noinplace => {
-                                    instrs.push(
-                                        SEALInstr::MulPlainInplace { op1: lop2.clone(), op2: lop1 }
-                                    );
-                                    inplace_map.insert(*id, *nr2);
-                                },
-
-                                _ => {
-                                    instrs.push(
-                                        SEALInstr::MulPlain { id: lid.clone(), op1: lop2, op2: lop1 }
-                                    )
-                                }
-                            }
-                        },
-
-                        (HEOperand::Literal(_), HEOperand::Literal(_)) => {
-                            panic!("attempting to multiply two constants---this should be constant folded")
+                            );
                         }
-                    }
-                },
-                
-                HEInstruction::Rot(id, op1, op2) => {
-                    let lid = format!("i{}", id);
-                    let lop1 = Self::lower_operand(&inplace_map, &mut const_map, op1);
-                    match (op1, op2) {
-                        (HEOperand::Ref(r1), HEOperand::Literal(cn2)) => {
-                            let lop2 = cn2.to_string();
-                            match r1 {
-                                HERef::Node(nr1)
-                                if !uses[id+1].contains(nr1) && !noinplace => {
-                                    instrs.push(
-                                        SEALInstr::RotInplace { op1: lop1, op2: lop2 }
-                                    );
-                                    inplace_map.insert(*id, *nr1);
+                    },
+                    
+                    HEInstruction::Rot(optype, id, offset, he_ref) => {
+                        let ref_use = self.use_analysis.can_reuse(id, &he_ref);
+                        let instr = 
+                            match (optype, ref_use) {
+                                (HEInstructionType::Native, true) => {
+                                    SEALInstruction::Op(
+                                        SEALOpType::RotNative,
+                                        Self::instruction(id),
+                                        vec![Self::offset(offset), Self::he_ref(he_ref)]
+                                    )
                                 },
 
-                                HERef::Plaintext(_) =>  {
-                                    panic!("attempting to rotate plaintext {:?}", r1)
-                                }
+                                (HEInstructionType::Native, false) => {
+                                    SEALInstruction::OpInplace(
+                                        SEALOpType::RotNativeInplace,
+                                        vec![Self::offset(offset), Self::he_ref(he_ref)]
+                                    )
+                                },
 
-                                _ => {
-                                    instrs.push(
-                                        SEALInstr::Rot { id: lid, op1: lop1, op2: lop2 }
-                                    );
-                                }
-                            }
-                        }
+                                (HEInstructionType::CipherCipher, true) => {
+                                    SEALInstruction::Op(
+                                        SEALOpType::Rot,
+                                        Self::instruction(id),
+                                        vec![Self::offset(offset), Self::he_ref(he_ref)]
+                                    )
+                                },
+                                
+                                (HEInstructionType::CipherCipher, false) => {
+                                    SEALInstruction::OpInplace(
+                                        SEALOpType::RotInplace,
+                                        vec![Self::offset(offset), Self::he_ref(he_ref)]
+                                    )
+                                },
 
-                        _ => panic!("must rotate ciphertext with constant value")
+                                (HEInstructionType::CipherPlain, _) =>
+                                    unreachable!()
+                            };
+
+                        seal_stmts.push(SEALStatement::Instruction(instr));
                     }
                 }
             }
         }
+    }
 
-        let literals: Vec<(isize, String)> = const_map.into_iter().collect();
-        let ciphertexts: HashSet<String> = prog.get_ciphertext_symbols();
-
-        let constants: Vec<(Vec<isize>, String)> =
-            prog.get_plaintext_symbols().into_iter().map(|sym|
-                match store.plaintexts.get(&sym) {
-                    Some(Plaintext { dimensions: _, value }) => {
-                        (Vec::from_iter(value.clone().into_iter()), sym)
-                    },
-                    _ => {
-                        panic!("symbol {} does not map into a plaintext object", &sym)
-                    },
-                }
-            ).collect();
-
-        let output: SEALNodeId = match &instrs.last().unwrap() {
-            SEALInstr::Add { id, op1, op2 } => id.clone(),
-            SEALInstr::AddInplace { op1, op2 } => op1.clone(),
-            SEALInstr::AddPlain { id, op1, op2 } => id.clone(),
-            SEALInstr::AddPlainInplace { op1, op2 } => op1.clone(),
-            SEALInstr::Sub { id, op1, op2 } => id.clone(),
-            SEALInstr::SubInplace { op1, op2 } => op1.clone(),
-            SEALInstr::SubPlain { id, op1, op2 } => id.clone(),
-            SEALInstr::SubPlainInplace { op1, op2 } => op1.clone(),
-            SEALInstr::Negate { id, op1 } => id.clone(),
-            SEALInstr::NegateInplace { op1 } => op1.clone(),
-            SEALInstr::Mul { id, op1, op2 } => id.clone(),
-            SEALInstr::MulInplace { op1, op2 } => op1.clone(),
-            SEALInstr::MulPlain { id, op1, op2 } => id.clone(),
-            SEALInstr::MulPlainInplace { op1, op2 } => op1.clone(),
-            SEALInstr::Rot { id, op1, op2 } => id.clone(),
-            SEALInstr::RotInplace { op1, op2 } => op1.clone(),
-            SEALInstr::RelinearizeInplace { op1 } => op1.clone(),
-        };
-        HELoweredProgram {
-            vec_size, literals, constants, instrs, output,
-            server_inputs:
-                server_inputs.into_iter()
-                .map(|(k,v)| (k, v.as_vec().clone()))
-                .collect(),
-            client_inputs:
-                client_inputs.into_iter()
-                .map(|(k,v)| (k, v.as_vec().clone()))
-                .collect(),
-            ciphertexts,
-            client_preprocess:
-                client_store.into_iter()
-                .map(|(k,v)| (k, v.as_python_str()))
-                .collect(),
+    fn lower_context(
+        &self,
+        context: HEProgramContext,
+        client_code: &mut Vec<SEALStatement>,
+        server_code: &mut Vec<SEALStatement>
+    ) {
+        // TODO finish for client code
+        for (vector, name) in context.ct_vector_map {
+            server_code.extend([
+                SEALStatement::Instruction(
+                    SEALInstruction::OpInplace(
+                        SEALOpType::ServerRecv,
+                        vec![format!("\"{}\"", name)]
+                    )
+                ),
+                SEALStatement::Instruction(
+                    SEALInstruction::Op(
+                        SEALOpType::ServerGetCiphertextInputVector,
+                        name.clone(),
+                        vec![format!("\"{}\"", name)]
+                    )
+                )
+            ])
         }
+
+        for (constval, name) in context.const_map {
+            server_code.push(
+                SEALStatement::Instruction(
+                    SEALInstruction::Op(
+                        SEALOpType::DeclareConst,
+                        name,
+                        vec![constval.to_string()]
+                    )
+                )
+            )
+        }
+
+        for (mask, name) in context.mask_map {
+            let mask_str =
+                format!(
+                    "[{}]",
+                    mask.into_iter().map(|(extent, lo, hi)| {
+                        format!("({}, {}, {})", extent, lo, hi)
+                    })
+                    .collect::<Vec<String>>()
+                    .join(", ")
+                );
+
+            server_code.push(
+                SEALStatement::Instruction(
+                    SEALInstruction::Op(
+                        SEALOpType::DeclareMask,
+                        name,
+                        vec![mask_str]
+                    )
+                )
+            )
+        }
+    } 
+
+    fn lower(mut self) -> SEALProgram {
+        let mut client_code: Vec<SEALStatement> = Vec::new();
+        let mut server_code: Vec<SEALStatement> = Vec::new();
+        let mut program = HEProgram::default();
+        std::mem::swap(&mut program, &mut self.program);
+
+        self.lower_context(
+            program.context, 
+            &mut client_code,
+            &mut server_code
+        );
+        for stmt in program.statements {
+            self.lower_recur(stmt, &mut server_code);
+        }
+
+        SEALProgram { client_code, server_code }
     }
 }
-*/
+
+#[cfg(test)]
+mod tests {
+    use crate::{circ::{*, partial_eval::HEPartialEvaluator}, program::{*, lowering::CircuitLowering}, lang::*};
+    use super::*;
+
+    fn test_lowering(program: HEProgram) {
+        let seal_program = SEALBackend::new(program).lower();
+        println!("{}", seal_program);
+    }
+
+    #[test]
+    fn test_partial_eval() {
+        let mut coord_map =
+            IndexCoordinateMap::from_coord_system(IndexCoordinateSystem::from_dim_list(vec![
+                (String::from("i"), 2),
+                (String::from("j"), 2),
+            ]));
+
+        let vector = VectorInfo {
+            array: String::from("arr"),
+            preprocessing: None,
+            offset_map: BaseOffsetMap::new(2),
+            dims: im::Vector::new(),
+        };
+
+        let ct_obj = CiphertextObject::InputVector(vector);
+
+        coord_map.set(im::vector![0, 0], ct_obj.clone());
+        coord_map.set(im::vector![0, 1], ct_obj.clone());
+        coord_map.set(im::vector![1, 0], ct_obj.clone());
+        coord_map.set(im::vector![1, 1], ct_obj.clone());
+
+        let mut registry = CircuitObjectRegistry::new();
+
+        let lit_2 = registry.register_circuit(ParamCircuitExpr::Literal(2));
+        let add_2 = registry.register_circuit(ParamCircuitExpr::Op(Operator::Add, lit_2, lit_2));
+        let ct = registry.register_circuit(ParamCircuitExpr::CiphertextVar(String::from("ct")));
+        let reduce_vec = registry.register_circuit(ParamCircuitExpr::ReduceDim(
+            String::from("j"),
+            2,
+            Operator::Add,
+            ct,
+        ));
+
+        let circuit =
+            registry.register_circuit(ParamCircuitExpr::Op(Operator::Add, reduce_vec, add_2));
+
+        registry
+            .ct_var_values
+            .insert(String::from("ct"), CircuitValue::CoordMap(coord_map));
+
+        let circuit_program = ParamCircuitProgram {
+            registry,
+            native_expr_list: vec![],
+            circuit_expr_list: vec![(String::from("out"), vec![(String::from("i"), 2)], circuit)],
+        };
+
+        let circuit_program2 = HEPartialEvaluator::new().run(circuit_program);
+
+        let mut lowering = CircuitLowering::new();
+        let he_program = lowering.run(circuit_program2);
+
+        test_lowering(he_program);
+    }
+}

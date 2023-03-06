@@ -2,7 +2,7 @@
 /// instruction representation of HE programs
 
 use pretty::RcDoc;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{self, Display};
 
 use crate::{
@@ -13,6 +13,7 @@ use crate::{
 pub type InstructionId = usize;
 
 pub mod lowering;
+pub mod backend;
 
 /// data types for arrays in an HE program.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -131,6 +132,40 @@ pub enum HEInstruction {
     Rot(HEInstructionType, usize, OffsetExpr, HERef),
 }
 
+impl HEInstruction {
+    pub fn get_id(&self) -> InstructionId {
+        match self {
+            HEInstruction::Add(_, id, _, _) |
+            HEInstruction::Sub(_, id, _, _) |
+            HEInstruction::Mul(_, id, _, _) |
+            HEInstruction::Rot(_, id, _, _) =>
+                *id
+        }
+    }
+
+    pub fn get_refs(&self) -> Vec<HERef> {
+        match self {
+            HEInstruction::Add(_, _, ref1, ref2) |
+            HEInstruction::Sub(_, _, ref1, ref2) |
+            HEInstruction::Mul(_, _, ref1, ref2) =>
+                vec![ref1.clone(), ref2.clone()],
+
+            HEInstruction::Rot(_, _, _, ref1) => 
+                vec![ref1.clone()]
+        }
+    }
+
+    /// get the other instuctions this one reads
+    pub fn get_instr_refs(&self) -> Vec<InstructionId> {
+        self.get_refs().into_iter().filter_map(|r| {
+            match r {
+                HERef::Instruction(id) => Some(id),
+                HERef::Array(_, _) => None,
+            }
+        }).collect()
+    }
+}
+
 impl fmt::Display for HEInstruction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -221,6 +256,7 @@ impl Display for HEStatement {
     }
 }
 
+#[derive(Default)]
 pub struct HEProgramContext {
     ct_vector_map: HashMap<VectorInfo, ArrayName>,
     pt_vector_map: HashMap<VectorInfo, ArrayName>,
@@ -228,6 +264,7 @@ pub struct HEProgramContext {
     const_map: HashMap<isize, ArrayName>,
 }
 
+#[derive(Default)]
 pub struct HEProgram {
     pub context: HEProgramContext,
     pub statements: Vec<HEStatement>,
