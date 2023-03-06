@@ -3,6 +3,7 @@ use he_vectorizer::{lang::{parser::ProgramParser, elaborated::Elaborator, index_
 fn test_compile(src: &str) {
     let source = ProgramParser::new().parse(&src).unwrap();
     let elaborated = Elaborator::new().run(source);
+    println!("elaborated program:\n{}", elaborated);
 
     let inline_set = elaborated.get_default_inline_set();
     let array_group_map = elaborated.get_default_array_group_map();
@@ -11,6 +12,7 @@ fn test_compile(src: &str) {
 
     let transformed = res_index_elim.unwrap();
     let init_schedule = Schedule::gen_initial_schedule(&transformed);
+    println!("transformed program:\n{}", transformed);
 
     let array_materializers: Vec<Box<dyn InputArrayMaterializer>> = 
         vec![Box::new(DefaultArrayMaterializer::new())];
@@ -19,17 +21,21 @@ fn test_compile(src: &str) {
 
     let res_materialize = materializer.run(&init_schedule);
     let circuit = res_materialize.unwrap();
+    println!("circuit:\n{}", circuit);
 
     // TODO add optimizer
 
-    let circuit_pe = HEPartialEvaluator::new().run(circuit);
-    let program = CircuitLowering::new().run(circuit_pe);
+    let pe_circuit = HEPartialEvaluator::new().run(circuit);
+    println!("partially evaluated circuit:\n{}", pe_circuit);
+
+    let program = CircuitLowering::new().run(pe_circuit);
+    println!("program:\n{}", program);
 
     let seal_backend = SEALBackend::new(None);
     let mut code_str: String = String::new();
     seal_backend.compile(program, &mut code_str).unwrap();
 
-    println!("{}", code_str);
+    println!("generated code:\n{}", code_str);
 }
 
 #[test]
