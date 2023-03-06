@@ -127,7 +127,7 @@ impl Display for DimContent {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct OffsetMap<T> {
-    map: Vec<T>,
+    pub map: Vec<T>,
 }
 
 pub type BaseOffsetMap = OffsetMap<isize>;

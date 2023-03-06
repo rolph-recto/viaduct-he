@@ -219,12 +219,14 @@ impl CircuitLowering {
         let mut const_map = HashMap::new();
 
         for vector in registry.get_ciphertext_input_vectors(None) {
-            let vector_name = self.name_generator.get_fresh_name(&vector.array);
+            let vector_name =
+                self.name_generator.get_fresh_name(&format!("v_{}", vector.array));
             ct_vector_map.insert(vector, vector_name);
         }
 
         for vector in registry.get_plaintext_input_vectors(None) {
-            let vector_name = self.name_generator.get_fresh_name(&vector.array);
+            let vector_name =
+                self.name_generator.get_fresh_name(&format!("v_{}", vector.array));
             pt_vector_map.insert(vector, vector_name);
         }
 

@@ -3,7 +3,12 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::{program::*, lang::Operator};
+use crate::{
+    program::*,
+    lang::Operator,
+    scheduling::ClientPreprocessing,
+    circ::vector_info::VectorDimContent
+};
 
 enum SEALOpType {
     // HE operations
@@ -45,9 +50,15 @@ enum SEALOpType {
 
     DeclareMask,
     DeclareConst,
+    BuildInputVector,
+
     ServerGetCiphertextInputVector,
     ServerDeclarePlaintextInputVector,
+    ServerInput,
     ServerRecv,
+
+    ClientInput,
+    ClientSend,
 }
 
 impl SEALOpType {
@@ -89,9 +100,15 @@ impl SEALOpType {
 
             SEALOpType::DeclareMask => RcDoc::text("Mask"),
             SEALOpType::DeclareConst => RcDoc::text("Const"),
-            SEALOpType::ServerGetCiphertextInputVector => RcDoc::text("seal.get_ct_input"),
+            SEALOpType::ServerGetCiphertextInputVector => RcDoc::text("seal.get_ct_vector"),
+            SEALOpType::BuildInputVector => RcDoc::text("seal.build_pt_input"),
+
             SEALOpType::ServerDeclarePlaintextInputVector => RcDoc::text("PlaintextInput"),
+            SEALOpType::ServerInput => RcDoc::text("seal.server_input"),
             SEALOpType::ServerRecv => RcDoc::text("seal.server_recv"),
+
+            SEALOpType::ClientInput => RcDoc::text("seal.client_input"),
+            SEALOpType::ClientSend => RcDoc::text("seal.client_send"),
         }
     }
 }
@@ -310,8 +327,17 @@ impl SEALBackend {
             HERef::Instruction(i) =>
                 Self::instruction(i),
 
-            HERef::Array(array, indices) =>
-                format!("{}.get({})", array, Self::vec(indices)),
+            HERef::Array(array, indices) => {
+                let vec_str = 
+                    if indices.len() > 0 {
+                        Self::vec(indices)
+
+                    } else {
+                        String::from("")
+                    };
+
+                format!("{}.get({})", array, vec_str)
+            }
         }
     }
 
@@ -633,21 +659,147 @@ impl SEALBackend {
         }
     }
 
-    fn lower_context(
+    fn vector_dim_content(dim: &VectorDimContent) -> String {
+        match dim {
+            VectorDimContent::FilledDim { dim, extent, stride, oob_left, oob_right, pad_left, pad_right } =>
+                format!(
+                    "FilledDim({}, {}, {}, {}, {}, {}, {})",
+                    dim, extent, stride, oob_left, oob_right, pad_left, pad_right
+                ),
+
+            VectorDimContent::EmptyDim { extent, pad_left, pad_right, oob_right } =>
+                format!(
+                    "EmptyDim({}, {}, {}, {})",
+                    extent, pad_left, pad_right, oob_right
+                ),
+
+            VectorDimContent::ReducedDim { extent: _, pad_left: _, pad_right: _ } => 
+                unreachable!("input vector has reduced dim")
+        }
+    }
+
+    /// return argument list for vector info
+    /// args should be [array, preprocessing, offset, dims]
+    fn vector_info(vector: &VectorInfo) -> Vec<String> {
+        let mut args = Vec::new();
+        args.push(format!("\"{}\"", vector.array));
+
+        let preprocess_str = 
+            if let Some(preprocess) = vector.preprocessing {
+                match preprocess {
+                    ClientPreprocessing::Permute(i, j) => {
+                        format!("Permute({},{})", i, j)
+                    }
+                }
+
+            } else {
+                String::from("None")
+            };
+
+        args.push(preprocess_str);
+        args.push(Self::vec(vector.offset_map.map.clone()));
+
+        let dims_vec: Vec<String> = 
+            vector.dims.iter()
+            .map(|dim| Self::vector_dim_content(dim))
+            .collect();
+
+        args.push(Self::vec(dims_vec));
+        args
+    }
+
+    fn lower_context_client(
         &self,
-        context: HEProgramContext,
-        client_code: &mut Vec<SEALStatement>,
+        context: &HEProgramContext,
+        client_code: &mut Vec<SEALStatement>
+    ) {
+        let ct_inputs: HashSet<String> =
+            context.ct_vector_map.iter().map(|(vec, _)| {
+                vec.array.clone()
+            }).collect();
+
+        // get ct inputs
+        for input in ct_inputs {
+            client_code.push(
+                SEALStatement::Instruction(
+                    SEALInstruction::OpInplace(
+                        SEALOpType::ClientInput,
+                        vec![format!("\"{}\"", input)]
+                    )
+                )
+            );
+        }
+
+        // recv ct vectors from client 
+        for (vector, name) in context.ct_vector_map.iter() {
+            client_code.extend([
+                SEALStatement::Instruction(
+                    SEALInstruction::Op(
+                        SEALOpType::BuildInputVector,
+                        name.clone(),
+                        Self::vector_info(vector)
+                    )
+                ),
+                SEALStatement::Instruction(
+                    SEALInstruction::OpInplace(
+                        SEALOpType::ClientSend,
+                        vec![format!("\"{}\"", name), name.clone()],
+                    )
+                )
+            ])
+        }
+    }
+
+    fn lower_context_server(
+        &self,
+        context: &HEProgramContext,
         server_code: &mut Vec<SEALStatement>
     ) {
-        // TODO finish for client code
-        for (vector, name) in context.ct_vector_map {
-            server_code.extend([
+        // recv ct vectors from client 
+        for (_, name) in context.ct_vector_map.iter() {
+            server_code.push(
                 SEALStatement::Instruction(
                     SEALInstruction::OpInplace(
                         SEALOpType::ServerRecv,
                         vec![format!("\"{}\"", name)]
                     )
-                ),
+                )
+            );
+        }
+
+        let pt_inputs: HashSet<String> =
+            context.pt_vector_map.iter().map(|(vec, _)| {
+                vec.array.clone()
+            }).collect();
+
+        // get pt inputs
+        for input in pt_inputs {
+            server_code.push(
+                SEALStatement::Instruction(
+                    SEALInstruction::OpInplace(
+                        SEALOpType::ServerInput,
+                        vec![format!("\"{}\"", input)]
+                    )
+                )
+            );
+        }
+
+        // build pt vectors
+        for (vector, name) in context.pt_vector_map.iter() {
+            server_code.push(
+                SEALStatement::Instruction(
+                    SEALInstruction::Op(
+                        SEALOpType::BuildInputVector,
+                        name.clone(),
+                        Self::vector_info(vector)
+                    )
+                )
+            )
+        }
+
+        // assign ct vectors to variables
+        for (_, name) in context.ct_vector_map.iter() {
+            server_code.push(
                 SEALStatement::Instruction(
                     SEALInstruction::Op(
                         SEALOpType::ServerGetCiphertextInputVector,
@@ -655,22 +807,22 @@ impl SEALBackend {
                         vec![format!("\"{}\"", name)]
                     )
                 )
-            ])
+            )
         }
 
-        for (constval, name) in context.const_map {
+        for (constval, name) in context.const_map.iter() {
             server_code.push(
                 SEALStatement::Instruction(
                     SEALInstruction::Op(
                         SEALOpType::DeclareConst,
-                        name,
+                        name.clone(),
                         vec![constval.to_string()]
                     )
                 )
             )
         }
 
-        for (mask, name) in context.mask_map {
+        for (mask, name) in context.mask_map.iter() {
             let mask_str =
                 format!(
                     "[{}]",
@@ -685,7 +837,7 @@ impl SEALBackend {
                 SEALStatement::Instruction(
                     SEALInstruction::Op(
                         SEALOpType::DeclareMask,
-                        name,
+                        name.clone(),
                         vec![mask_str]
                     )
                 )
@@ -699,11 +851,9 @@ impl SEALBackend {
         let mut program = HEProgram::default();
         std::mem::swap(&mut program, &mut self.program);
 
-        self.lower_context(
-            program.context, 
-            &mut client_code,
-            &mut server_code
-        );
+        self.lower_context_client(&program.context, &mut client_code);
+        self.lower_context_server(&program.context, &mut server_code);
+
         for stmt in program.statements {
             self.lower_recur(stmt, &mut server_code);
         }
@@ -762,6 +912,85 @@ mod tests {
         registry
             .ct_var_values
             .insert(String::from("ct"), CircuitValue::CoordMap(coord_map));
+
+        let circuit_program = ParamCircuitProgram {
+            registry,
+            native_expr_list: vec![],
+            circuit_expr_list: vec![(String::from("out"), vec![(String::from("i"), 2)], circuit)],
+        };
+
+        let circuit_program2 = HEPartialEvaluator::new().run(circuit_program);
+
+        let mut lowering = CircuitLowering::new();
+        let he_program = lowering.run(circuit_program2);
+
+        test_lowering(he_program);
+    }
+
+    #[test]
+    fn test_partial_eval2() {
+        let mut registry = CircuitObjectRegistry::new();
+
+        let vector = VectorInfo {
+            array: String::from("arr"),
+            preprocessing: None,
+            offset_map: BaseOffsetMap::new(2),
+            dims: im::Vector::new(),
+        };
+
+        let ct_obj = CiphertextObject::InputVector(vector);
+
+        let mut coord_map =
+            IndexCoordinateMap::from_coord_system(IndexCoordinateSystem::from_dim_list(vec![
+                (String::from("i"), 2),
+                (String::from("j"), 2),
+            ]));
+
+        coord_map.set(im::vector![0, 0], ct_obj.clone());
+        coord_map.set(im::vector![0, 1], ct_obj.clone());
+        coord_map.set(im::vector![1, 0], ct_obj.clone());
+        coord_map.set(im::vector![1, 1], ct_obj.clone());
+
+        registry
+            .ct_var_values
+            .insert(String::from("ct"), CircuitValue::CoordMap(coord_map));
+
+        let vector2 = VectorInfo {
+            array: String::from("parr"),
+            preprocessing: None,
+            offset_map: BaseOffsetMap::new(2),
+            dims: im::Vector::new(),
+        };
+
+        let pt_obj = PlaintextObject::InputVector(vector2);
+
+        let mut coord_map2 =
+            IndexCoordinateMap::from_coord_system(IndexCoordinateSystem::from_dim_list(vec![
+                (String::from("i"), 2),
+                (String::from("j"), 2),
+            ]));
+
+        coord_map2.set(im::vector![0, 0], pt_obj.clone());
+        coord_map2.set(im::vector![0, 1], pt_obj.clone());
+        coord_map2.set(im::vector![1, 0], pt_obj.clone());
+        coord_map2.set(im::vector![1, 1], pt_obj.clone());
+
+        registry
+            .pt_var_values
+            .insert(String::from("pt"), CircuitValue::CoordMap(coord_map2));
+
+        let pt = registry.register_circuit(ParamCircuitExpr::PlaintextVar(String::from("pt")));
+        let add_pt = registry.register_circuit(ParamCircuitExpr::Op(Operator::Add, pt, pt));
+        let ct = registry.register_circuit(ParamCircuitExpr::CiphertextVar(String::from("ct")));
+        let reduce_vec = registry.register_circuit(ParamCircuitExpr::ReduceDim(
+            String::from("j"),
+            2,
+            Operator::Add,
+            ct,
+        ));
+
+        let circuit =
+            registry.register_circuit(ParamCircuitExpr::Op(Operator::Add, reduce_vec, add_pt));
 
         let circuit_program = ParamCircuitProgram {
             registry,
