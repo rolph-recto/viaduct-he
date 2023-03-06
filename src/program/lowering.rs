@@ -905,13 +905,14 @@ impl CircuitLowering {
         }
 
         // process HE expressions
+        let output = program.circuit_expr_list.last().unwrap().0.clone();
         for (array, dims, circuit_id) in program.circuit_expr_list {
             statements.extend(
                 self.process_circuit_expr(array, dims, circuit_id, &program.registry, &context)
             );
         }
 
-        HEProgram { context, statements }
+        HEProgram { context, statements, output }
     }
 }
 

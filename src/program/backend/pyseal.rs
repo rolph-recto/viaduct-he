@@ -53,12 +53,14 @@ enum SEALOpType {
     BuildInputVector,
 
     ServerGetCiphertextInputVector,
-    ServerDeclarePlaintextInputVector,
     ServerInput,
     ServerRecv,
+    ServerSend,
 
     ClientInput,
+    ClientOutput,
     ClientSend,
+    ClientRecv,
 }
 
 impl SEALOpType {
@@ -103,12 +105,14 @@ impl SEALOpType {
             SEALOpType::ServerGetCiphertextInputVector => RcDoc::text("seal.get_ct_vector"),
             SEALOpType::BuildInputVector => RcDoc::text("seal.build_pt_input"),
 
-            SEALOpType::ServerDeclarePlaintextInputVector => RcDoc::text("PlaintextInput"),
             SEALOpType::ServerInput => RcDoc::text("seal.server_input"),
             SEALOpType::ServerRecv => RcDoc::text("seal.server_recv"),
+            SEALOpType::ServerSend => RcDoc::text("seal.server_send"),
 
             SEALOpType::ClientInput => RcDoc::text("seal.client_input"),
+            SEALOpType::ClientOutput => RcDoc::text("seal.client_output"),
             SEALOpType::ClientSend => RcDoc::text("seal.client_send"),
+            SEALOpType::ClientRecv => RcDoc::text("seal.client_recv"),
         }
     }
 }
@@ -755,18 +759,6 @@ impl SEALBackend {
         context: &HEProgramContext,
         server_code: &mut Vec<SEALStatement>
     ) {
-        // recv ct vectors from client 
-        for (_, name) in context.ct_vector_map.iter() {
-            server_code.push(
-                SEALStatement::Instruction(
-                    SEALInstruction::OpInplace(
-                        SEALOpType::ServerRecv,
-                        vec![format!("\"{}\"", name)]
-                    )
-                )
-            );
-        }
-
         let pt_inputs: HashSet<String> =
             context.pt_vector_map.iter().map(|(vec, _)| {
                 vec.array.clone()
@@ -779,6 +771,18 @@ impl SEALBackend {
                     SEALInstruction::OpInplace(
                         SEALOpType::ServerInput,
                         vec![format!("\"{}\"", input)]
+                    )
+                )
+            );
+        }
+
+        // recv ct vectors from client 
+        for (_, name) in context.ct_vector_map.iter() {
+            server_code.push(
+                SEALStatement::Instruction(
+                    SEALInstruction::OpInplace(
+                        SEALOpType::ServerRecv,
+                        vec![format!("\"{}\"", name)]
                     )
                 )
             );
@@ -857,6 +861,31 @@ impl SEALBackend {
         for stmt in program.statements {
             self.lower_recur(stmt, &mut server_code);
         }
+
+        server_code.push(
+            SEALStatement::Instruction(
+                SEALInstruction::OpInplace(
+                    SEALOpType::ServerSend,
+                    vec![format!("\"{}\"", program.output), program.output.clone()]
+                )
+            )
+        );
+
+        client_code.extend([
+            SEALStatement::Instruction(
+                SEALInstruction::Op(
+                    SEALOpType::ClientRecv,
+                    program.output.clone(),
+                    vec![format!("\"{}\"", program.output.clone())]
+                )
+            ),
+            SEALStatement::Instruction(
+                SEALInstruction::OpInplace(
+                    SEALOpType::ClientOutput,
+                    vec![program.output]
+                )
+            ),
+        ]);
 
         SEALProgram { client_code, server_code }
     }

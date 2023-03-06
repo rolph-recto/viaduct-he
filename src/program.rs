@@ -268,6 +268,7 @@ pub struct HEProgramContext {
 pub struct HEProgram {
     pub context: HEProgramContext,
     pub statements: Vec<HEStatement>,
+    pub output: ArrayName,
 }
 
 impl HEProgram {
