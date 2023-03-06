@@ -198,17 +198,15 @@ impl CircuitLowering {
                     );
 
                     let assign_stmt = HEStatement::AssignVar(var.clone(), coord_index, operand);
-                    println!("adding {}", assign_stmt);
                     statements.push(assign_stmt);
                 }
-            }
+            },
 
             CircuitValue::Single(obj) => {
                 let operand = f(obj, &input);
                 let assign_stmt = HEStatement::AssignVar(var, vec![], operand);
-                println!("adding {}", assign_stmt);
                 statements.push(assign_stmt);
-            }
+            },
         }
     }
 

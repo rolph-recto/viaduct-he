@@ -223,7 +223,7 @@ impl Analysis<HEOptCircuit> for HEData {
             HEOptCircuit::ProductVectors([id1, id2]) |
             HEOptCircuit::SumVectors([id1, id2]) => {
                 let data1 = data(id1);
-                let data2 = data(id1);
+                let data2 = data(id2);
                 let mut muldepth = max(data1.muldepth, data2.muldepth);
 
                 if let HEOptCircuit::ProductVectors(_) = enode {

@@ -14,7 +14,7 @@ pub mod index_elim;
 pub mod source;
 pub mod typechecker;
 
-pub static OUTPUT_EXPR_NAME: &'static str = "__root__";
+pub static OUTPUT_EXPR_NAME: &'static str = "__out";
 
 // name of a dimension in a schedule
 pub type DimName = String;

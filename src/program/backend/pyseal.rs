@@ -1,7 +1,11 @@
-/// lowered_program.rs
-/// lowered program for generating output programs from templates
+/// pyseal.rs
+/// PySEAL backend
 
 use std::collections::{HashMap, HashSet};
+
+use handlebars::{Handlebars, RenderError};
+use log::info;
+use serde::Serialize;
 
 use crate::{
     program::*,
@@ -9,6 +13,8 @@ use crate::{
     scheduling::ClientPreprocessing,
     circ::vector_info::VectorDimContent
 };
+
+use super::HEBackend;
 
 enum SEALOpType {
     // HE operations
@@ -103,7 +109,7 @@ impl SEALOpType {
             SEALOpType::DeclareMask => RcDoc::text("Mask"),
             SEALOpType::DeclareConst => RcDoc::text("Const"),
             SEALOpType::ServerGetCiphertextInputVector => RcDoc::text("seal.get_ct_vector"),
-            SEALOpType::BuildInputVector => RcDoc::text("seal.build_pt_input"),
+            SEALOpType::BuildInputVector => RcDoc::text("seal.build_vector"),
 
             SEALOpType::ServerInput => RcDoc::text("seal.server_input"),
             SEALOpType::ServerRecv => RcDoc::text("seal.server_recv"),
@@ -291,12 +297,12 @@ impl UseAnalysis {
     }
 }
 
-struct SEALBackend {
+struct SEALLowering {
     use_analysis: UseAnalysis,
-    program: HEProgram,
+    program: HEProgram
 }
 
-impl SEALBackend {
+impl SEALLowering {
     fn new(program: HEProgram) -> Self {
         let use_analysis = UseAnalysis::analyze(&program);
         Self { use_analysis, program }
@@ -891,13 +897,73 @@ impl SEALBackend {
     }
 }
 
+#[derive(Serialize)]
+struct SEALHandlebarsData {
+    program: String
+}
+
+pub struct SEALBackend {
+    template_file_opt: Option<String>
+}
+
+impl SEALBackend {
+    pub fn new(template_file_opt: Option<String>) -> Self {
+        SEALBackend { template_file_opt }
+    }
+
+    fn codegen_template(
+        self,
+        program: SEALProgram,
+    ) -> Result<String, RenderError> {
+        let template_file = self.template_file_opt.unwrap();
+        let template_str =
+            std::fs::read_to_string(&template_file)
+            .expect(&format!("Could not read file {}", &template_file));
+
+        let mut handlebars = Handlebars::new();
+        handlebars.register_template_string("template", template_str)?;
+
+        let seal_program =
+            SEALHandlebarsData { program: program.to_string() };
+
+        handlebars.render("template", &seal_program)
+    }
+}
+
+impl HEBackend for SEALBackend {
+    fn compile(
+        self,
+        program: HEProgram,
+        writer: &mut impl std::fmt::Write
+    ) -> std::fmt::Result {
+        let backend = SEALLowering::new(program);
+        let program = backend.lower();
+
+        if let Some(_) = &self.template_file_opt {
+            match self.codegen_template(program) {
+                Ok(prog_str) => {
+                    writer.write_str(&prog_str)
+                },
+
+                Err(err) => {
+                    info!("{}", err);
+                    Err(std::fmt::Error)
+                }
+            }
+
+        } else {
+            writer.write_str(&program.to_string())
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::{circ::{*, partial_eval::HEPartialEvaluator}, program::{*, lowering::CircuitLowering}, lang::*};
+    use crate::{circ::{*, partial_eval::*}, program::{*, lowering::*}, lang::*};
     use super::*;
 
     fn test_lowering(program: HEProgram) {
-        let seal_program = SEALBackend::new(program).lower();
+        let seal_program = SEALLowering::new(program).lower();
         println!("{}", seal_program);
     }
 

@@ -1,133 +1,100 @@
-/*
-use std::collections::HashMap;
+use he_vectorizer::{lang::{parser::ProgramParser, elaborated::Elaborator, index_elim::IndexElimination}, scheduling::Schedule, circ::{materializer::{DefaultArrayMaterializer, InputArrayMaterializer, Materializer}, partial_eval::HEPartialEvaluator}, program::{lowering::CircuitLowering, backend::{pyseal::SEALBackend, HEBackend}}};
 
-use he_vectorizer::{circ::{circ_gen::HECircuitGenerator, optimizer::{HELatencyModel, ExtractorType, Optimizer}, lowering::{program::HEProgram, seal::HELoweredProgram}}, lang::{index_elim::IndexElimination, parser::ProgramParser}};
+fn test_compile(src: &str) {
+    let source = ProgramParser::new().parse(&src).unwrap();
+    let elaborated = Elaborator::new().run(source);
 
-fn test_compile(src: &str, size: usize, opt_duration: usize, extractor: ExtractorType, noinplace: bool) {
-    let parser = ProgramParser::new();
-    let src_program = parser.parse(src).unwrap();
+    let inline_set = elaborated.get_default_inline_set();
+    let array_group_map = elaborated.get_default_array_group_map();
 
-    let index_elim = IndexElimination::new();
-    let indfree_program = index_elim.run(&src_program).unwrap();
+    let res_index_elim = IndexElimination::new().run(&inline_set, &array_group_map, elaborated);
 
-    println!("index-free representation:");
-    println!("{}", &indfree_program.expr);
+    let transformed = res_index_elim.unwrap();
+    let init_schedule = Schedule::gen_initial_schedule(&transformed);
 
-    let circ_gen = HECircuitGenerator::new();
-    let (circ, store) = circ_gen.gen_circuit(&indfree_program).unwrap();
+    let array_materializers: Vec<Box<dyn InputArrayMaterializer>> = 
+        vec![Box::new(DefaultArrayMaterializer::new())];
+    let materializer =
+        Materializer::new(array_materializers, transformed);
 
-    println!("circuit:");
-    println!("{}", circ);
+    let res_materialize = materializer.run(&init_schedule);
+    let circuit = res_materialize.unwrap();
 
-    let latency_model = HELatencyModel::default();
+    // TODO add optimizer
 
-    // parse the expression, the type annotation tells it which Language to use
-    // let init_circ: RecExpr<HEOptCircuit> = input_str.parse().unwrap();
+    let circuit_pe = HEPartialEvaluator::new().run(circuit);
+    let program = CircuitLowering::new().run(circuit_pe);
 
-    let init_circ = circ.to_opt_circuit();
-    let init_prog = HEProgram::from(&init_circ);
+    let seal_backend = SEALBackend::new(None);
+    let mut code_str: String = String::new();
+    seal_backend.compile(program, &mut code_str).unwrap();
 
-    println!("Initial HE program (muldepth {}, latency {}ms):",
-        init_prog.get_muldepth(),
-        init_prog.get_latency(&latency_model)
-    );
-
-    let opt_circ =
-        if opt_duration > 0 {
-            let optimizer = Optimizer::new(size);
-            optimizer.optimize(&init_circ, size, opt_duration, extractor)
-
-        } else {
-            init_circ
-        };
-
-    let opt_prog = HEProgram::from(&opt_circ);
-
-    if opt_duration > 0 {
-        println!("Optimized HE program (muldepth {}, latency {}ms):",
-            opt_prog.get_muldepth(),
-            opt_prog.get_latency(&latency_model)
-        );
-    }
-
-    let lowered_prog: HELoweredProgram =
-        HELoweredProgram::lower_program(
-            size,
-            noinplace,
-            &opt_prog,
-            &store,
-            indfree_program.client_store,
-            HashMap::new(),
-            HashMap::new()
-        );
-
-    println!("{:#?}", lowered_prog.instrs)
+    println!("{}", code_str);
 }
 
 #[test]
 fn test_imgblur() {
     let src =
         "
-        input img: [(0,16),(0,16)]
-        for x: (0, 16) {
-            for y: (0, 16) {
+        input img: [4,4] from client
+        for x: 4 {
+            for y: 4 {
                 img[x-1][y-1] + img[x+1][y+1]
             }
         }
         ";
 
-    test_compile(src, 4096, 0, ExtractorType::Greedy, true);
+    test_compile(src);
 }
 
 #[test]
 fn test_matmul() {
     let src =
         "
-        input A: [(0,1),(0,1)]
-        input B: [(0,1),(0,1)]
-        for i: (0,1) {
-            for j: (0,1) {
-                sum(for k: (0,1) { A[i][k] * B[k][j] })
+        input A: [2,2] from client
+        input B: [2,2] from server
+        for i: 2 {
+            for j: 2 {
+                sum(for k: 2 { A[i][k] * B[k][j] })
             }
         }
         ";
 
-    test_compile(src, 4096, 0, ExtractorType::Greedy, true);
+    test_compile(src);
 }
 
 #[test]
 fn test_matmul2() {
     let src =
         "
-        input A1: [(0,1),(0,1)]
-        input A2: [(0,1),(0,1)]
-        input B: [(0,1),(0,1)]
+        input A1: [2,2] from client
+        input A2: [2,2] from client
+        input B: [2,2] from client
         let res =
-            for i: (0,1) {
-                for j: (0,1) {
-                    sum(for k: (0,1) { A1[i][k] * B[k][j] })
+            for i: 2 {
+                for j: 2 {
+                    sum(for k: 2 { A1[i][k] * B[k][j] })
                 }
             }
         in
-        for i: (0,1) {
-            for j: (0,1) {
-                sum(for k: (0,1) { A2[i][k] * res[k][j] })
+        for i: 2 {
+            for j: 2 {
+                sum(for k: 2 { A2[i][k] * res[k][j] })
             }
         }
         ";
 
-    test_compile(src, 4096, 0, ExtractorType::Greedy, true);
+    test_compile(src);
 }
 
 #[test]
 fn test_dotprod() {
     let src =
         "
-        input C: [(0,7)]
-        input P: [(0,7)]
-        sum(for i: (0,7) { C[i] * P[i] })
+        input C: [4] from client
+        input P: [4] from server
+        sum(for i: 4 { C[i] * P[i] })
         ";
 
-    test_compile(src, 4096, 0, ExtractorType::Greedy, true);
+    test_compile(src);
 }
-*/
