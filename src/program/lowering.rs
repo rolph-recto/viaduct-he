@@ -632,14 +632,10 @@ impl CircuitLowering {
                         HEOperand::Ref(HERef::Instruction(reduce_id)),
                     ));
 
-                    println!("REDUCE LOWER BODY_STMTS\n{:?}", body_stmts);
-
                     stmts.extend([
                         HEStatement::DeclareVar(reduce_var.clone(), HEType::Ciphertext, vec![]),
                         HEStatement::ForNode(dim.clone(), *extent, body_stmts),
                     ]);
-
-                    println!("REDUCE LOWER STMTS\n{:?}", stmts);
 
                     let id = self.fresh_instr_id();
                     ref_map.insert(id, (reduce_var_ref, HEType::Ciphertext));
