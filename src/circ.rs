@@ -1363,7 +1363,7 @@ impl ParamCircuitProgram {
 
             ParamCircuitExpr::ReduceDim(dim, extent, op, body_id) => {
                 let body_str = self.display_circuit(*body_id);
-                format!("reduce_vec({}:{}, {}, {})", dim, extent, op, body_str)
+                format!("reduce_dim({}:{}, {}, {})", dim, extent, op, body_str)
             }
         }
     }

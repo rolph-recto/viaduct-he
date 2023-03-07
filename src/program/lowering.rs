@@ -421,15 +421,14 @@ impl CircuitLowering {
         dims_reversed.reverse();
 
         // wrap the body in a nest of for loops
-        let array_statement = dims_reversed
+        let array_statements =
+            dims_reversed
             .into_iter()
             .fold(body_statements, |acc, (dim, extent)| {
                 vec![HEStatement::ForNode(dim, extent, acc)]
-            })
-            .pop()
-            .unwrap();
+            });
 
-        statements.push(array_statement);
+        statements.extend(array_statements);
 
         statements
     }
@@ -633,10 +632,14 @@ impl CircuitLowering {
                         HEOperand::Ref(HERef::Instruction(reduce_id)),
                     ));
 
+                    println!("REDUCE LOWER BODY_STMTS\n{:?}", body_stmts);
+
                     stmts.extend([
                         HEStatement::DeclareVar(reduce_var.clone(), HEType::Ciphertext, vec![]),
                         HEStatement::ForNode(dim.clone(), *extent, body_stmts),
                     ]);
+
+                    println!("REDUCE LOWER STMTS\n{:?}", stmts);
 
                     let id = self.fresh_instr_id();
                     ref_map.insert(id, (reduce_var_ref, HEType::Ciphertext));

@@ -908,7 +908,7 @@ pub struct SEALBackend {
 
 impl SEALBackend {
     pub fn new(template_file_opt: Option<String>) -> Self {
-        SEALBackend { template_file_opt }
+        Self { template_file_opt }
     }
 
     fn codegen_template(
