@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::{collections::{HashMap, HashSet}, process::id};
 
 use crate::{circ::*, lang::*, program::*, util::NameGenerator};
 
@@ -286,22 +286,25 @@ impl CircuitLowering {
         }
 
         let mut body_statements: Vec<HEStatement> = Vec::new();
+        let mut ref_map = HashMap::new();
         let body_id = self.gen_native_expr_instrs(
             circuit_id,
             &registry,
             &context,
             &dims,
             &native_inline_map,
-            &mut HashMap::new(),
+            &mut ref_map,
             &mut body_statements,
         );
+
+        let body_ref = ref_map[&body_id].clone();
         
         statements.extend(
             self.gen_array_statements(
                 array,
                 dims,
                 HEType::Native,
-                body_id,
+                body_ref,
                 body_statements
             )
         );
@@ -370,6 +373,7 @@ impl CircuitLowering {
 
         // generate statements in the array expr's body
         let mut body_statements: Vec<HEStatement> = Vec::new();
+        let mut ref_map = HashMap::new();
         let body_id = self.gen_circuit_expr_instrs(
             circuit_id,
             &registry,
@@ -377,16 +381,18 @@ impl CircuitLowering {
             &dims,
             &ct_inline_map,
             &pt_inline_map,
-            &mut HashMap::new(),
+            &mut ref_map,
             &mut body_statements,
         );
+
+        let body_ref = ref_map[&body_id].0.clone();
         
         statements.extend(
             self.gen_array_statements(
                 array,
                 dims,
                 HEType::Ciphertext,
-                body_id,
+                body_ref,
                 body_statements
             )
         );
@@ -399,7 +405,7 @@ impl CircuitLowering {
         array: ArrayName,
         dims: Vec<(DimName, Extent)>,
         array_type: HEType,
-        body_id: InstructionId,
+        body_ref: HERef,
         mut body_statements: Vec<HEStatement>,
     ) -> Vec<HEStatement> {
         let mut statements: Vec<HEStatement> = Vec::new();
@@ -414,7 +420,7 @@ impl CircuitLowering {
         body_statements.push(HEStatement::AssignVar(
             array,
             dim_vars.into_iter().map(|var| HEIndex::Var(var)).collect(),
-            HEOperand::Ref(HERef::Instruction(body_id)),
+            HEOperand::Ref(body_ref)
         ));
 
         let mut dims_reversed = dims.clone();

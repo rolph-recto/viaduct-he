@@ -278,8 +278,6 @@ impl UseAnalysis {
             })
             .collect();
 
-        println!("atomic_stmts: {:?}", atomic_stmts);
-
         let mut out_set: HashSet<InstructionId> = HashSet::new();
         for stmt in atomic_stmts {
             match stmt {
