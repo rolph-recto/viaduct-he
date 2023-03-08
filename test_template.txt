@@ -178,7 +178,8 @@ class TestWrapper:
 
     def client_output(self, arr):
         assert(self.party == "client")
-        print("client output: ", arr)
+        print("client output:")
+        arr.show()
 
     def client_send(self, name, arr):
         assert(self.party == "client")
@@ -190,7 +191,7 @@ class TestWrapper:
 
     def server_recv(self, name):
         assert(self.party == "server")
-        self.server_vectors[name] = self.client_buffer[name]
+        return self.vec_to_array(self.client_buffer[name])
 
     def server_send(self, name, arr):
         assert(self.party == "server")
@@ -199,20 +200,7 @@ class TestWrapper:
 
     def client_recv(self, name):
         assert(self.party == "client")
-        self.client_vectors[name] = self.server_buffer[name]
-
-    def get_vector(self, name):
-        vec = None
-        if self.party == "server":
-            vec = self.server_vectors[name]
-
-        elif self.party == "client":
-            vec = self.client_vectors[name]
-
-        else:
-            raise "party not set"
-
-        return self.vec_to_array(vec)
+        return self.server_buffer[name]
 
     def vec_to_array(self, vec):
         arr = None
@@ -256,7 +244,9 @@ class TestWrapper:
 
         array = self.get_array(name)
         if len(dims) == 0:
-            vec = NativeVector(self.size, np.array(array[tuple(offset)]))
+            npvec = np.zeros((self.size,))
+            npvec[0] = array[tuple(offset)]
+            vec = NativeVector(self.size, npvec)
             return self.vec_to_array(vec)
 
         else:

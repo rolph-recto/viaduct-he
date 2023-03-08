@@ -869,18 +869,6 @@ impl SEALLowering {
             );
         }
 
-        // recv ct vectors from client 
-        for (_, name) in context.ct_vector_map.iter() {
-            server_code.push(
-                SEALStatement::Instruction(
-                    SEALInstruction::OpInplace(
-                        SEALOpType::ServerRecv,
-                        vec![format!("\"{}\"", name)]
-                    )
-                )
-            );
-        }
-
         // build pt vectors
         for (vector, name) in context.pt_vector_map.iter() {
             server_code.push(
@@ -894,17 +882,17 @@ impl SEALLowering {
             )
         }
 
-        // assign ct vectors to variables
+        // recv ct vectors from client 
         for (_, name) in context.ct_vector_map.iter() {
             server_code.push(
                 SEALStatement::Instruction(
                     SEALInstruction::Op(
-                        SEALOpType::GetVector,
+                        SEALOpType::ServerRecv,
                         name.clone(),
                         vec![format!("\"{}\"", name)]
                     )
                 )
-            )
+            );
         }
 
         for (constval, name) in context.const_map.iter() {
@@ -966,14 +954,8 @@ impl SEALLowering {
 
         let client_post_code = Vec::from([
             SEALStatement::Instruction(
-                SEALInstruction::OpInplace(
-                    SEALOpType::ClientRecv,
-                    vec![format!("\"{}\"", program.output.clone())]
-                )
-            ),
-            SEALStatement::Instruction(
                 SEALInstruction::Op(
-                    SEALOpType::GetVector,
+                    SEALOpType::ClientRecv,
                     program.output.clone(),
                     vec![format!("\"{}\"", program.output.clone())]
                 )
