@@ -175,16 +175,30 @@ impl SEALStatement {
 }
 
 struct SEALProgram {
-    client_code: Vec<SEALStatement>,
+    client_pre_code: Vec<SEALStatement>,
+    client_post_code: Vec<SEALStatement>,
     server_code: Vec<SEALStatement>,
 }
 
 impl SEALProgram {
     pub fn to_doc(&self) -> RcDoc<()> {
-        let client_doc =
-            if self.client_code.len() > 0 {
+        let client_pre_doc =
+            if self.client_pre_code.len() > 0 {
                 RcDoc::intersperse(
-                    self.client_code.iter().map(|stmt| {
+                    self.client_pre_code.iter().map(|stmt| {
+                        stmt.to_doc()
+                    }),
+                    RcDoc::hardline()
+                ) 
+
+            } else {
+                RcDoc::text("pass")
+            };
+
+        let client_post_doc =
+            if self.client_post_code.len() > 0 {
+                RcDoc::intersperse(
+                    self.client_post_code.iter().map(|stmt| {
                         stmt.to_doc()
                     }),
                     RcDoc::hardline()
@@ -207,9 +221,15 @@ impl SEALProgram {
                 RcDoc::text("pass")
             };
 
-        RcDoc::text("def client(seal):")
+        RcDoc::text("def client_pre(seal):")
         .append(
-            RcDoc::hardline().append(client_doc).nest(4)
+            RcDoc::hardline().append(client_pre_doc).nest(4)
+        )
+        .append(RcDoc::hardline())
+        .append(RcDoc::hardline())
+        .append(RcDoc::text("def client_post(seal):"))
+        .append(
+            RcDoc::hardline().append(client_post_doc).nest(4)
         )
         .append(RcDoc::hardline())
         .append(RcDoc::hardline())
@@ -921,12 +941,12 @@ impl SEALLowering {
     } 
 
     fn lower(mut self) -> SEALProgram {
-        let mut client_code: Vec<SEALStatement> = Vec::new();
+        let mut client_pre_code: Vec<SEALStatement> = Vec::new();
         let mut server_code: Vec<SEALStatement> = Vec::new();
         let mut program = HEProgram::default();
         std::mem::swap(&mut program, &mut self.program);
 
-        self.lower_context_client(&program.context, &mut client_code);
+        self.lower_context_client(&program.context, &mut client_pre_code);
         self.lower_context_server(&program.context, &mut server_code);
 
         for stmt in program.statements {
@@ -942,7 +962,7 @@ impl SEALLowering {
             )
         );
 
-        client_code.extend([
+        let client_post_code = Vec::from([
             SEALStatement::Instruction(
                 SEALInstruction::Op(
                     SEALOpType::ClientRecv,
@@ -958,7 +978,7 @@ impl SEALLowering {
             ),
         ]);
 
-        SEALProgram { client_code, server_code }
+        SEALProgram { client_pre_code, client_post_code, server_code }
     }
 }
 
