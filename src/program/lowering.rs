@@ -211,10 +211,10 @@ impl CircuitLowering {
     }
 
     fn gen_program_context(&mut self, registry: &CircuitObjectRegistry) -> HEProgramContext {
-        let mut ct_vector_map = HashMap::new();
-        let mut pt_vector_map = HashMap::new();
-        let mut mask_map = HashMap::new();
-        let mut const_map = HashMap::new();
+        let mut ct_vector_map = IndexMap::new();
+        let mut pt_vector_map = IndexMap::new();
+        let mut mask_map = IndexMap::new();
+        let mut const_map = IndexMap::new();
 
         for vector in registry.get_ciphertext_input_vectors(None) {
             let vector_name =

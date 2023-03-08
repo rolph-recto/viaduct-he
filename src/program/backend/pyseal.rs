@@ -1,7 +1,7 @@
 /// pyseal.rs
 /// PySEAL backend
 
-use std::collections::{HashMap, HashSet};
+use std::{collections::{HashMap, HashSet}, fs::rename};
 
 use handlebars::{Handlebars, RenderError};
 use log::info;
@@ -79,24 +79,24 @@ impl SEALOpType {
             SEALOpType::AddNative => RcDoc::text("seal.add_native"),
             SEALOpType::AddNativeInplace => RcDoc::text("seal.add_native_inplace"),
 
-            SEALOpType::Sub => RcDoc::text("seal.sub"),
-            SEALOpType::SubInplace => RcDoc::text("seal.sub_inplace"),
-            SEALOpType::SubPlain => RcDoc::text("seal.sub_plain"),
-            SEALOpType::SubPlainInplace => RcDoc::text("seal.sub_plain_inplace"),
-            SEALOpType::SubNative => RcDoc::text("seal.sub_native"),
-            SEALOpType::SubNativeInplace => RcDoc::text("seal.sub_native_inplace"),
+            SEALOpType::Sub => RcDoc::text("seal.subtract"),
+            SEALOpType::SubInplace => RcDoc::text("seal.subtract_inplace"),
+            SEALOpType::SubPlain => RcDoc::text("seal.subtract_plain"),
+            SEALOpType::SubPlainInplace => RcDoc::text("seal.subtract_plain_inplace"),
+            SEALOpType::SubNative => RcDoc::text("seal.subtract_native"),
+            SEALOpType::SubNativeInplace => RcDoc::text("seal.subtract_native_inplace"),
 
-            SEALOpType::Mul => RcDoc::text("seal.mul"),
-            SEALOpType::MulInplace => RcDoc::text("seal.mul_inplace"),
-            SEALOpType::MulPlain => RcDoc::text("seal.mul_plain"),
-            SEALOpType::MulPlainInplace => RcDoc::text("seal.mul_plain_inplace"),
-            SEALOpType::MulNative => RcDoc::text("seal.mul_native"),
+            SEALOpType::Mul => RcDoc::text("seal.multiply"),
+            SEALOpType::MulInplace => RcDoc::text("seal.multiply_inplace"),
+            SEALOpType::MulPlain => RcDoc::text("seal.multiply_plain"),
+            SEALOpType::MulPlainInplace => RcDoc::text("seal.multiply_plain_inplace"),
+            SEALOpType::MulNative => RcDoc::text("seal.multiply_native"),
             SEALOpType::MulNativeInplace => RcDoc::text("seal.mul_native_inplace"),
 
-            SEALOpType::Rot => RcDoc::text("seal.rot"),
-            SEALOpType::RotInplace => RcDoc::text("seal.rot_inplace"),
-            SEALOpType::RotNative => RcDoc::text("seal.rot_native"),
-            SEALOpType::RotNativeInplace => RcDoc::text("seal.rot_native_inplace"),
+            SEALOpType::Rot => RcDoc::text("seal.rotate_row"),
+            SEALOpType::RotInplace => RcDoc::text("seal.rotate_row_inplace"),
+            SEALOpType::RotNative => RcDoc::text("seal.rotate_row_native"),
+            SEALOpType::RotNativeInplace => RcDoc::text("seal.rotate_row_native_inplace"),
 
             SEALOpType::Encode => RcDoc::text("seal.encode"),
             SEALOpType::RelinearizeInplace => RcDoc::text("seal.relinearize_inplace"),
@@ -250,14 +250,24 @@ impl UseAnalysis {
         }
     }
 
-    pub fn can_reuse(&self, id: InstructionId, he_ref: &HERef) -> bool {
+    pub fn can_reuse(
+        &self,
+        id: InstructionId,
+        he_ref: &HERef
+    ) -> Option<(InstructionId, InstructionId)> {
         match he_ref {
             HERef::Instruction(ref_id) => {
                 let use_map = self.0.get(&id).unwrap();
-                !use_map.contains(ref_id)
+
+                if !use_map.contains(ref_id) {
+                    Some((id, *ref_id))
+
+                } else {
+                    None
+                }
             },
 
-            HERef::Array(_, _) => false,
+            HERef::Array(_, _) => None,
         }
     }
 
@@ -267,6 +277,8 @@ impl UseAnalysis {
                 Self::get_atomic_statements(stmt)
             })
             .collect();
+
+        println!("atomic_stmts: {:?}", atomic_stmts);
 
         let mut out_set: HashSet<InstructionId> = HashSet::new();
         for stmt in atomic_stmts {
@@ -299,13 +311,14 @@ impl UseAnalysis {
 
 struct SEALLowering {
     use_analysis: UseAnalysis,
-    program: HEProgram
+    program: HEProgram,
+    enable_inplace: bool
 }
 
 impl SEALLowering {
-    fn new(program: HEProgram) -> Self {
+    fn new(program: HEProgram, enable_inplace: bool) -> Self {
         let use_analysis = UseAnalysis::analyze(&program);
-        Self { use_analysis, program }
+        Self { use_analysis, program, enable_inplace }
     }
 
     fn array_ref<T: Display>(array: ArrayName, indices: Vec<T>) -> String {
@@ -475,12 +488,42 @@ impl SEALLowering {
         }
     }
 
-    fn lower_recur(&self, stmt: HEStatement, seal_stmts: &mut Vec<SEALStatement>) {
+    fn can_reuse(&self, id: InstructionId, r: &HERef) -> Option<(InstructionId, InstructionId)> {
+        if self.enable_inplace {
+            self.use_analysis.can_reuse(id, r)
+
+        } else {
+            None
+        }
+    }
+
+    fn resolve_ref(&self, rename_map: &HashMap<InstructionId, InstructionId>, r: HERef) -> HERef {
+        match r {
+            HERef::Instruction(id) => {
+                let mut cur = id;
+
+                while let Some(rid) = rename_map.get(&cur) {
+                    cur = *rid;
+                }
+                
+                HERef::Instruction(cur)
+            },
+
+            HERef::Array(_, _) => r
+        }
+    }
+
+    fn lower_recur(
+        &self,
+        stmt: HEStatement,
+        seal_stmts: &mut Vec<SEALStatement>,
+        rename_map: &mut HashMap<InstructionId, InstructionId>,
+    ) {
         match stmt {
             HEStatement::ForNode(dim, extent, body) => {
                 let mut body_stmts = Vec::new();
                 for body_stmt in body {
-                    self.lower_recur(body_stmt, &mut body_stmts);
+                    self.lower_recur(body_stmt, &mut body_stmts, rename_map);
                 }
 
                 seal_stmts.push(
@@ -514,11 +557,21 @@ impl SEALLowering {
             },
 
             HEStatement::AssignVar(array, indices, op) => {
+                let nop =
+                    match op {
+                        HEOperand::Ref(r) => {
+                            let nref = self.resolve_ref(rename_map, r);
+                            HEOperand::Ref(nref)
+                        },
+
+                        HEOperand::Literal(_) => op
+                    };
+
                 seal_stmts.push(
                     SEALStatement::Instruction(
                         SEALInstruction::OpInplace(
                             SEALOpType::Assign,
-                            vec![array, Self::vec(indices), Self::operand(op)]
+                            vec![array, Self::vec(indices), Self::operand(nop)]
                         )
                     )
                 )
@@ -538,25 +591,29 @@ impl SEALLowering {
             HEStatement::Instruction(instr) => {
                 match instr {
                     HEInstruction::Add(optype, id, ref1, ref2) => {
-                        let use1 = self.use_analysis.can_reuse(id, &ref1);
-                        let use2 = self.use_analysis.can_reuse(id, &ref2);
+                        let use1 = self.can_reuse(id, &ref1);
+                        let use2 = self.can_reuse(id, &ref2);
+                        let nref1 = self.resolve_ref(rename_map, ref1);
+                        let nref2 = self.resolve_ref(rename_map, ref2);
                         let (instr, _) =
                             match (use1, use2) {
-                                (false, false) => {
+                                (None, None) => {
                                     Self::get_binop(
-                                        Operator::Add, optype, false, id, ref1, ref2
+                                        Operator::Add, optype, false, id, nref1, nref2
                                     )
                                 },
 
-                                (false, true) => {
+                                (None, Some((_, rid2))) => {
+                                    rename_map.insert(id, rid2);
                                     Self::get_binop(
-                                        Operator::Add, optype, true, id, ref2, ref1
+                                        Operator::Add, optype, true, id, nref2, nref1
                                     )
                                 },
 
-                                (true, false) | (true, true) => {
+                                (Some((rid1, _)), None) | (Some((rid1, _)), Some(_)) => {
+                                    rename_map.insert(id, rid1);
                                     Self::get_binop(
-                                        Operator::Add, optype, true, id, ref1, ref2
+                                        Operator::Add, optype, true, id, nref1, nref2
                                     )
                                 },
                             };
@@ -565,19 +622,22 @@ impl SEALLowering {
                     },
  
                     HEInstruction::Sub(optype, id, ref1, ref2) => {
-                        let use1 = self.use_analysis.can_reuse(id, &ref1);
-                        let use2 = self.use_analysis.can_reuse(id, &ref2);
+                        let use1 = self.can_reuse(id, &ref1);
+                        let use2 = self.can_reuse(id, &ref2);
+                        let nref1 = self.resolve_ref(rename_map, ref1);
+                        let nref2 = self.resolve_ref(rename_map, ref2);
                         let (instr, _) =
                             match (use1, use2) {
-                                (false, false) | (false, true) => {
+                                (None, None) | (None, Some(_)) => {
                                     Self::get_binop(
-                                        Operator::Sub, optype, false, id, ref1, ref2
+                                        Operator::Sub, optype, false, id, nref1, nref2
                                     )
                                 },
 
-                                (true, false) | (true, true) => {
+                                (Some((rid1, _)), None) | (Some((rid1, _)), Some(_)) => {
+                                    rename_map.insert(id, rid1);
                                     Self::get_binop(
-                                        Operator::Sub, optype, true, id, ref1, ref2
+                                        Operator::Sub, optype, true, id, nref1, nref2
                                     )
                                 },
                             };
@@ -586,25 +646,29 @@ impl SEALLowering {
                     },
                     
                     HEInstruction::Mul(optype, id, ref1, ref2) => {
-                        let use1 = self.use_analysis.can_reuse(id, &ref1);
-                        let use2 = self.use_analysis.can_reuse(id, &ref2);
+                        let use1 = self.can_reuse(id, &ref1);
+                        let use2 = self.can_reuse(id, &ref2);
+                        let nref1 = self.resolve_ref(rename_map, ref1);
+                        let nref2 = self.resolve_ref(rename_map, ref2);
                         let (instr, res) =
                             match (use1, use2) {
-                                (false, false) => {
+                                (None, None) => {
                                     Self::get_binop(
-                                        Operator::Mul, optype, false, id, ref1, ref2
+                                        Operator::Mul, optype, false, id, nref1, nref2
                                     )
                                 },
 
-                                (false, true) => {
+                                (None, Some((_, rid2))) => {
+                                    rename_map.insert(id, rid2);
                                     Self::get_binop(
-                                        Operator::Mul, optype, true, id, ref2, ref1
+                                        Operator::Mul, optype, true, id, nref2, nref1
                                     )
                                 },
 
-                                (true, false) | (true, true) => {
+                                (Some((rid1, _)), None) | (Some((rid1, _)), Some(_)) => {
+                                    rename_map.insert(id, rid1);
                                     Self::get_binop(
-                                        Operator::Mul, optype, true, id, ref1, ref2
+                                        Operator::Mul, optype, true, id, nref1, nref2
                                     )
                                 },
                             };
@@ -624,37 +688,40 @@ impl SEALLowering {
                         }
                     },
                     
-                    HEInstruction::Rot(optype, id, offset, he_ref) => {
-                        let ref_use = self.use_analysis.can_reuse(id, &he_ref);
+                    HEInstruction::Rot(optype, id, offset, body_ref) => {
+                        let ref_use = self.can_reuse(id, &body_ref);
+                        let body_nref = self.resolve_ref(rename_map, body_ref);
                         let instr = 
                             match (optype, ref_use) {
-                                (HEInstructionType::Native, true) => {
+                                (HEInstructionType::Native, None) => {
                                     SEALInstruction::Op(
                                         SEALOpType::RotNative,
                                         Self::instruction(id),
-                                        vec![Self::offset(offset), Self::he_ref(he_ref)]
+                                        vec![Self::offset(offset), Self::he_ref(body_nref)]
                                     )
                                 },
 
-                                (HEInstructionType::Native, false) => {
+                                (HEInstructionType::Native, Some((_, rid2))) => {
+                                    rename_map.insert(id, rid2);
                                     SEALInstruction::OpInplace(
                                         SEALOpType::RotNativeInplace,
-                                        vec![Self::offset(offset), Self::he_ref(he_ref)]
+                                        vec![Self::offset(offset), Self::he_ref(body_nref)]
                                     )
                                 },
 
-                                (HEInstructionType::CipherCipher, true) => {
+                                (HEInstructionType::CipherCipher, None) => {
                                     SEALInstruction::Op(
                                         SEALOpType::Rot,
                                         Self::instruction(id),
-                                        vec![Self::offset(offset), Self::he_ref(he_ref)]
+                                        vec![Self::offset(offset), Self::he_ref(body_nref)]
                                     )
                                 },
                                 
-                                (HEInstructionType::CipherCipher, false) => {
+                                (HEInstructionType::CipherCipher, Some((_, rid2))) => {
+                                    rename_map.insert(id, rid2);
                                     SEALInstruction::OpInplace(
                                         SEALOpType::RotInplace,
-                                        vec![Self::offset(offset), Self::he_ref(he_ref)]
+                                        vec![Self::offset(offset), Self::he_ref(body_nref)]
                                     )
                                 },
 
@@ -865,7 +932,7 @@ impl SEALLowering {
         self.lower_context_server(&program.context, &mut server_code);
 
         for stmt in program.statements {
-            self.lower_recur(stmt, &mut server_code);
+            self.lower_recur(stmt, &mut server_code, &mut HashMap::new());
         }
 
         server_code.push(
@@ -903,12 +970,13 @@ struct SEALHandlebarsData {
 }
 
 pub struct SEALBackend {
-    template_file_opt: Option<String>
+    template_file_opt: Option<String>,
+    enable_inplace: bool,
 }
 
 impl SEALBackend {
-    pub fn new(template_file_opt: Option<String>) -> Self {
-        Self { template_file_opt }
+    pub fn new(template_file_opt: Option<String>, enable_inplace: bool) -> Self {
+        Self { template_file_opt, enable_inplace }
     }
 
     fn codegen_template(
@@ -936,7 +1004,7 @@ impl HEBackend for SEALBackend {
         program: HEProgram,
         writer: &mut impl std::fmt::Write
     ) -> std::fmt::Result {
-        let backend = SEALLowering::new(program);
+        let backend = SEALLowering::new(program, self.enable_inplace);
         let program = backend.lower();
 
         if let Some(_) = &self.template_file_opt {
@@ -963,7 +1031,7 @@ mod tests {
     use super::*;
 
     fn test_lowering(program: HEProgram) {
-        let seal_program = SEALLowering::new(program).lower();
+        let seal_program = SEALLowering::new(program, false).lower();
         println!("{}", seal_program);
     }
 

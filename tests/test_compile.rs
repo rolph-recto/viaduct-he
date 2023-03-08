@@ -31,7 +31,7 @@ fn test_compile(src: &str) {
     let program = CircuitLowering::new().run(pe_circuit);
     println!("program:\n{}", program);
 
-    let seal_backend = SEALBackend::new(None);
+    let seal_backend = SEALBackend::new(None, true);
     let mut code_str: String = String::new();
     seal_backend.compile(program, &mut code_str).unwrap();
 

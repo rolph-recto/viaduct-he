@@ -1,3 +1,4 @@
+use indexmap::IndexMap;
 /// program.rs
 /// instruction representation of HE programs
 
@@ -258,10 +259,10 @@ impl Display for HEStatement {
 
 #[derive(Default)]
 pub struct HEProgramContext {
-    ct_vector_map: HashMap<VectorInfo, ArrayName>,
-    pt_vector_map: HashMap<VectorInfo, ArrayName>,
-    mask_map: HashMap<MaskVector, ArrayName>,
-    const_map: HashMap<isize, ArrayName>,
+    ct_vector_map: IndexMap<VectorInfo, ArrayName>,
+    pt_vector_map: IndexMap<VectorInfo, ArrayName>,
+    mask_map: IndexMap<MaskVector, ArrayName>,
+    const_map: IndexMap<isize, ArrayName>,
 }
 
 #[derive(Default)]

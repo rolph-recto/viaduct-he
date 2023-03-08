@@ -14,11 +14,13 @@ impl NameGenerator {
     pub fn get_fresh_name(&mut self, name: &str) -> String {
         if self.name_map.contains_key(name) {
             let n = self.name_map[name];
+            let counter = self.name_map.get_mut(name).unwrap();
+            *counter += 1;
             format!("{}_{}", name, n)
 
         } else {
             self.name_map.insert(String::from(name), 2);
-            String::from(name)
+            format!("{}_{}", name, 1)
         }
     }
 }
@@ -59,5 +61,22 @@ mod test {
     #[test]
     fn test_pow2_2() {
         assert!(gen_pow2_list(1) == vec![1])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_fresh_names() {
+        let mut namegen = NameGenerator::new();
+        let name1 = namegen.get_fresh_name("test");
+        let name2 = namegen.get_fresh_name("test");
+        let name3 = namegen.get_fresh_name("test");
+
+        assert_ne!(name1, name2);
+        assert_ne!(name2, name3);
+        assert_ne!(name1, name3);
     }
 }
