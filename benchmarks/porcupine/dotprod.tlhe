@@ -1,3 +1,3 @@
-input c: [(0, 7)]
-input p: [(0, 7)]
-sum(for i: (0, 7) { c[i] * p[i] })
+input c: [4] from client
+input p: [4] from server
+sum(c * p)

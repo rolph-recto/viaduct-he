@@ -162,6 +162,10 @@ impl IndexCoordinateSystem {
     pub fn index_vars(&self) -> Vec<String> {
         self.0.iter().map(|(var, _)| var.clone()).collect()
     }
+    
+    pub fn extents(&self) -> Vec<Extent> {
+        self.0.iter().map(|(_, extent)| *extent).collect()
+    }
 
     pub fn in_range(&self, coord: IndexCoord) -> bool {
         if self.0.len() == coord.len() {
@@ -266,6 +270,10 @@ impl<T: Clone> IndexCoordinateMap<T> {
 
     pub fn index_vars(&self) -> Vec<String> {
         self.coord_system.index_vars()
+    }
+
+    pub fn extents(&self) -> Vec<Extent> {
+        self.coord_system.extents()
     }
 
     pub fn set(&mut self, coord: IndexCoord, value: T) {

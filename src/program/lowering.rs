@@ -185,12 +185,20 @@ impl CircuitLowering {
     fn process_circuit_val<T: Clone>(
         value: &CircuitValue<T>,
         var: String,
+        decl_type: HEType,
         input: &HEProgramContext,
         f: fn(&T, &HEProgramContext) -> HEOperand,
         statements: &mut Vec<HEStatement>,
     ) {
         match value {
             CircuitValue::CoordMap(coord_map) => {
+                statements.push(
+                    HEStatement::DeclareVar(
+                        var.clone(),
+                        decl_type,
+                        coord_map.extents()
+                    )
+                );
                 for (coords, obj) in coord_map.value_iter() {
                     let operand = f(obj.unwrap(), &input);
                     let coord_index = Vec::from_iter(
@@ -203,6 +211,13 @@ impl CircuitLowering {
             },
 
             CircuitValue::Single(obj) => {
+                statements.push(
+                    HEStatement::DeclareVar(
+                        var.clone(),
+                        decl_type,
+                        vec![]
+                    )
+                );
                 let operand = f(obj, &input);
                 let assign_stmt = HEStatement::AssignVar(var, vec![], operand);
                 statements.push(assign_stmt);
@@ -266,6 +281,7 @@ impl CircuitLowering {
                 CircuitLowering::process_circuit_val(
                     registry.get_pt_var_value(&pt_var),
                     pt_var,
+                    HEType::Plaintext,
                     &context,
                     |obj, input| {
                         HEOperand::Ref(CircuitLowering::resolve_plaintext_object(obj, input))
@@ -279,6 +295,7 @@ impl CircuitLowering {
             CircuitLowering::process_circuit_val(
                 registry.get_offset_fvar_value(&offset_fvar),
                 offset_fvar,
+                HEType::Native,
                 &context,
                 CircuitLowering::resolve_offset,
                 &mut statements,
@@ -334,6 +351,7 @@ impl CircuitLowering {
                 CircuitLowering::process_circuit_val(
                     registry.get_ct_var_value(&ct_var),
                     ct_var,
+                HEType::Ciphertext,
                     &context,
                     |obj, input| {
                         HEOperand::Ref(CircuitLowering::resolve_ciphertext_object(obj, input))
@@ -352,6 +370,7 @@ impl CircuitLowering {
                 CircuitLowering::process_circuit_val(
                     registry.get_pt_var_value(&pt_var),
                     pt_var,
+                    HEType::Plaintext,
                     &context,
                     |obj, input| {
                         HEOperand::Ref(CircuitLowering::resolve_plaintext_object(obj, input))
@@ -365,6 +384,7 @@ impl CircuitLowering {
             CircuitLowering::process_circuit_val(
                 registry.get_offset_fvar_value(&offset_fvar),
                 offset_fvar,
+                HEType::Native,
                 &context,
                 CircuitLowering::resolve_offset,
                 &mut statements,

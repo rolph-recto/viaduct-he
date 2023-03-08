@@ -53,12 +53,13 @@ enum SEALOpType {
     // HE datatypes
     DeclareNativeArray,
     DeclareCiphertextArray,
+    DeclarePlaintextArray,
 
     DeclareMask,
     DeclareConst,
-    BuildInputVector,
+    BuildVector,
 
-    ServerGetCiphertextInputVector,
+    GetVector,
     ServerInput,
     ServerRecv,
     ServerSend,
@@ -103,13 +104,14 @@ impl SEALOpType {
 
             SEALOpType::Assign => RcDoc::text("seal.set"),
 
-            SEALOpType::DeclareNativeArray => RcDoc::text("NativeArray"),
-            SEALOpType::DeclareCiphertextArray => RcDoc::text("CiphertextArray"),
+            SEALOpType::DeclareNativeArray => RcDoc::text("seal.native_array"),
+            SEALOpType::DeclareCiphertextArray => RcDoc::text("seal.ciphertext_array"),
+            SEALOpType::DeclarePlaintextArray => RcDoc::text("seal.plaintext_array"),
+            SEALOpType::DeclareMask => RcDoc::text("seal.mask"),
+            SEALOpType::DeclareConst => RcDoc::text("seal.const"),
 
-            SEALOpType::DeclareMask => RcDoc::text("Mask"),
-            SEALOpType::DeclareConst => RcDoc::text("Const"),
-            SEALOpType::ServerGetCiphertextInputVector => RcDoc::text("seal.get_ct_vector"),
-            SEALOpType::BuildInputVector => RcDoc::text("seal.build_vector"),
+            SEALOpType::GetVector => RcDoc::text("seal.get_vector"),
+            SEALOpType::BuildVector => RcDoc::text("seal.build_vector"),
 
             SEALOpType::ServerInput => RcDoc::text("seal.server_input"),
             SEALOpType::ServerRecv => RcDoc::text("seal.server_recv"),
@@ -560,7 +562,7 @@ impl SEALLowering {
                     match optype {
                         HEType::Native => SEALOpType::DeclareNativeArray,
                         HEType::Ciphertext => SEALOpType::DeclareCiphertextArray,
-                        HEType::Plaintext => unreachable!()
+                        HEType::Plaintext => SEALOpType::DeclarePlaintextArray,
                     };
 
                 seal_stmts.push(
@@ -830,7 +832,7 @@ impl SEALLowering {
             client_code.extend([
                 SEALStatement::Instruction(
                     SEALInstruction::Op(
-                        SEALOpType::BuildInputVector,
+                        SEALOpType::BuildVector,
                         name.clone(),
                         Self::vector_info(vector)
                     )
@@ -884,7 +886,7 @@ impl SEALLowering {
             server_code.push(
                 SEALStatement::Instruction(
                     SEALInstruction::Op(
-                        SEALOpType::BuildInputVector,
+                        SEALOpType::BuildVector,
                         name.clone(),
                         Self::vector_info(vector)
                     )
@@ -897,7 +899,7 @@ impl SEALLowering {
             server_code.push(
                 SEALStatement::Instruction(
                     SEALInstruction::Op(
-                        SEALOpType::ServerGetCiphertextInputVector,
+                        SEALOpType::GetVector,
                         name.clone(),
                         vec![format!("\"{}\"", name)]
                     )
@@ -964,8 +966,14 @@ impl SEALLowering {
 
         let client_post_code = Vec::from([
             SEALStatement::Instruction(
-                SEALInstruction::Op(
+                SEALInstruction::OpInplace(
                     SEALOpType::ClientRecv,
+                    vec![format!("\"{}\"", program.output.clone())]
+                )
+            ),
+            SEALStatement::Instruction(
+                SEALInstruction::Op(
+                    SEALOpType::GetVector,
                     program.output.clone(),
                     vec![format!("\"{}\"", program.output.clone())]
                 )

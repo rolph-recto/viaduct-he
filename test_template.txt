@@ -1,0 +1,346 @@
+import itertools
+import numpy as np
+from time import time
+
+class AbstractArray:
+    def __init__(self, size: int, extents: list[int]):
+        if len(extents) == 0:
+            self.single = CiphertextVector(size)
+
+        else:
+            self.map = {}
+            coords = itertools.product(*map(lambda e: tuple(range(e)), extents))
+            for coord in coords:
+                self.map[coord] = CiphertextVector(size)
+
+    def set(self, coord: list[int], val):
+        if len(coord) == 0:
+            self.single = val
+
+        else:
+            self.map[tuple(coord)] = val
+
+    def get(self, coord=[]):
+        if len(coord) == 0:
+            return self.single
+
+        else:
+            return self.map[tuple(coord)]
+
+    def create_vector(self, size):
+        pass
+
+    def show(self):
+        if self.single is not None:
+            print(self.single)
+
+        else:
+            for coord, val in self.map.items():
+                print("{} => {}", coord, val)
+
+
+class CiphertextArray(AbstractArray):
+    def __init__(self, size: int, extents: list[int]):
+        super().__init__(size, extents)
+
+    def create_vector(self, size: int):
+        return CiphertextVector(size)
+
+
+class PlaintextArray(AbstractArray):
+    def __init__(self, size: int, extents: list[int]):
+        super().__init__(size, extents)
+
+    def create_vector(self, size: int):
+        return PlaintextVector(size)
+
+
+class NativeArray(AbstractArray):
+    def __init__(self, size: int, extents: list[int]):
+        super().__init__(size, extents)
+
+    def create_vector(self, size: int):
+        return NativeVector(size)
+
+
+class AbstractVector:
+    def __init__(self, size: int, array=None):
+        self.size = size
+        if array is None:
+            self.array = np.zeros((size,))
+
+        else:
+            self.array = array
+
+    def load(self, x):
+        n = len(x)
+        assert(self.size >= n)
+        self.array[:n] = np.array(x)
+
+    def get(self, n):
+        return self.array[:n]
+
+    def add_inplace(self, y):
+        assert(self.validate_operand(y))
+        self.array = self.array + y.array
+
+    def sub_inplace(self, y):
+        assert(self.validate_operand(y))
+        self.array = self.array - y.array
+
+    def multiply_inplace(self, y):
+        assert(self.validate_operand(y))
+        self.array = self.array * y.array
+
+    def rotate_inplace(self, n):
+        self.array = self.array[[(i-n) % self.size for i in range(self.size)]]
+
+    def __add__(self, x):
+        assert(self.validate_operand(x))
+        return self.create(self.size, self.array + x.array)
+
+    def __sub__(self, x):
+        assert(self.validate_operand(x))
+        return self.create(self.size, self.array - x.array)
+        
+    def __mul__(self, x):
+        assert(self.validate_operand(x))
+        return self.create(self.size, self.array * x.array)
+
+    def rotate(self, n):
+        return self.create(self.size, self.array[[(i-n) % self.size for i in range(self.size)]])
+
+    def __str__(self):
+        return str(self.array)
+
+    def create(self, size, array):
+        pass
+
+    def validate_operand(self, y):
+        pass
+
+class CiphertextVector(AbstractVector):
+    def __init__(self, size, array=None):
+        super().__init__(size, array)
+
+    def create(self, size, array):
+        return CiphertextVector(size, array)
+
+    def validate_operand(self, y):
+        return isinstance(y, CiphertextVector) or isinstance(y, PlaintextVector)
+
+
+class PlaintextVector(AbstractVector):
+    def __init__(self, size, array):
+        super().__init__(size, array)
+
+    def create(self, size, array):
+        return CiphertextVector(size, array)
+
+    def validate_operand(self, y):
+        return isinstance(y, CiphertextVector) or isinstance(y, PlaintextVector)
+
+
+class NativeVector(AbstractVector):
+    def __init__(self, size, array):
+        super().__init__(size, array)
+
+    def create(self, size, array):
+        return CiphertextVector(size, array)
+
+    def validate_operand(self, y):
+        return isinstance(y, NativeVector)
+
+
+class TestWrapper:
+    def __init__(self, size, client_inputs={}, server_inputs={}):
+        self.size = size
+        self.client_inputs = client_inputs
+        self.server_inputs = server_inputs
+        self.client_arrays = {}
+        self.server_arrays = {}
+        self.client_buffer = {}
+        self.server_buffer = {}
+        self.server_vectors = {}
+        self.client_vectors = {}
+        self.party = None
+
+    def set_party(self, party):
+        self.party = party
+
+    def client_input(self, name):
+        assert(self.party == "client")
+        self.client_arrays[name] = self.client_inputs[name]
+
+    def server_input(self, name):
+        assert(self.party == "server")
+        self.server_arrays[name] = self.server_inputs[name]
+
+    def client_output(self, arr):
+        assert(self.party == "client")
+        print("client output: ", arr)
+
+    def client_send(self, name, arr):
+        assert(self.party == "client")
+        vec = arr.get([])
+        assert(isinstance(vec, NativeVector))
+
+        # "encrypt" whatever the client sends
+        self.client_buffer[name] = CiphertextVector(self.size, vec.array)
+
+    def server_recv(self, name):
+        assert(self.party == "server")
+        self.server_vectors[name] = self.client_buffer[name]
+
+    def server_send(self, name, arr):
+        assert(self.party == "server")
+        assert(isinstance(arr, CiphertextArray))
+        self.server_buffer[name] = arr
+
+    def client_recv(self, name):
+        assert(self.party == "client")
+        self.client_vectors[name] = self.server_buffer[name]
+
+    def get_vector(self, name):
+        vec = None
+        if self.party == "server":
+            vec = self.server_vectors[name]
+
+        elif self.party == "client":
+            vec = self.client_vectors[name]
+
+        else:
+            raise "party not set"
+
+        return self.vec_to_array(vec)
+
+    def vec_to_array(self, vec):
+        arr = None
+        if isinstance(vec, NativeVector):
+            arr = NativeArray(self.size, [])
+
+        elif isinstance(vec, CiphertextVector):
+            arr = CiphertextArray(self.size, [])
+
+        elif isinstance(vec, PlaintextVector):
+            arr = PlaintextArray(self.size, [])
+
+        else:
+            raise "unknown type"
+
+        arr.set([], vec)
+        return arr
+
+    def get_array(self, name):
+        if self.party == "server":
+            return self.server_arrays[name]
+
+        elif self.party == "client":
+            return self.client_arrays[name]
+
+        else:
+            raise "party not set"
+
+    def native_array(self, extents: list[list[int]]):
+        return NativeArray(self.size, extents)
+
+    def ciphertext_array(self, extents):
+        return CiphertextArray(self.size, extents)
+
+    def plaintext_array(self, extents):
+        return PlaintextArray(self.size, extents)
+
+    def build_vector(self, name, preprocess, offset, dims):
+        if preprocess is not None:
+            raise NotImplemented
+
+        array = self.get_array(name)
+        if len(dims) == 0:
+            vec = NativeVector(self.size, np.array(array[tuple(offset)]))
+            return self.vec_to_array(vec)
+
+        else:
+            raise NotImplemented
+
+    def const(self, const: int):
+        return self.vec_to_array(NativeVector(self.size, np.array(self.size * [const])))
+
+    def mask(self, mask: list[(int, int, int)]):
+        raise NotImplemented
+
+    def set(self, arr, coord, val):
+        arr.set(coord, val)
+
+    def pad_list(self, l, n):
+        return l + ([0]*(n-len(l)))
+
+    def encode(self, arr, coord):
+        vec = arr.get(coord)
+        assert(isinstance(vec, NativeVector))
+        arr.set(coord, PlaintextVector(vec.size, vec.array))
+
+    def encrypt(self, x):
+        return x
+
+    def add(self, x, y):
+        return x + y
+
+    def add_plain(self, x, y):
+        return x + y
+
+    def add_inplace(self, x, y):
+        x.add_inplace(y)
+
+    def add_plain_inplace(self, x, y):
+        x.add_inplace(y)
+
+    def multiply(self, x, y):
+        return x * y
+
+    def multiply_plain(self, x, y):
+        return x * y
+
+    def multiply_inplace(self, x, y):
+        x.multiply_inplace(y)
+
+    def multiply_plain_inplace(self, x, y):
+        x.multiply_inplace(y)
+
+    def rotate_rows(self, x, amt):
+        return x.rotate(amt)
+
+    def rotate_rows_inplace(self, x, amt):
+        x.rotate_inplace(amt)
+
+    def relinearize_inplace(self, x):
+        pass
+
+    def invariant_noise_budget(self, x):
+        return 0
+
+def input(dims):
+    return np.zeros(tuple(dims))
+
+### START GENERATED CODE
+{{{ program }}}
+### END GENERATED CODE
+
+client_inputs = { "c": np.array([1,2,3,4]) }
+server_inputs = { "p": np.array([5,6,7,8]) }
+
+slot_count = 4096
+row_size = 2048
+seal = TestWrapper(slot_count, client_inputs, server_inputs)
+
+seal.set_party("client")
+client_pre(seal)
+
+exec_start_time = time()
+seal.set_party("server")
+server(seal)
+exec_end_time = time()
+
+seal.set_party("client")
+client_post(seal)
+
+print("exec duration: {}ms".format((exec_end_time - exec_start_time)*1000))
