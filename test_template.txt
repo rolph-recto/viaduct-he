@@ -1,6 +1,65 @@
+import sys
 import itertools
+import json
 import numpy as np
 from time import time
+
+
+class ClientPreprocessing:
+    pass
+
+
+class Permute(ClientPreprocessing):
+    def __init__(self, i, j):
+        self.i = i
+        self.j = j
+
+    def __str__(self):
+        return "Permute({},{})".format(self.i, self.j)
+
+
+class VectorDimContent:
+    def __init__(self):
+        pass
+
+    def offset_left(self):
+        raise NotImplemented
+
+    def size(self):
+        raise NotImplemented
+
+
+class FilledDim(VectorDimContent):
+    def __init__(self, dim, extent, stride, oob_left, oob_right, pad_left, pad_right):
+        super.__init__()
+        self.dim = dim
+        self.extent = extent
+        self.stride = stride
+        self.oob_left = oob_left
+        self.oob_right = oob_right
+        self.pad_left = pad_left
+        self.pad_right = pad_right
+
+    def offset_left(self):
+        return self.oob_left + self.pad_left
+
+    def size(self):
+        return self.pad_left + self.oob_left + self.extent + self.oob_right + self.pad_right
+
+
+class EmptyDim(VectorDimContent):
+    def __init__(self, extent, pad_left, pad_right, oob_right):
+        self.extent = extent
+        self.pad_left = pad_left
+        self.pad_right = pad_right
+        self.oob_right = oob_right
+
+    def offset_left(self):
+        return self.pad_left
+
+    def size(self):
+        return self.pad_left + self.extent + self.oob_right + self.pad_right
+
 
 class AbstractArray:
     def __init__(self, size: int, extents: list[int]):
@@ -161,8 +220,6 @@ class TestWrapper:
         self.server_arrays = {}
         self.client_buffer = {}
         self.server_buffer = {}
-        self.server_vectors = {}
-        self.client_vectors = {}
         self.party = None
 
     def set_party(self, party):
@@ -238,19 +295,54 @@ class TestWrapper:
     def plaintext_array(self, extents):
         return PlaintextArray(self.size, extents)
 
-    def build_vector(self, name, preprocess, offset, dims):
+    def build_vector(self, name: str, preprocess: ClientPreprocessing, src_offset: list[int], dims: list[VectorDimContent]) -> NativeArray:
         if preprocess is not None:
             raise NotImplemented
 
         array = self.get_array(name)
         if len(dims) == 0:
             npvec = np.zeros((self.size,))
-            npvec[0] = array[tuple(offset)]
+            npvec[0] = array[tuple(src_offset)]
             vec = NativeVector(self.size, npvec)
             return self.vec_to_array(vec)
 
         else:
-            raise NotImplemented
+            dst_offset = []
+            dst_shape = []
+            stride_map = {}
+            coords = []
+            dst_size = 1
+            for i, dim in enumerate(dims):
+                dst_offset.append(dim.offset_left())
+                dst_shape.append(dim.size())
+                dst_size = dim.size()
+                coords.append(range(dim.extent))
+
+                if isinstance(dim, FilledDim):
+                    stride_map[i] = (dim.dim, dim.stride)
+
+            dst = np.zeros(dst_shape, dtype=int)
+            for coord in itertools.product(*coords):
+                src_coord = src_offset[:]
+                dst_coord = dst_offset[:]
+                for i, coord in enumerate(coord):
+                    dst_coord[i] += coord
+                    if i in stride_map:
+                        (src_dim, stride) = stride_map[i]
+                        src_coord[src_dim] += coord * stride
+
+                dst[tuple(dst_coord)] = array[tuple(src_coord)]
+
+            dst_flat = dst.reshape(dst_size)
+
+            # should we actually repeat? or just pad with zeros?
+            repeats = int(self.size / dst_size)
+            if self.size % dst_size != 0:
+                repeats += 1
+
+            dst_vec = np.tile(dst_flat, repeats)[:self.size]
+            return self.vec_to_array(NativeVector(self.size, dst_vec))
+
 
     def const(self, const: int):
         return self.vec_to_array(NativeVector(self.size, np.array(self.size * [const])))
@@ -260,9 +352,6 @@ class TestWrapper:
 
     def set(self, arr, coord, val):
         arr.set(coord, val)
-
-    def pad_list(self, l, n):
-        return l + ([0]*(n-len(l)))
 
     def encode(self, arr, coord):
         vec = arr.get(coord)
@@ -308,19 +397,31 @@ class TestWrapper:
     def invariant_noise_budget(self, x):
         return 0
 
-def input(dims):
-    return np.zeros(tuple(dims))
 
 ### START GENERATED CODE
 {{{ program }}}
 ### END GENERATED CODE
 
-client_inputs = { "c": np.array([1,2,3,4]) }
-server_inputs = { "p": np.array([5,6,7,8]) }
 
-slot_count = 4096
-row_size = 2048
-seal = TestWrapper(slot_count, client_inputs, server_inputs)
+input_str = None
+client_inputs = {}
+server_inputs = {}
+if len(sys.argv) >= 2:
+    with open(sys.argv[1]) as f:
+        input_str = f.read()
+
+else:
+    input_str = sys.stdin.read()
+
+inputs = json.loads(input_str)
+for key, val in inputs["client"].items():
+    client_inputs[key] = np.array(val)
+
+for key, val in inputs["server"].items():
+    server_inputs[key] = np.array(val)
+
+vec_size = {{{ size }}}
+seal = TestWrapper(vec_size, client_inputs, server_inputs)
 
 seal.set_party("client")
 client_pre(seal)

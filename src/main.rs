@@ -60,7 +60,7 @@ struct HEArguments {
     extractor: ExtractorType,
 
     /// vector size
-    #[clap(short = 's', long = "size", value_parser, default_value_t = 8192)]
+    #[clap(short = 's', long = "size", value_parser, default_value_t = 2048)]
     size: usize,
 
     /// don't inline instructions
@@ -110,7 +110,13 @@ fn main() {
     let program = CircuitLowering::new().run(circuit_pe);
 
     info!("compiling with PySEAL backend...");
-    let seal_backend = SEALBackend::new(args.template.clone(), !args.noinplace);
+    let seal_backend =
+        SEALBackend::new(
+            args.template.clone(), 
+            !args.noinplace,
+            args.size
+        );
+
     let mut code_str: String = String::new();
     seal_backend.compile(program, &mut code_str).unwrap();
 

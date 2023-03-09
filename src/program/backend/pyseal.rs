@@ -974,17 +974,19 @@ impl SEALLowering {
 
 #[derive(Serialize)]
 struct SEALHandlebarsData {
-    program: String
+    program: String,
+    size: usize,
 }
 
 pub struct SEALBackend {
     template_file_opt: Option<String>,
     enable_inplace: bool,
+    size: usize,
 }
 
 impl SEALBackend {
-    pub fn new(template_file_opt: Option<String>, enable_inplace: bool) -> Self {
-        Self { template_file_opt, enable_inplace }
+    pub fn new(template_file_opt: Option<String>, enable_inplace: bool, size: usize) -> Self {
+        Self { template_file_opt, enable_inplace, size }
     }
 
     fn codegen_template(
@@ -1000,7 +1002,7 @@ impl SEALBackend {
         handlebars.register_template_string("template", template_str)?;
 
         let seal_program =
-            SEALHandlebarsData { program: program.to_string() };
+            SEALHandlebarsData { program: program.to_string(), size: self.size };
 
         handlebars.render("template", &seal_program)
     }
