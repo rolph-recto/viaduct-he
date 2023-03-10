@@ -480,10 +480,18 @@ impl CircuitLowering {
                     if let Some(var_ref) = ct_inline_map.get(var) {
                         ref_map.insert(instr_id, (var_ref.clone(), HEType::Ciphertext));
                     } else {
-                        let index_vars = indices
-                            .iter()
-                            .map(|(var, _)| HEIndex::Var(var.clone()))
-                            .collect();
+                        let index_vars =
+                            match registry.get_ct_var_value(var) {
+                                CircuitValue::CoordMap(coord_map) => {
+                                    let index_vars = coord_map.index_vars_and_extents();
+                                    assert!(index_vars.iter().all(|ve| indices.contains(ve)));
+                                    index_vars.iter().map(|(v, _)| {
+                                        HEIndex::Var(v.clone())
+                                    }).collect()
+                                },
+                                CircuitValue::Single(_) => vec![]
+                            };
+
                         let var_ref = HERef::Array(var.clone(), index_vars);
                         ref_map.insert(instr_id, (var_ref, HEType::Ciphertext));
                     }
@@ -497,10 +505,18 @@ impl CircuitLowering {
                     if let Some(var_ref) = pt_inline_map.get(var) {
                         ref_map.insert(instr_id, (var_ref.clone(), HEType::Plaintext));
                     } else {
-                        let index_vars = indices
-                            .iter()
-                            .map(|(var, _)| HEIndex::Var(var.clone()))
-                            .collect();
+                        let index_vars =
+                            match registry.get_pt_var_value(var) {
+                                CircuitValue::CoordMap(coord_map) => {
+                                    let index_vars = coord_map.index_vars_and_extents();
+                                    assert!(index_vars.iter().all(|ve| indices.contains(ve)));
+                                    index_vars.iter().map(|(v, _)| {
+                                        HEIndex::Var(v.clone())
+                                    }).collect()
+                                },
+                                CircuitValue::Single(_) => vec![]
+                            };
+
                         let var_ref = HERef::Array(var.clone(), index_vars);
                         ref_map.insert(instr_id, (var_ref, HEType::Plaintext));
                     }
@@ -687,7 +703,7 @@ impl CircuitLowering {
 
         } else {
             match registry.get_circuit(expr_id) {
-                ParamCircuitExpr::CiphertextVar(var) => {
+                ParamCircuitExpr::CiphertextVar(_) => {
                     unreachable!()
                 },
 
@@ -697,10 +713,19 @@ impl CircuitLowering {
                         ref_map.insert(instr_id, var_ref.clone());
 
                     } else {
-                        let index_vars = indices
-                            .iter()
-                            .map(|(var, _)| HEIndex::Var(var.clone()))
-                            .collect();
+                        let index_vars =
+                            match registry.get_pt_var_value(var) {
+                                CircuitValue::CoordMap(coord_map) => {
+                                    let index_vars = coord_map.index_vars_and_extents();
+                                    assert!(index_vars.iter().all(|ve| indices.contains(ve)));
+                                    index_vars.iter().map(|(v, _)| {
+                                        HEIndex::Var(v.clone())
+                                    }).collect()
+
+                                },
+                                CircuitValue::Single(_) => vec![]
+                            };
+
                         let var_ref = HERef::Array(var.clone(), index_vars);
                         ref_map.insert(instr_id, var_ref);
                     }

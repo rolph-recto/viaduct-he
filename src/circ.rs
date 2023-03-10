@@ -276,6 +276,10 @@ impl<T: Clone> IndexCoordinateMap<T> {
         self.coord_system.extents()
     }
 
+    pub fn index_vars_and_extents(&self) -> Vec<(String, Extent)> {
+        self.coord_system.0.clone()
+    }
+
     pub fn set(&mut self, coord: IndexCoord, value: T) {
         self.coord_map.insert(coord, value);
     }
