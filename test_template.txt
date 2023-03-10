@@ -12,21 +12,21 @@ class ClientPreprocessing:
 
 class Permute(ClientPreprocessing):
     def __init__(self, dim_i, dim_j):
-        self.dim_i = i
-        self.dim_j = j
+        self.dim_i = dim_i
+        self.dim_j = dim_j
 
     def apply(self, arr):
         slices = []
         for ind in range(arr.shape[self.dim_i]):
             i_slice = np.take(arr, ind, axis=self.dim_i)
             roll_dim = self.dim_j if self.dim_j < self.dim_i else self.dim_j - 1
-            perm_i_slice = np.roll(i_slice, ind, axis=roll_dim)
+            perm_i_slice = np.roll(i_slice, -ind, axis=roll_dim)
             slices.append(perm_i_slice)
 
         return np.stack(slices, axis=self.dim_i)
 
     def __str__(self):
-        return "Permute({},{})".format(self.i, self.j)
+        return "Permute({},{})".format(self.dim_i, self.dim_j)
 
 
 class VectorDimContent:
@@ -41,8 +41,8 @@ class VectorDimContent:
 
 
 class FilledDim(VectorDimContent):
-    def __init__(self, dim, extent, stride, oob_left, oob_right, pad_left, pad_right):
-        super.__init__()
+    def __init__(self, dim, extent, stride=1, oob_left=0, oob_right=0, pad_left=0, pad_right=0):
+        super().__init__()
         self.dim = dim
         self.extent = extent
         self.stride = stride
@@ -59,7 +59,8 @@ class FilledDim(VectorDimContent):
 
 
 class EmptyDim(VectorDimContent):
-    def __init__(self, extent, pad_left, pad_right, oob_right):
+    def __init__(self, extent, pad_left=0, pad_right=0, oob_right=0):
+        super().__init__()
         self.extent = extent
         self.pad_left = pad_left
         self.pad_right = pad_right
@@ -238,11 +239,11 @@ class TestWrapper:
 
     def client_input(self, name):
         assert(self.party == "client")
-        self.client_arrays[name] = self.client_inputs[name]
+        self.client_arrays[(name, "")] = self.client_inputs[name]
 
     def server_input(self, name):
         assert(self.party == "server")
-        self.server_arrays[name] = self.server_inputs[name]
+        self.server_arrays[(name, "")] = self.server_inputs[name]
 
     def client_output(self, arr):
         assert(self.party == "client")
@@ -287,15 +288,27 @@ class TestWrapper:
         arr.set([], vec)
         return arr
 
-    def get_array(self, name):
+    def get_array(self, name, preprocess=None):
+        preprocess_str = str(preprocess) if preprocess is not None else ""
+
+        arrays = None
         if self.party == "server":
-            return self.server_arrays[name]
+            arrays = self.server_arrays
 
         elif self.party == "client":
-            return self.client_arrays[name]
+            arrays = self.client_arrays
 
         else:
             raise Exception("party not set")
+
+        if not (name, preprocess_str) in arrays:
+            arr = arrays[(name, "")]
+            parr = preprocess.apply(arr)
+            arrays[(name, preprocess_str)] = parr
+            return parr
+
+        else:
+            return arrays[(name, preprocess_str)]
 
     def native_array(self, extents: list[list[int]]):
         return NativeArray(self.size, extents)
@@ -307,10 +320,7 @@ class TestWrapper:
         return PlaintextArray(self.size, extents)
 
     def build_vector(self, name: str, preprocess: ClientPreprocessing, src_offset: list[int], dims: list[VectorDimContent]) -> NativeArray:
-        if preprocess is not None:
-            raise NotImplemented
-
-        array = self.get_array(name)
+        array = self.get_array(name, preprocess)
         if len(dims) == 0:
             npvec = np.zeros((self.size,))
             npvec[0] = array[tuple(src_offset)]
@@ -342,7 +352,14 @@ class TestWrapper:
                         (src_dim, stride) = stride_map[i]
                         src_coord[src_dim] += coord * stride
 
-                dst[tuple(dst_coord)] = array[tuple(src_coord)]
+                dst_coord_tup = tuple(dst_coord)
+                src_coord_tup = tuple(src_coord)
+                src_in_bounds = all(map(lambda t: t[0] > t[1], zip(array.shape, src_coord_tup)))
+                if src_in_bounds:
+                    dst[dst_coord_tup] = array[tuple(src_coord)]
+
+                else:
+                    dst[dst_coord_tup] = 0
 
             dst_flat = dst.reshape(dst_size)
 
@@ -407,7 +424,6 @@ class TestWrapper:
 
     def invariant_noise_budget(self, x):
         return 0
-
 
 ### START GENERATED CODE
 {{{ program }}}
