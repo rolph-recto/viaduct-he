@@ -144,7 +144,14 @@ impl<'a> Scheduler<'a> {
     pub fn run(&mut self, iter_limit: Option<usize>) {
         let mut iter = 0;
         let mut changed = true;
-        while changed && iter_limit.map_or(true, |limit| iter < limit) {
+        let within_limit = |x: usize| {
+            match iter_limit {
+                Some(limit) => x < limit,
+                None => true
+            }
+        };
+
+        while changed && within_limit(iter) {
             changed = self.iterate();
             iter += 1;
         }
