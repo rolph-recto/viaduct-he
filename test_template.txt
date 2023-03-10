@@ -6,13 +6,24 @@ from time import time
 
 
 class ClientPreprocessing:
-    pass
+    def apply(self, arr):
+        raise NotImplemented
 
 
 class Permute(ClientPreprocessing):
-    def __init__(self, i, j):
-        self.i = i
-        self.j = j
+    def __init__(self, dim_i, dim_j):
+        self.dim_i = i
+        self.dim_j = j
+
+    def apply(self, arr):
+        slices = []
+        for ind in range(arr.shape[self.dim_i]):
+            i_slice = np.take(arr, ind, axis=self.dim_i)
+            roll_dim = self.dim_j if self.dim_j < self.dim_i else self.dim_j - 1
+            perm_i_slice = np.roll(i_slice, ind, axis=roll_dim)
+            slices.append(perm_i_slice)
+
+        return np.stack(slices, axis=self.dim_i)
 
     def __str__(self):
         return "Permute({},{})".format(self.i, self.j)
@@ -271,7 +282,7 @@ class TestWrapper:
             arr = PlaintextArray(self.size, [])
 
         else:
-            raise "unknown type"
+            raise Exception("unknown type")
 
         arr.set([], vec)
         return arr
@@ -284,7 +295,7 @@ class TestWrapper:
             return self.client_arrays[name]
 
         else:
-            raise "party not set"
+            raise Exception("party not set")
 
     def native_array(self, extents: list[list[int]]):
         return NativeArray(self.size, extents)
