@@ -2,7 +2,7 @@ use bimap::BiHashMap;
 
 use crate::{
     circ::{vector_info::VectorInfo, *},
-    scheduling::{ClientPreprocessing, IndexingSiteSchedule},
+    scheduling::{ArrayPreprocessing, IndexingSiteSchedule},
 };
 
 /// general methods for deriving vectors through rotation and masking
@@ -74,7 +74,7 @@ impl VectorDeriver {
         array_shape: &Shape,
         schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
-        preprocessing: Option<ClientPreprocessing>,
+        preprocessing: Option<ArrayPreprocessing>,
         coords: impl Iterator<Item = IndexCoord> + Clone,
         obj_map: &mut IndexCoordinateMap<T>,
         mask_map: &mut IndexCoordinateMap<PlaintextObject>,
@@ -393,7 +393,7 @@ impl VectorDeriver {
         array_shape: &Shape,
         schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
-        preprocessing: Option<ClientPreprocessing>,
+        preprocessing: Option<ArrayPreprocessing>,
         registry: &mut CircuitObjectRegistry,
     ) -> CircuitId
     where

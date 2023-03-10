@@ -16,10 +16,10 @@ fn test_compile(src: &str) {
 
     let array_materializers: Vec<Box<dyn InputArrayMaterializer>> = 
         vec![Box::new(DefaultArrayMaterializer::new())];
-    let materializer =
-        Materializer::new(array_materializers, transformed);
+    let materializer = Materializer::new(array_materializers);
 
-    let res_materialize = materializer.run(&init_schedule);
+    let res_materialize =
+        materializer.run(&transformed, &init_schedule);
     let circuit = res_materialize.unwrap();
     println!("circuit:\n{}", circuit);
 

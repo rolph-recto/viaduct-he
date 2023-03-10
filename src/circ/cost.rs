@@ -1,88 +1,75 @@
 use std::{
-    cmp::max,
-    ops::{Add, Mul},
+    cmp::{max, Ordering},
+    collections::HashMap,
 };
 
-use crate::circ::{IndexCoordinateSystem, ParamCircuitExpr, ParamCircuitProgram, VectorType};
+use crate::{
+    circ::{ParamCircuitExpr, ParamCircuitProgram, VectorType},
+    lang::Operator,
+};
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+use super::{CircuitId, CircuitObjectRegistry};
+
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub struct CostFeatures {
     input_ciphertexts: usize,
     input_plaintexts: usize,
     output_ciphertexts: usize,
-    rotations: usize,
+    ct_rotations: usize,
+    pt_rotations: usize,
     ct_ct_add: usize,
-    pt_ct_add: usize,
+    ct_pt_add: usize,
     pt_pt_add: usize,
-    ct_ct_mult: usize,
-    pt_ct_mult: usize,
-    pt_pt_mult: usize,
+    ct_ct_mul: usize,
+    ct_pt_mul: usize,
+    pt_pt_mul: usize,
     ct_ct_sub: usize,
-    pt_ct_sub: usize,
+    ct_pt_sub: usize,
     pt_pt_sub: usize,
     ct_ct_muldepth: usize,
-    pt_ct_muldepth: usize,
+    ct_pt_muldepth: usize,
 }
 
 impl CostFeatures {
-    fn new() -> Self {
-        CostFeatures {
-            input_ciphertexts: 0,
-            input_plaintexts: 0,
-            output_ciphertexts: 0,
-            rotations: 0,
-            ct_ct_add: 0,
-            pt_ct_add: 0,
-            pt_pt_add: 0,
-            ct_ct_mult: 0,
-            pt_ct_mult: 0,
-            pt_pt_mult: 0,
-            ct_ct_sub: 0,
-            pt_ct_sub: 0,
-            pt_pt_sub: 0,
-            ct_ct_muldepth: 0,
-            pt_ct_muldepth: 0,
-        }
-    }
-
-    fn weighted_cost(&self, weights: &CostFeatures) -> usize {
+    pub fn weighted_cost(&self, weights: &CostFeatures) -> usize {
         let weighted = (*self).weight(*weights);
         weighted.input_ciphertexts
             + weighted.input_plaintexts
             + weighted.output_ciphertexts
-            + weighted.rotations
+            + weighted.pt_rotations
             + weighted.ct_ct_add
-            + weighted.pt_ct_add
+            + weighted.ct_pt_add
             + weighted.pt_pt_add
-            + weighted.ct_ct_mult
-            + weighted.pt_ct_mult
-            + weighted.pt_pt_mult
+            + weighted.ct_ct_mul
+            + weighted.ct_pt_mul
+            + weighted.pt_pt_mul
             + weighted.ct_ct_sub
-            + weighted.pt_ct_sub
+            + weighted.ct_pt_sub
             + weighted.pt_pt_sub
             + weighted.ct_ct_muldepth
-            + weighted.pt_ct_muldepth
+            + weighted.ct_pt_muldepth
     }
 
     /// because this operation is meant for combining features of subexprs,
     /// everything is pointwise *except* for muldepth, of which max is taken
-    pub fn combine(self, other: Self) -> Self {
+    pub fn combine(&self, other: &Self) -> Self {
         CostFeatures {
             input_ciphertexts: self.input_ciphertexts + other.input_ciphertexts,
             input_plaintexts: self.input_plaintexts + other.input_plaintexts,
             output_ciphertexts: self.output_ciphertexts + other.output_ciphertexts,
-            rotations: self.rotations + other.rotations,
+            ct_rotations: self.ct_rotations + other.ct_rotations,
+            pt_rotations: self.pt_rotations + other.pt_rotations,
             ct_ct_add: self.ct_ct_add + other.ct_ct_add,
-            pt_ct_add: self.pt_ct_add + other.pt_ct_add,
+            ct_pt_add: self.ct_pt_add + other.ct_pt_add,
             pt_pt_add: self.pt_pt_add + other.pt_pt_add,
-            ct_ct_mult: self.ct_ct_mult + other.ct_ct_mult,
-            pt_ct_mult: self.pt_ct_mult + other.pt_ct_mult,
-            pt_pt_mult: self.pt_pt_mult + other.pt_pt_mult,
+            ct_ct_mul: self.ct_ct_mul + other.ct_ct_mul,
+            ct_pt_mul: self.ct_pt_mul + other.ct_pt_mul,
+            pt_pt_mul: self.pt_pt_mul + other.pt_pt_mul,
             ct_ct_sub: self.ct_ct_sub + other.ct_ct_sub,
-            pt_ct_sub: self.pt_ct_sub + other.pt_ct_sub,
+            ct_pt_sub: self.ct_pt_sub + other.ct_pt_sub,
             pt_pt_sub: self.pt_pt_sub + other.pt_pt_sub,
             ct_ct_muldepth: max(self.ct_ct_muldepth, other.ct_ct_muldepth),
-            pt_ct_muldepth: max(self.pt_ct_muldepth, other.pt_ct_muldepth),
+            ct_pt_muldepth: max(self.ct_pt_muldepth, other.ct_pt_muldepth),
         }
     }
 
@@ -91,210 +78,241 @@ impl CostFeatures {
             input_ciphertexts: self.input_ciphertexts * other.input_ciphertexts,
             input_plaintexts: self.input_plaintexts * other.input_plaintexts,
             output_ciphertexts: self.output_ciphertexts * other.output_ciphertexts,
-            rotations: self.rotations * other.rotations,
+            ct_rotations: self.ct_rotations * other.ct_rotations,
+            pt_rotations: self.pt_rotations * other.pt_rotations,
             ct_ct_add: self.ct_ct_add * other.ct_ct_add,
-            pt_ct_add: self.pt_ct_add * other.pt_ct_add,
+            ct_pt_add: self.ct_pt_add * other.ct_pt_add,
             pt_pt_add: self.pt_pt_add * other.pt_pt_add,
-            ct_ct_mult: self.ct_ct_mult * other.ct_ct_mult,
-            pt_ct_mult: self.pt_ct_mult * other.pt_ct_mult,
-            pt_pt_mult: self.pt_pt_mult * other.pt_pt_mult,
+            ct_ct_mul: self.ct_ct_mul * other.ct_ct_mul,
+            ct_pt_mul: self.ct_pt_mul * other.ct_pt_mul,
+            pt_pt_mul: self.pt_pt_mul * other.pt_pt_mul,
             ct_ct_sub: self.ct_ct_sub * other.ct_ct_sub,
-            pt_ct_sub: self.pt_ct_sub * other.pt_ct_sub,
+            ct_pt_sub: self.ct_pt_sub * other.ct_pt_sub,
             pt_pt_sub: self.pt_pt_sub * other.pt_pt_sub,
             ct_ct_muldepth: self.ct_ct_muldepth * other.ct_ct_muldepth,
-            pt_ct_muldepth: self.pt_ct_muldepth * other.pt_ct_muldepth,
+            ct_pt_muldepth: self.ct_pt_muldepth * other.ct_pt_muldepth,
         }
     }
 }
 
-impl Default for CostFeatures {
-    fn default() -> Self {
-        Self {
-            input_ciphertexts: 0,
-            input_plaintexts: 0,
-            output_ciphertexts: 0,
-            rotations: 0,
-            ct_ct_add: 0,
-            pt_ct_add: 0,
-            pt_pt_add: 0,
-            ct_ct_mult: 0,
-            pt_ct_mult: 0,
-            pt_pt_mult: 0,
-            ct_ct_sub: 0,
-            pt_ct_sub: 0,
-            pt_pt_sub: 0,
-            ct_ct_muldepth: 0,
-            pt_ct_muldepth: 0,
+impl PartialOrd for CostFeatures {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        let pairs = vec![
+            (self.input_ciphertexts, other.input_ciphertexts),
+            (self.input_plaintexts, other.input_plaintexts),
+            (self.output_ciphertexts, other.output_ciphertexts),
+            (self.ct_rotations, other.ct_rotations),
+            (self.pt_rotations, other.pt_rotations),
+            (self.ct_ct_add, other.ct_ct_add),
+            (self.ct_pt_add, other.ct_pt_add),
+            (self.pt_pt_add, other.pt_pt_add),
+            (self.ct_ct_sub, other.ct_ct_sub),
+            (self.ct_pt_sub, other.ct_pt_sub),
+            (self.pt_pt_sub, other.pt_pt_sub),
+            (self.ct_ct_mul, other.ct_ct_mul),
+            (self.ct_pt_mul, other.ct_pt_mul),
+            (self.pt_pt_mul, other.pt_pt_mul),
+            (self.ct_ct_muldepth, other.ct_ct_muldepth),
+            (self.ct_pt_muldepth, other.ct_pt_muldepth)
+        ];
+
+        let less = pairs.iter().all(|(s, o)| s < o);
+        let equal = pairs.iter().all(|(s, o)| s == o);
+        let greater = pairs.iter().all(|(s, o)| s > o);
+
+        if less {
+            Some(Ordering::Less)
+
+        } else if equal {
+            Some(Ordering::Equal)
+
+        } else if greater {
+            Some(Ordering::Greater)
+
+        } else {
+            None
         }
     }
 }
 
 /// estimate cost of an param circuit program
-pub struct CostEstimator {}
+#[derive(Default)]
+pub struct CostEstimator;
 
 impl CostEstimator {
-    pub fn new() -> Self {
-        CostEstimator {}
-    }
+    pub fn estimate_cost(&self, program: &ParamCircuitProgram) -> CostFeatures {
+        let mut cost: CostFeatures =
+            program.native_expr_list.iter()
+            .chain(program.circuit_expr_list.iter())
+            .fold(CostFeatures::default(), |acc, (_, dims, id)| {
+                let multiplicity =  
+                    dims.iter().fold(1, |acc, (_, extent)| acc * extent);
 
-    // TODO finish
-    pub fn estimate_cost(&self, program: &ParamCircuitProgram) -> Result<CostFeatures, String> {
-        Ok(CostFeatures::default())
-        /*
-        if let ExprScheduleType::Specific(schedule) = &program.schedule {
-            let coord_system = IndexCoordinateSystem::new(schedule.exploded_dims.iter());
-            let (vec_type, mult, mut cost) = self.estimate_cost_expr(&program.expr, &coord_system);
+                let (_, cost) =
+                    self.estimate_cost_expr(
+                        *id,
+                        multiplicity,
+                        &program.registry, 
+                        &mut HashMap::new()
+                    );
 
-            if let VectorType::Ciphertext = vec_type {
-                cost.input_ciphertexts = program.registry.get_ct_objects().len();
-                cost.input_plaintexts = program.registry.get_pt_objects().len();
-                cost.output_ciphertexts = mult;
-                Ok(cost)
+                acc.combine(&cost)
+            });
 
-            } else {
-                Err("Cannot estimate cost of plaintext computation".to_string())
-            }
+        let (output_dims, _) = program.output_circuit();
+        let output_multiplicity =
+            output_dims.iter()
+            .fold(1, |acc, (_, extent)| acc * extent);
 
-        } else {
-            Err("Cannot estimate cost of literal expression".to_string())
-        }
-        */
+        cost.input_ciphertexts += program.registry.get_ciphertext_input_vectors(None).len();
+        cost.input_plaintexts += program.registry.get_plaintext_input_vectors(None).len();
+        cost.input_plaintexts += program.registry.get_constants(None, None).len();
+        cost.input_plaintexts += program.registry.get_masks(None).len();
+        cost.output_ciphertexts += output_multiplicity;
+
+        cost
     }
 
     // TODO finish
     fn estimate_cost_expr(
         &self,
-        expr: &ParamCircuitExpr,
-        coord_system: &IndexCoordinateSystem,
-    ) -> (VectorType, usize, CostFeatures) {
-        (
-            VectorType::Ciphertext,
-            coord_system.multiplicity(),
-            CostFeatures::new(),
-        )
-        /*
-        match expr {
+        id: CircuitId,
+        multiplicity: usize,
+        registry: &CircuitObjectRegistry,
+        cost_map: &mut HashMap<CircuitId, (VectorType, CostFeatures)>,
+    ) -> (VectorType, CostFeatures) {
+        if cost_map.contains_key(&id) {
+            return cost_map[&id]
+        }
+
+        match registry.get_circuit(id) {
             ParamCircuitExpr::CiphertextVar(_) => {
-                (VectorType::Ciphertext, coord_system.multiplicity(), CostFeatures::new())
+                let cost = CostFeatures::default();
+                cost_map.insert(id, (VectorType::Plaintext, cost));
+                (VectorType::Ciphertext, cost)
             },
 
-            ParamCircuitExpr::PlaintextVar(_) => {
-                (VectorType::Plaintext, coord_system.multiplicity(), CostFeatures::new())
-            },
-
+            ParamCircuitExpr::PlaintextVar(_) |
             ParamCircuitExpr::Literal(_) => {
-                (VectorType::Plaintext, coord_system.multiplicity(), CostFeatures::new())
+                let cost = CostFeatures::default();
+                cost_map.insert(id, (VectorType::Plaintext, cost));
+                (VectorType::Plaintext, cost)
             },
 
-            ParamCircuitExpr::Op(op, expr1, expr2) => {
-                let (type1, mult1, cost1) = self.estimate_cost_expr(expr1, coord_system);
-                let (type2, mult2, cost2) = self.estimate_cost_expr(expr2, coord_system);
-                assert!(mult1 == mult2);
+            ParamCircuitExpr::Op(op, id1, id2) => {
+                let (type1, cost1) =
+                    self.estimate_cost_expr(*id1, multiplicity, registry, cost_map);
 
-                let mut out_cost = CostFeatures::new();
-                let out_type =
+                let (type2, cost2) =
+                    self.estimate_cost_expr(*id2, multiplicity, registry, cost_map);
+
+                let mut cost = cost1.combine(&cost2);
+                let node_type =
                     match (op, type1, type2) {
                         (Operator::Add, VectorType::Ciphertext, VectorType::Ciphertext) => {
-                            out_cost.ct_ct_add = mult1;
+                            cost.ct_ct_add += multiplicity;
                             VectorType::Ciphertext
                         },
 
                         (Operator::Add, VectorType::Ciphertext, VectorType::Plaintext) |
                         (Operator::Add, VectorType::Plaintext, VectorType::Ciphertext) => {
-                            out_cost.pt_ct_add = mult1;
+                            cost.ct_pt_add += multiplicity;
                             VectorType::Ciphertext
                         },
 
                         (Operator::Add, VectorType::Plaintext, VectorType::Plaintext) => {
-                            out_cost.pt_pt_add = mult1;
+                            cost.pt_pt_add += multiplicity;
                             VectorType::Plaintext
                         },
 
                         (Operator::Sub, VectorType::Ciphertext, VectorType::Ciphertext) => {
-                            out_cost.ct_ct_sub = mult1;
+                            cost.ct_ct_sub += multiplicity;
                             VectorType::Ciphertext
                         },
 
                         (Operator::Sub, VectorType::Ciphertext, VectorType::Plaintext) |
                         (Operator::Sub, VectorType::Plaintext, VectorType::Ciphertext) => {
-                            out_cost.pt_ct_sub = mult1;
+                            cost.ct_pt_sub += multiplicity;
                             VectorType::Ciphertext
                         },
 
                         (Operator::Sub, VectorType::Plaintext, VectorType::Plaintext) => {
-                            out_cost.pt_pt_sub = mult1;
+                            cost.pt_pt_sub += multiplicity;
                             VectorType::Plaintext
                         },
 
                         (Operator::Mul, VectorType::Ciphertext, VectorType::Ciphertext) => {
-                            out_cost.ct_ct_sub = mult1;
-                            out_cost.ct_ct_muldepth = max(cost1.ct_ct_muldepth, cost2.ct_ct_muldepth) + 1;
+                            cost.ct_ct_mul += multiplicity;
                             VectorType::Ciphertext
                         },
 
                         (Operator::Mul, VectorType::Ciphertext, VectorType::Plaintext) |
                         (Operator::Mul, VectorType::Plaintext, VectorType::Ciphertext) => {
-                            out_cost.pt_ct_sub = mult1;
-                            out_cost.pt_ct_muldepth = max(cost1.pt_ct_muldepth, cost2.pt_ct_muldepth) + 1;
+                            cost.ct_pt_mul += multiplicity;
                             VectorType::Ciphertext
                         },
 
                         (Operator::Mul, VectorType::Plaintext, VectorType::Plaintext) => {
-                            out_cost.pt_pt_mult = mult1;
+                            cost.pt_pt_mul += multiplicity;
                             VectorType::Plaintext
-                        }
+                        },
                     };
 
-                (out_type, mult1, cost1.combine(cost2).combine(out_cost))
+                cost_map.insert(id, (node_type, cost));
+                (node_type, cost)
             },
 
-            ParamCircuitExpr::Rotate(_, body) => {
-                let (body_type, body_mult, body_cost) = self.estimate_cost_expr(body, coord_system);
-                let mut out_cost = CostFeatures::new();
-                out_cost.rotations = body_mult;
-                (body_type, body_mult, body_cost.combine(out_cost))
-            },
+            ParamCircuitExpr::Rotate(_, body_id) => {
+                let (body_type, body_cost) =
+                    self.estimate_cost_expr(*body_id, multiplicity, registry, cost_map);
 
-            ParamCircuitExpr::ReduceVectors(_, extent, op, body) => {
-                let (body_type, body_mult, body_cost) = self.estimate_cost_expr(body, coord_system);
-                let out_mult = body_mult / extent;
-                let mut out_cost = CostFeatures::new();
-
-                match (op, body_type) {
-                    (Operator::Add, VectorType::Ciphertext) => {
-                        out_cost.ct_ct_add = out_mult * (extent - 1);
+                let mut cost = body_cost;
+                match body_type {
+                    VectorType::Ciphertext => {
+                        cost.ct_rotations += multiplicity;
                     },
-
-                    (Operator::Add, VectorType::Plaintext) => {
-                        out_cost.pt_pt_add = out_mult * (extent - 1);
-                    },
-
-                    (Operator::Sub, VectorType::Ciphertext) => {
-                        out_cost.ct_ct_sub  = out_mult * (extent - 1);
-                    },
-
-                    (Operator::Sub, VectorType::Plaintext) => {
-                        out_cost.pt_pt_add = out_mult * (extent - 1);
-                    },
-
-                    (Operator::Mul, VectorType::Ciphertext) => {
-                        out_cost.ct_ct_mult = out_mult * (extent - 1);
-
-                        // compilation of reduction will try to create a
-                        // balanced tree of mults, so there is only log-factor
-                        // addition to muldepth
-                        out_cost.ct_ct_muldepth = ((extent - 1) as f64).log2() as usize;
-                    },
-
-                    (Operator::Mul, VectorType::Plaintext) => {
-                        out_cost.pt_pt_mult = out_mult * (extent - 1);
+                    VectorType::Plaintext => {
+                        cost.pt_rotations += multiplicity;
                     }
                 }
 
-                (body_type, out_mult, body_cost.combine(out_cost))
+                (body_type, cost)
+            },
+
+            ParamCircuitExpr::ReduceDim(_, extent, op, body_id) => {
+                let (body_type, body_cost) =
+                    self.estimate_cost_expr(*body_id, extent * multiplicity, registry, cost_map);
+
+                let mut cost = body_cost;
+                match (op, body_type) {
+                    (Operator::Add, VectorType::Ciphertext) => {
+                        cost.ct_ct_add += extent - 1;
+                    },
+
+                    (Operator::Add, VectorType::Plaintext) => {
+                        cost.pt_pt_add += extent - 1;
+                    },
+
+                    (Operator::Sub, VectorType::Ciphertext) => {
+                        cost.pt_pt_add += extent - 1;
+                    },
+                    
+                    (Operator::Sub, VectorType::Plaintext) => {
+                        cost.pt_pt_sub += extent - 1;
+                    },
+
+                    (Operator::Mul, VectorType::Ciphertext) => {
+                        cost.ct_ct_mul += extent - 1;
+                    },
+
+                    (Operator::Mul, VectorType::Plaintext) => {
+                        cost.pt_pt_mul += extent - 1;
+                    },
+                }
+
+                (body_type, cost)
             },
         }
-        */
     }
 }
 
@@ -323,18 +341,19 @@ mod tests {
 
         assert!(res.is_ok());
 
-        let tprogram = res.unwrap();
-        let init_schedule = Schedule::gen_initial_schedule(&tprogram);
+        let inlined = res.unwrap();
+        let init_schedule = Schedule::gen_initial_schedule(&inlined);
 
-        let materializer = Materializer::new(vec![Box::new(DummyArrayMaterializer {})], tprogram);
+        let materializer = Materializer::new(vec![Box::new(DummyArrayMaterializer {})]);
 
-        let res_mat = materializer.run(&init_schedule);
+        let res_mat =
+            materializer.run(&inlined, &init_schedule);
+
         assert!(res_mat.is_ok());
 
         let param_circ = res_mat.unwrap();
-        let res_cost = CostEstimator::new().estimate_cost(&param_circ);
-        assert!(res_cost.is_ok());
-        println!("{:?}", res_cost.unwrap());
+        let cost = CostEstimator::default().estimate_cost(&param_circ);
+        println!("{:?}", cost);
     }
 
     #[test]

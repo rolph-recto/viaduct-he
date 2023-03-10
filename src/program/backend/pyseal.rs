@@ -10,7 +10,7 @@ use serde::Serialize;
 use crate::{
     program::*,
     lang::Operator,
-    scheduling::ClientPreprocessing,
+    scheduling::ArrayPreprocessing,
     circ::vector_info::VectorDimContent
 };
 
@@ -784,7 +784,7 @@ impl SEALLowering {
         let preprocess_str = 
             if let Some(preprocess) = vector.preprocessing {
                 match preprocess {
-                    ClientPreprocessing::Permute(i, j) => {
+                    ArrayPreprocessing::Permute(i, j) => {
                         format!("Permute({},{})", i, j)
                     }
                 }

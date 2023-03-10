@@ -13,67 +13,67 @@ use super::source::{IndexExpr, SourceExpr};
 
 /// expression with associated data about lowering to an index-free representation
 #[derive(Clone, Debug)]
-pub enum TransformedExpr {
-    ReduceNode(usize, Operator, Box<TransformedExpr>),
-    Op(Operator, Box<TransformedExpr>, Box<TransformedExpr>),
+pub enum InlinedExpr {
+    ReduceNode(usize, Operator, Box<InlinedExpr>),
+    Op(Operator, Box<InlinedExpr>, Box<InlinedExpr>),
     Literal(isize),
     ExprRef(IndexingId, ArrayTransform),
 }
 
-impl TransformedExpr {
+impl InlinedExpr {
     pub fn get_indexed_arrays(&self) -> HashSet<ArrayName> {
         match self {
-            TransformedExpr::ReduceNode(_, _, body) => body.get_indexed_arrays(),
+            InlinedExpr::ReduceNode(_, _, body) => body.get_indexed_arrays(),
 
-            TransformedExpr::Op(_, expr1, expr2) => {
+            InlinedExpr::Op(_, expr1, expr2) => {
                 let mut sites1 = expr1.get_indexed_arrays();
                 let sites2 = expr2.get_indexed_arrays();
                 sites1.extend(sites2);
                 sites1
             }
 
-            TransformedExpr::Literal(_) => HashSet::new(),
+            InlinedExpr::Literal(_) => HashSet::new(),
 
-            TransformedExpr::ExprRef(_, transform) => HashSet::from([transform.array.clone()]),
+            InlinedExpr::ExprRef(_, transform) => HashSet::from([transform.array.clone()]),
         }
     }
 
     pub fn get_indexing_sites(&self) -> HashMap<IndexingId, ArrayTransform> {
         match self {
-            TransformedExpr::ReduceNode(_, _, body) => body.get_indexing_sites(),
+            InlinedExpr::ReduceNode(_, _, body) => body.get_indexing_sites(),
 
-            TransformedExpr::Op(_, expr1, expr2) => {
+            InlinedExpr::Op(_, expr1, expr2) => {
                 let mut sites1 = expr1.get_indexing_sites();
                 let sites2 = expr2.get_indexing_sites();
                 sites1.extend(sites2);
                 sites1
             }
 
-            TransformedExpr::Literal(_) => HashMap::new(),
+            InlinedExpr::Literal(_) => HashMap::new(),
 
-            TransformedExpr::ExprRef(indexing_id, transform) => {
+            InlinedExpr::ExprRef(indexing_id, transform) => {
                 HashMap::from([(indexing_id.clone(), transform.clone())])
             }
         }
     }
 }
 
-impl Display for TransformedExpr {
+impl Display for InlinedExpr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TransformedExpr::ReduceNode(dim, op, body) => {
+            InlinedExpr::ReduceNode(dim, op, body) => {
                 write!(f, "reduce({}, {}, {})", dim, op, body)
             }
 
-            TransformedExpr::Op(op, expr1, expr2) => {
+            InlinedExpr::Op(op, expr1, expr2) => {
                 write!(f, "({} {} {})", expr1, op, expr2)
             }
 
-            TransformedExpr::ExprRef(indexing_id, transform) => {
+            InlinedExpr::ExprRef(indexing_id, transform) => {
                 write!(f, "expr({}, {})", indexing_id, transform)
             }
 
-            TransformedExpr::Literal(lit) => {
+            InlinedExpr::Literal(lit) => {
                 write!(f, "{}", lit)
             }
         }
@@ -82,12 +82,12 @@ impl Display for TransformedExpr {
 
 pub type ArrayDim = (IndexingId, DimIndex);
 
-pub struct TransformedProgram {
+pub struct InlinedProgram {
     pub input_map: IndexMap<ArrayName, (Shape, ArrayType)>,
-    pub expr_map: IndexMap<ArrayName, TransformedExpr>,
+    pub expr_map: IndexMap<ArrayName, InlinedExpr>,
 }
 
-impl TransformedProgram {
+impl InlinedProgram {
     pub fn is_expr(&self, array: &ArrayName) -> bool {
         self.expr_map.contains_key(array)
     }
@@ -96,7 +96,7 @@ impl TransformedProgram {
         self.input_map.contains_key(array)
     }
 
-    pub fn get_output_expr(&self) -> &TransformedExpr {
+    pub fn get_output_expr(&self) -> &InlinedExpr {
         &self.expr_map.get(OUTPUT_EXPR_NAME).unwrap()
     }
 
@@ -143,17 +143,17 @@ impl TransformedProgram {
     /// generate equality constraints about which dimensions should be considered the same
     fn compute_dim_equalities(
         &self,
-        expr: &TransformedExpr,
+        expr: &InlinedExpr,
     ) -> (Vec<(ArrayDim, ArrayDim)>, Vec<ArrayDim>) {
         match expr {
-            TransformedExpr::ReduceNode(reduced_index, _, body) => {
+            InlinedExpr::ReduceNode(reduced_index, _, body) => {
                 let (eq_body, mut body_dims) = self.compute_dim_equalities(body);
                 assert!(body_dims.len() > 0);
                 body_dims.remove(*reduced_index);
                 (eq_body, body_dims)
             }
 
-            TransformedExpr::Op(_, expr1, expr2) => {
+            InlinedExpr::Op(_, expr1, expr2) => {
                 let (mut eqs1, dims1) = self.compute_dim_equalities(expr1);
                 let (eqs2, dims2) = self.compute_dim_equalities(expr2);
                 let (len1, len2) = (dims1.len(), dims2.len());
@@ -173,9 +173,9 @@ impl TransformedProgram {
                 }
             }
 
-            TransformedExpr::Literal(_) => (vec![], vec![]),
+            InlinedExpr::Literal(_) => (vec![], vec![]),
 
-            TransformedExpr::ExprRef(indexing_id, transform) => {
+            InlinedExpr::ExprRef(indexing_id, transform) => {
                 let input_dims: Vec<ArrayDim> = (0..transform.dims.len())
                     .map(|i| (indexing_id.clone(), i))
                     .collect();
@@ -186,7 +186,7 @@ impl TransformedProgram {
     }
 }
 
-impl Display for TransformedProgram {
+impl Display for InlinedProgram {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.input_map
             .iter()
@@ -394,7 +394,7 @@ impl IndexElimination {
         expr: &SourceExpr,
         output_transform: &ArrayTransform,
         path_ctx: &PathContext,
-    ) -> Result<TransformedExpr, String> {
+    ) -> Result<InlinedExpr, String> {
         match expr {
             SourceExpr::For(index, extent, body) => {
                 let new_path_ctx = PathContext::new(
@@ -432,10 +432,10 @@ impl IndexElimination {
                     output_transform,
                     path_ctx,
                 )?;
-                Ok(TransformedExpr::Op(*op, Box::new(res1), Box::new(res2)))
+                Ok(InlinedExpr::Op(*op, Box::new(res1), Box::new(res2)))
             }
 
-            SourceExpr::Literal(num) => Ok(TransformedExpr::Literal(*num)),
+            SourceExpr::Literal(num) => Ok(InlinedExpr::Literal(*num)),
 
             SourceExpr::Reduce(op, body) => {
                 let new_path_ctx = PathContext::new(
@@ -452,7 +452,7 @@ impl IndexElimination {
 
                 // index of reduced dim should always 0
                 // this invariant is enforced by the Indexing case
-                Ok(TransformedExpr::ReduceNode(0, *op, Box::new(body_res)))
+                Ok(InlinedExpr::ReduceNode(0, *op, Box::new(body_res)))
             }
 
             // this should compute a new output shape for the indexed array
@@ -628,7 +628,7 @@ impl IndexElimination {
                     Ok(transformed_indexed_expr)
                 } else {
                     // don't inline
-                    Ok(TransformedExpr::ExprRef(
+                    Ok(InlinedExpr::ExprRef(
                         indexing_id.clone(),
                         indexed_transform,
                     ))
@@ -642,10 +642,10 @@ impl IndexElimination {
         inline_set: &HashSet<IndexingId>,
         array_group_map: &HashMap<IndexingId, ArrayName>,
         program: ElaboratedProgram,
-    ) -> Result<TransformedProgram, String> {
+    ) -> Result<InlinedProgram, String> {
         self.compute_shape_program(&program);
 
-        let mut expr_map: IndexMap<ArrayName, TransformedExpr> = IndexMap::new();
+        let mut expr_map: IndexMap<ArrayName, InlinedExpr> = IndexMap::new();
         let mut worklist: Vec<String> = vec![String::from(OUTPUT_EXPR_NAME)];
 
         while worklist.len() > 0 {
@@ -678,7 +678,7 @@ impl IndexElimination {
         // so reverse the insertion order to get the program order
         expr_map.reverse();
 
-        let transformed_program = TransformedProgram {
+        let transformed_program = InlinedProgram {
             input_map: program.input_map,
             expr_map,
         };

@@ -5,12 +5,12 @@ import numpy as np
 from time import time
 
 
-class ClientPreprocessing:
+class ArrayPreprocessing:
     def apply(self, arr):
         raise NotImplemented
 
 
-class Permute(ClientPreprocessing):
+class PermuteDims(ArrayPreprocessing):
     def __init__(self, dim_i, dim_j):
         self.dim_i = dim_i
         self.dim_j = dim_j

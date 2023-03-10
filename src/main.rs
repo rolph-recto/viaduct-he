@@ -89,16 +89,17 @@ fn main() {
     info!("index elimination...");
     let res_index_elim = IndexElimination::new().run(&inline_set, &array_group_map, elaborated);
 
-    let transformed = res_index_elim.unwrap();
-    let init_schedule = Schedule::gen_initial_schedule(&transformed);
+    let inlined = res_index_elim.unwrap();
+    let init_schedule = Schedule::gen_initial_schedule(&inlined);
 
     info!("materialization...");
     let array_materializers: Vec<Box<dyn InputArrayMaterializer>> = 
         vec![Box::new(DefaultArrayMaterializer::new())];
-    let materializer =
-        Materializer::new(array_materializers, transformed);
+    let materializer = Materializer::new(array_materializers);
 
-    let res_materialize = materializer.run(&init_schedule);
+    let res_materialize =
+        materializer.run(&inlined, &init_schedule);
+
     let circuit = res_materialize.unwrap();
 
     // TODO add optimizer

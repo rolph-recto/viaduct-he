@@ -850,6 +850,15 @@ pub struct ParamCircuitProgram {
 }
 
 impl ParamCircuitProgram {
+    pub fn output_circuit(&self) -> (Vec<(DimName, Extent)>, CircuitId) {
+        let (_, dims, id) =
+            self.circuit_expr_list.iter()
+            .find(|(name, _, _)| name == OUTPUT_EXPR_NAME)
+            .unwrap();
+
+        (dims.clone(), *id)
+    }
+
     pub fn to_opt_circuit(&self) -> (Vec<RecExpr<HEOptCircuit>>, HECostContext) {
         // only run optimization *before* partial evaluation
         assert!(self.native_expr_list.len() == 0);

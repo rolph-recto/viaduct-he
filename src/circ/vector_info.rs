@@ -135,7 +135,7 @@ impl VectorDimContent {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct VectorInfo {
     pub array: ArrayName,
-    pub preprocessing: Option<ClientPreprocessing>,
+    pub preprocessing: Option<ArrayPreprocessing>,
     pub offset_map: OffsetMap<isize>,
     pub dims: im::Vector<VectorDimContent>,
 }
@@ -269,7 +269,7 @@ impl VectorInfo {
         shape: &Shape,
         schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
-        preprocessing: Option<ClientPreprocessing>,
+        preprocessing: Option<ArrayPreprocessing>,
     ) -> Self {
         let offset_env = OffsetEnvironment::new(index_map);
 
@@ -306,7 +306,7 @@ impl VectorInfo {
         shape: &Shape,
         schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
-        preprocessing: Option<ClientPreprocessing>,
+        preprocessing: Option<ArrayPreprocessing>,
     ) -> CircuitValue<VectorInfo> {
         if !coord_system.is_empty() {
             let mut coord_map = IndexCoordinateMap::from_coord_system(coord_system);
@@ -340,7 +340,7 @@ impl VectorInfo {
         array: ArrayName,
         index_map: HashMap<DimName, usize>,
         expr_schedule: &ExprSchedule,
-        preprocessing: Option<ClientPreprocessing>,
+        preprocessing: Option<ArrayPreprocessing>,
     ) -> Self {
         let transform = ArrayTransform::from_shape(array, &expr_schedule.shape);
 

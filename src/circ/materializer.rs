@@ -1,13 +1,15 @@
-use std::collections::{HashMap, HashSet};
+use std::{collections::{HashMap, HashSet}};
 
 use crate::{
     circ::{vector_deriver::VectorDeriver, vector_info::VectorInfo, *},
-    lang::index_elim::{TransformedExpr, TransformedProgram},
+    lang::index_elim::{InlinedExpr, InlinedProgram},
     scheduling::*,
     util,
 };
 
 pub trait InputArrayMaterializer {
+    fn create(&self) -> Box<dyn InputArrayMaterializer>;
+
     fn can_materialize(
         &self,
         array_type: ArrayType,
@@ -26,10 +28,28 @@ pub trait InputArrayMaterializer {
     ) -> CircuitId;
 }
 
+pub struct MaterializerFactory {
+    array_materializers: Vec<Box<dyn InputArrayMaterializer>>,
+}
+
+impl MaterializerFactory {
+    pub fn new(array_materializers: Vec<Box<dyn InputArrayMaterializer>>) -> Self {
+        Self { array_materializers }
+    }
+
+    pub fn create(&self) -> Materializer {
+        let amats: Vec<Box<dyn InputArrayMaterializer>> =
+            self.array_materializers.iter().map(|amat| {
+                amat.create()
+            }).collect();
+
+        Materializer::new(amats)
+    }
+}
+
 /// materializes a schedule for an index-free program.
 pub struct Materializer {
     array_materializers: Vec<Box<dyn InputArrayMaterializer>>,
-    program: TransformedProgram,
     registry: CircuitObjectRegistry,
     expr_circuit_map: HashMap<ArrayName, CircuitId>,
     expr_schedule_map: HashMap<ArrayName, ExprScheduleType>,
@@ -37,13 +57,9 @@ pub struct Materializer {
 }
 
 impl Materializer {
-    pub fn new(
-        array_materializers: Vec<Box<dyn InputArrayMaterializer>>,
-        program: TransformedProgram,
-    ) -> Self {
+    pub fn new(array_materializers: Vec<Box<dyn InputArrayMaterializer>>) -> Self {
         Materializer {
             array_materializers,
-            program,
             registry: CircuitObjectRegistry::new(),
             expr_circuit_map: HashMap::new(),
             expr_schedule_map: HashMap::new(),
@@ -52,12 +68,16 @@ impl Materializer {
     }
 
     /// packages the materialized expr with the vector registry
-    pub fn run(mut self, schedule: &Schedule) -> Result<ParamCircuitProgram, String> {
+    pub fn run(
+        mut self,
+        program: &InlinedProgram,
+        schedule: &Schedule
+    ) -> Result<ParamCircuitProgram, String> {
         let mut circuit_list: Vec<(String, Vec<(DimName, Extent)>, CircuitId)> = vec![];
 
         // need to clone expr_map here because the iteration through it is mutating
-        let expr_list: Vec<(ArrayName, TransformedExpr)> = self
-            .program
+        let expr_list: Vec<(ArrayName, InlinedExpr)> = 
+            program
             .expr_map
             .iter()
             .map(|(array, expr)| (array.clone(), expr.clone()))
@@ -67,7 +87,7 @@ impl Materializer {
             .into_iter()
             .try_for_each(|(array, expr)| -> Result<(), String> {
                 let (expr_schedule, array_type, circuit_id) =
-                    self.materialize_expr(&expr, schedule)?;
+                    self.materialize_expr(program, &expr, schedule)?;
 
                 let dims = match &expr_schedule {
                     ExprScheduleType::Any => vec![],
@@ -133,11 +153,12 @@ impl Materializer {
 
     fn materialize_expr(
         &mut self,
-        expr: &TransformedExpr,
+        program: &InlinedProgram,
+        expr: &InlinedExpr,
         schedule: &Schedule,
     ) -> Result<(ExprScheduleType, ArrayType, CircuitId), String> {
         match expr {
-            TransformedExpr::Literal(lit) => {
+            InlinedExpr::Literal(lit) => {
                 let sched_lit = Schedule::schedule_literal()?;
                 let circuit_id = self
                     .registry
@@ -145,9 +166,13 @@ impl Materializer {
                 Ok((sched_lit, ArrayType::Plaintext, circuit_id))
             }
 
-            TransformedExpr::Op(op, expr1, expr2) => {
-                let (sched1, type1, id1) = self.materialize_expr(expr1, schedule)?;
-                let (sched2, type2, id2) = self.materialize_expr(expr2, schedule)?;
+            InlinedExpr::Op(op, expr1, expr2) => {
+                let (sched1, type1, id1) =
+                    self.materialize_expr(program, expr1, schedule)?;
+
+                let (sched2, type2, id2) =
+                    self.materialize_expr(program, expr2, schedule)?;
+
                 let schedule = Schedule::schedule_op(&sched1, &sched2)?;
 
                 let expr = ParamCircuitExpr::Op(op.clone(), id1, id2);
@@ -157,8 +182,9 @@ impl Materializer {
             }
 
             // TODO support client transforms
-            TransformedExpr::ReduceNode(reduced_index, op, body) => {
-                let (body_sched, body_type, mat_body) = self.materialize_expr(body, schedule)?;
+            InlinedExpr::ReduceNode(reduced_index, op, body) => {
+                let (body_sched, body_type, mat_body) =
+                    self.materialize_expr(program, body, schedule)?;
 
                 let schedule = Schedule::schedule_reduce(*reduced_index, &body_sched)?;
 
@@ -222,9 +248,9 @@ impl Materializer {
             }
 
             // TODO this is assumed to be a transformation of an input array
-            TransformedExpr::ExprRef(indexing_id, transform) => {
+            InlinedExpr::ExprRef(indexing_id, transform) => {
                 let schedule = &schedule.schedule_map[indexing_id];
-                if self.program.is_expr(&transform.array) {
+                if program.is_expr(&transform.array) {
                     // indexing an expression
                     let ref_schedule_type = self
                         .expr_schedule_map
@@ -275,7 +301,8 @@ impl Materializer {
                     }
                 } else {
                     // indexing an input array
-                    let (array_shape, array_type) = &self.program.input_map[&transform.array];
+                    let (array_shape, array_type) =
+                        &program.input_map[&transform.array];
 
                     for amat in self.array_materializers.iter_mut() {
                         if amat.can_materialize(*array_type, array_shape, schedule, transform) {
@@ -309,6 +336,10 @@ impl Materializer {
 pub struct DummyArrayMaterializer {}
 
 impl InputArrayMaterializer for DummyArrayMaterializer {
+    fn create(&self) -> Box<dyn InputArrayMaterializer> {
+        Box::new(Self {})
+    }
+
     // the dummy materializer can only materialize arrays w/o client preprocessing
     fn can_materialize(
         &self,
@@ -358,6 +389,10 @@ impl DefaultArrayMaterializer {
 }
 
 impl InputArrayMaterializer for DefaultArrayMaterializer {
+    fn create(&self) -> Box<dyn InputArrayMaterializer> {
+        Box::new(DefaultArrayMaterializer::new())
+    }
+
     /// the default materializer can only apply when there is no client preprocessing
     fn can_materialize(
         &self,
@@ -403,9 +438,7 @@ impl DiagonalArrayMaterializer {
             deriver: VectorDeriver::new(),
         }
     }
-}
 
-impl DiagonalArrayMaterializer {
     // if dim j is an empty dim, then we can apply the "diagonal"
     // trick from Halevi and Schoup for matrix-vector multiplication
     // to do this, follow these steps:
@@ -527,6 +560,10 @@ impl DiagonalArrayMaterializer {
 }
 
 impl InputArrayMaterializer for DiagonalArrayMaterializer {
+    fn create(&self) -> Box<dyn InputArrayMaterializer> {
+        Box::new(DiagonalArrayMaterializer::new())
+    }
+
     fn can_materialize(
         &self,
         _array_type: ArrayType,
@@ -534,7 +571,7 @@ impl InputArrayMaterializer for DiagonalArrayMaterializer {
         schedule: &IndexingSiteSchedule,
         _base: &ArrayTransform,
     ) -> bool {
-        if let Some(ClientPreprocessing::Permute(dim_i, dim_j)) = schedule.preprocessing {
+        if let Some(ArrayPreprocessing::Permute(dim_i, dim_j)) = schedule.preprocessing {
             // dim i must be exploded and dim j must be the outermost vectorized dim
             let i_exploded = schedule
                 .exploded_dims
@@ -576,7 +613,7 @@ impl InputArrayMaterializer for DiagonalArrayMaterializer {
         transform: &ArrayTransform,
         registry: &mut CircuitObjectRegistry,
     ) -> CircuitId {
-        if let Some(ClientPreprocessing::Permute(dim_i, dim_j)) = schedule.preprocessing {
+        if let Some(ArrayPreprocessing::Permute(dim_i, dim_j)) = schedule.preprocessing {
             match (&transform.dims[dim_i], &transform.dims[dim_j]) {
                 // if dim i is empty, then the permutation is a no-op
                 // materialize the schedule normally
@@ -615,7 +652,7 @@ impl InputArrayMaterializer for DiagonalArrayMaterializer {
                             shape,
                             schedule,
                             transform,
-                            Some(ClientPreprocessing::Permute(*idim_i, *idim_j)),
+                            Some(ArrayPreprocessing::Permute(*idim_i, *idim_j)),
                             registry,
                         ),
 
@@ -625,7 +662,7 @@ impl InputArrayMaterializer for DiagonalArrayMaterializer {
                             shape,
                             schedule,
                             transform,
-                            Some(ClientPreprocessing::Permute(*idim_i, *idim_j)),
+                            Some(ArrayPreprocessing::Permute(*idim_i, *idim_j)),
                             registry,
                         ),
                 },
@@ -666,13 +703,13 @@ mod tests {
         scheduling::ScheduleDim,
     };
 
-    fn test_materializer(program: TransformedProgram, schedule: Schedule) -> ParamCircuitProgram {
+    fn test_materializer(program: InlinedProgram, schedule: Schedule) -> ParamCircuitProgram {
         assert!(schedule.is_schedule_valid(&program));
 
-        let materializer =
-            Materializer::new(vec![Box::new(DefaultArrayMaterializer::new())], program);
+        let amats: Vec<Box<dyn InputArrayMaterializer>> = vec![Box::new(DefaultArrayMaterializer::new())];
+        let materializer = Materializer::new(amats);
 
-        let res_mat = materializer.run(&schedule);
+        let res_mat = materializer.run(&program, &schedule);
         assert!(res_mat.is_ok());
 
         let param_circ = res_mat.unwrap();
@@ -1056,7 +1093,7 @@ mod tests {
         };
 
         let schedule = IndexingSiteSchedule {
-            preprocessing: Some(ClientPreprocessing::Permute(0, 1)),
+            preprocessing: Some(ArrayPreprocessing::Permute(0, 1)),
             exploded_dims: im::vector![ScheduleDim {
                 index: 0,
                 stride: 1,
@@ -1105,7 +1142,7 @@ mod tests {
         };
 
         let schedule = IndexingSiteSchedule {
-            preprocessing: Some(ClientPreprocessing::Permute(0, 1)),
+            preprocessing: Some(ArrayPreprocessing::Permute(0, 1)),
             exploded_dims: im::vector![ScheduleDim {
                 index: 0,
                 stride: 1,
@@ -1134,13 +1171,13 @@ mod tests {
 
     #[test]
     fn test_vectorized_reduce() {
-        let program = TransformedProgram {
+        let program = InlinedProgram {
             expr_map: IndexMap::from([(
                 String::from(OUTPUT_EXPR_NAME),
-                TransformedExpr::ReduceNode(
+                InlinedExpr::ReduceNode(
                     1,
                     Operator::Add,
-                    Box::new(TransformedExpr::ExprRef(
+                    Box::new(InlinedExpr::ExprRef(
                         String::from("a1"),
                         ArrayTransform {
                             array: String::from("a"),
@@ -1201,13 +1238,13 @@ mod tests {
 
     #[test]
     fn test_read() {
-        let program = TransformedProgram {
+        let program = InlinedProgram {
             expr_map: IndexMap::from([
                 (
                     String::from("res"),
-                    TransformedExpr::Op(
+                    InlinedExpr::Op(
                         Operator::Add,
-                        Box::new(TransformedExpr::ExprRef(
+                        Box::new(InlinedExpr::ExprRef(
                             String::from("a_1"),
                             ArrayTransform {
                                 array: String::from("a"),
@@ -1226,14 +1263,14 @@ mod tests {
                                 ],
                             },
                         )),
-                        Box::new(TransformedExpr::Literal(3)),
+                        Box::new(InlinedExpr::Literal(3)),
                     ),
                 ),
                 (
                     String::from(OUTPUT_EXPR_NAME),
-                    TransformedExpr::Op(
+                    InlinedExpr::Op(
                         Operator::Add,
-                        Box::new(TransformedExpr::ExprRef(
+                        Box::new(InlinedExpr::ExprRef(
                             String::from("res_1"),
                             ArrayTransform {
                                 array: String::from("res"),
@@ -1252,7 +1289,7 @@ mod tests {
                                 ],
                             },
                         )),
-                        Box::new(TransformedExpr::Literal(2)),
+                        Box::new(InlinedExpr::Literal(2)),
                     ),
                 ),
             ]),

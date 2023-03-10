@@ -3,16 +3,16 @@ use std::{
     fmt::Display,
 };
 
-use egg::RecExpr;
-use gcollections::ops::Bounded;
-
 use crate::{
-    circ::{optimizer::HEOptCircuit, vector_info::VectorInfo, CircuitValue, IndexCoordinateMap},
+    circ::{vector_info::VectorInfo, CircuitValue, IndexCoordinateMap},
     lang::{
-        index_elim::{ArrayDim, TransformedExpr, TransformedProgram},
+        index_elim::{ArrayDim, InlinedExpr, InlinedProgram},
         *,
     },
 };
+
+mod transformer;
+mod scheduler;
 
 // a schedule for a dimension
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -38,24 +38,24 @@ impl Display for ScheduleDim {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub enum ClientPreprocessing {
+pub enum ArrayPreprocessing {
     // TODO add more complicated permutations
     // Permute(i, j) means to permute dim i along dim j
     Permute(DimIndex, DimIndex),
 }
 
-impl Display for ClientPreprocessing {
+impl Display for ArrayPreprocessing {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ClientPreprocessing::Permute(dim_i, dim_j) => write!(f, "permute({},{})", dim_i, dim_j),
+            ArrayPreprocessing::Permute(dim_i, dim_j) => write!(f, "permute({},{})", dim_i, dim_j),
         }
     }
 }
 
-impl ClientPreprocessing {
+impl ArrayPreprocessing {
     pub fn transformed_dims(&self) -> HashSet<DimIndex> {
         match self {
-            ClientPreprocessing::Permute(dim_i, _) => {
+            ArrayPreprocessing::Permute(dim_i, _) => {
                 let mut set: HashSet<DimIndex> = HashSet::new();
                 set.insert(*dim_i);
                 set
@@ -134,7 +134,7 @@ pub trait HasExplodedDims {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct IndexingSiteSchedule {
-    pub preprocessing: Option<ClientPreprocessing>,
+    pub preprocessing: Option<ArrayPreprocessing>,
     pub exploded_dims: im::Vector<ScheduleDim>,
     pub vectorized_dims: im::Vector<ScheduleDim>,
 }
@@ -286,7 +286,7 @@ impl VectorScheduleDim {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExprSchedule {
     pub shape: Shape,
-    pub preprocessing: Option<ClientPreprocessing>,
+    pub preprocessing: Option<ArrayPreprocessing>,
     pub exploded_dims: im::Vector<ScheduleDim>,
     pub vectorized_dims: im::Vector<VectorScheduleDim>,
 }
@@ -296,7 +296,7 @@ impl Display for ExprSchedule {
         let shape_str = self
             .shape
             .iter()
-            .map(|dim| dim.upper().to_string())
+            .map(|dim| dim.to_string())
             .collect::<Vec<String>>()
             .join(", ");
 
@@ -382,7 +382,7 @@ impl Display for Schedule {
 impl Schedule {
     // generate an initial schedule
     // the initial schedule explodes *all* dims
-    pub fn gen_initial_schedule(program: &TransformedProgram) -> Self {
+    pub fn gen_initial_schedule(program: &InlinedProgram) -> Self {
         let mut schedule_map: im::HashMap<IndexingId, IndexingSiteSchedule> = im::HashMap::new();
         let dim_class_map: HashMap<ArrayDim, usize> = program.compute_dim_equiv_classes();
 
@@ -417,24 +417,24 @@ impl Schedule {
     // apply the schedule to an index-free expression and compute the output schedule
     pub fn compute_output_schedule(
         &self,
-        program: &TransformedProgram,
-        expr: &TransformedExpr,
+        program: &InlinedProgram,
+        expr: &InlinedExpr,
     ) -> Result<ExprScheduleType, String> {
         match expr {
-            TransformedExpr::ReduceNode(reduced_index, _, body) => {
+            InlinedExpr::ReduceNode(reduced_index, _, body) => {
                 let body_sched = self.compute_output_schedule(program, body)?;
                 Schedule::schedule_reduce(*reduced_index, &body_sched)
             }
 
-            TransformedExpr::Op(_, expr1, expr2) => {
+            InlinedExpr::Op(_, expr1, expr2) => {
                 let sched1 = self.compute_output_schedule(program, expr1)?;
                 let sched2 = self.compute_output_schedule(program, expr2)?;
                 Schedule::schedule_op(&sched1, &sched2)
             }
 
-            TransformedExpr::Literal(_) => Schedule::schedule_literal(),
+            InlinedExpr::Literal(_) => Schedule::schedule_literal(),
 
-            TransformedExpr::ExprRef(indexing_id, transform) => {
+            InlinedExpr::ExprRef(indexing_id, transform) => {
                 if let Some(indexing_sched) = self.schedule_map.get(indexing_id) {
                     let expr_schedule = indexing_sched.to_expr_schedule(transform.as_shape());
                     Ok(ExprScheduleType::Specific(expr_schedule))
@@ -543,7 +543,7 @@ impl Schedule {
         }
     }
 
-    pub fn is_schedule_valid(&self, program: &TransformedProgram) -> bool {
+    pub fn is_schedule_valid(&self, program: &InlinedProgram) -> bool {
         program
             .expr_map
             .iter()
