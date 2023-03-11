@@ -31,6 +31,15 @@ impl Default for NameGenerator {
     }
 }
 
+pub fn get_nearest_pow2(n: usize) -> usize {
+    let mut pow = 1;
+    while pow < n {
+        pow *= 2;
+    }
+
+    pow
+}
+
 /// generate a descending list of powers of 2
 /// e.g. given n = 16, return [16, ]
 pub fn gen_pow2_list(n: usize) -> Vec<usize> {

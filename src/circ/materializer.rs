@@ -7,8 +7,8 @@ use crate::{
     util,
 };
 
-pub trait InputArrayMaterializer {
-    fn create(&self) -> Box<dyn InputArrayMaterializer>;
+pub trait InputArrayMaterializer<'a> {
+    fn create(&self) -> Box<dyn InputArrayMaterializer + 'a>;
 
     fn can_materialize(
         &self,
@@ -28,17 +28,17 @@ pub trait InputArrayMaterializer {
     ) -> CircuitId;
 }
 
-pub struct MaterializerFactory {
-    array_materializers: Vec<Box<dyn InputArrayMaterializer>>,
+pub struct MaterializerFactory<'a> {
+    array_materializers: Vec<Box<dyn InputArrayMaterializer<'a> + 'a>>,
 }
 
-impl MaterializerFactory {
-    pub fn new(array_materializers: Vec<Box<dyn InputArrayMaterializer>>) -> Self {
+impl<'a> MaterializerFactory<'a> {
+    pub fn new(array_materializers: Vec<Box<dyn InputArrayMaterializer<'a> + 'a>>) -> Self {
         Self { array_materializers }
     }
 
     pub fn create(&self) -> Materializer {
-        let amats: Vec<Box<dyn InputArrayMaterializer>> =
+        let amats: Vec<Box<dyn InputArrayMaterializer + 'a>> =
             self.array_materializers.iter().map(|amat| {
                 amat.create()
             }).collect();
@@ -48,16 +48,16 @@ impl MaterializerFactory {
 }
 
 /// materializes a schedule for an index-free program.
-pub struct Materializer {
-    array_materializers: Vec<Box<dyn InputArrayMaterializer>>,
+pub struct Materializer<'a> {
+    array_materializers: Vec<Box<dyn InputArrayMaterializer<'a> + 'a>>,
     registry: CircuitObjectRegistry,
     expr_circuit_map: HashMap<ArrayName, CircuitId>,
     expr_schedule_map: HashMap<ArrayName, ExprScheduleType>,
     expr_array_type_map: HashMap<ArrayName, ArrayType>,
 }
 
-impl Materializer {
-    pub fn new(array_materializers: Vec<Box<dyn InputArrayMaterializer>>) -> Self {
+impl<'a> Materializer<'a> {
+    pub fn new(array_materializers: Vec<Box<dyn InputArrayMaterializer<'a> + 'a>>) -> Self {
         Materializer {
             array_materializers,
             registry: CircuitObjectRegistry::new(),
@@ -113,7 +113,7 @@ impl Materializer {
         })
     }
 
-    fn materialize_expr_indexing_site<'a, T: CircuitObject>(
+    fn materialize_expr_indexing_site<'b, T: CircuitObject>(
         &mut self,
         indexing_id: &IndexingId,
         array_type: ArrayType,
@@ -123,7 +123,7 @@ impl Materializer {
         transform_circ_val: CircuitValue<VectorInfo>,
     ) -> Result<(ExprScheduleType, ArrayType, CircuitId), String>
     where
-        CircuitObjectRegistry: CanRegisterObject<'a, T>,
+        CircuitObjectRegistry: CanRegisterObject<'b, T>,
         ParamCircuitExpr: CanCreateObjectVar<T>,
     {
         let derivation_opt =
@@ -333,10 +333,10 @@ impl Materializer {
 }
 
 // array materializer that doesn't attempt to derive vectors
-pub struct DummyArrayMaterializer {}
+pub struct DummyArrayMaterializer;
 
-impl InputArrayMaterializer for DummyArrayMaterializer {
-    fn create(&self) -> Box<dyn InputArrayMaterializer> {
+impl<'a> InputArrayMaterializer<'a> for DummyArrayMaterializer {
+    fn create(&self) -> Box<dyn InputArrayMaterializer + 'a> {
         Box::new(Self {})
     }
 
@@ -388,8 +388,8 @@ impl DefaultArrayMaterializer {
     }
 }
 
-impl InputArrayMaterializer for DefaultArrayMaterializer {
-    fn create(&self) -> Box<dyn InputArrayMaterializer> {
+impl<'a> InputArrayMaterializer<'a> for DefaultArrayMaterializer {
+    fn create(&self) -> Box<dyn InputArrayMaterializer + 'a> {
         Box::new(DefaultArrayMaterializer::new())
     }
 
@@ -559,8 +559,8 @@ impl DiagonalArrayMaterializer {
     }
 }
 
-impl InputArrayMaterializer for DiagonalArrayMaterializer {
-    fn create(&self) -> Box<dyn InputArrayMaterializer> {
+impl<'a> InputArrayMaterializer<'a> for DiagonalArrayMaterializer {
+    fn create(&self) -> Box<dyn InputArrayMaterializer + 'a> {
         Box::new(DiagonalArrayMaterializer::new())
     }
 

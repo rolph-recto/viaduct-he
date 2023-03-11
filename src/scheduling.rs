@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    fmt::Display,
+    fmt::Display, ops::Index,
 };
 
 use crate::{
@@ -376,6 +376,14 @@ impl Display for Schedule {
         self.schedule_map
             .iter()
             .try_for_each(|(ref_id, schedule)| writeln!(f, "{} => {}", ref_id, schedule))
+    }
+}
+
+impl Index<&str> for Schedule {
+    type Output = IndexingSiteSchedule;
+
+    fn index(&self, index: &str) -> &Self::Output {
+        &self.schedule_map[index]
     }
 }
 
