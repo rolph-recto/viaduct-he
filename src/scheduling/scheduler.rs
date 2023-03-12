@@ -69,6 +69,12 @@ impl<'t> InlineScheduler<'t> {
     }
 }
 
+pub struct SchedulingResult {
+    pub inlined_program: InlinedProgram,
+    pub pareto_frontier: Vec<(Schedule, CostFeatures)>,
+    pub visited: HashSet<Schedule>,
+}
+
 /// scheduler for a particular inlined program
 /// (identified by array group map and inline set)
 pub struct Scheduler<'m, 't> {
@@ -132,7 +138,7 @@ impl<'m, 't> Scheduler<'m, 't> {
         scheduler
     }
 
-    pub fn get_pareto_frontier(mut self) -> Vec<(InlinedProgram, Vec<(Schedule, CostFeatures)>)> {
+    pub fn get_results(mut self) -> Vec<SchedulingResult> {
         let mut pareto_map: HashMap<usize, Vec<(Schedule, CostFeatures)>> = HashMap::new();
         for ((id, schedule), cost) in self.pareto_frontier.into_iter() {
             match pareto_map.get_mut(&id) {
@@ -148,7 +154,12 @@ impl<'m, 't> Scheduler<'m, 't> {
 
         pareto_map.into_iter().map(|(id, schedule_list)| {  
             let (_, inline_sched) = self.inline_schedulers.remove(&id).unwrap();
-            (inline_sched.program, schedule_list)
+
+            SchedulingResult {
+                inlined_program: inline_sched.program,
+                visited: inline_sched.visited,
+                pareto_frontier: schedule_list
+            }
         }).collect()
     }
 
@@ -236,6 +247,8 @@ impl<'m, 't> Scheduler<'m, 't> {
 
 #[cfg(test)]
 mod tests {
+    use std::array;
+
     use crate::{
         circ::materializer::DefaultMaterializerFactory,
         lang::{
@@ -256,14 +269,21 @@ mod tests {
 
         /*
         let inlined_programs: Vec<InlinedProgram> =
-            elaborated.inline_set_iter().filter_map(|inline_set| {
-                let array_group_map = elaborated.array_group_from_inline_set(&inline_set);
+            elaborated.inline_sets().iter()
+            .filter_map(|inline_set| {
+                let array_group_map =
+                    elaborated.array_group_from_inline_set(&inline_set);
+
                 let index_elim_res =
                     IndexElimination::new()
                     .run(&inline_set, &array_group_map, &elaborated);
 
                 match index_elim_res {
-                    Ok(inlined_program) => Some(inlined_program),
+                    Ok(inlined_program) => {
+                        println!("inline set: {:?}", inline_set);
+                        println!("inlined:\n{}", inlined_program);
+                        Some(inlined_program)
+                    }
                     Err(_) => None
                 }
             }).collect();
@@ -284,16 +304,32 @@ mod tests {
             );
         
         scheduler.run(None);
-        let pareto_frontier: Vec<(Schedule, CostFeatures)> =
-            scheduler.get_pareto_frontier()
-            .into_iter()
-            .flat_map(|(_, sched_list)| sched_list)
-            .collect();
 
-        println!("pareto frontier size: {}", pareto_frontier.len());
-        for (schedule, cost) in pareto_frontier {
-            println!("schedule:\n{}\ncost:\n{:?}", schedule, cost);
+        let mat_factory = DefaultMaterializerFactory;
+        for result in scheduler.get_results() {
+            println!("inlined program:\n{}", result.inlined_program);
+            println!("visited schedules: {}", result.visited.len());
+            println!("pareto frontier size: {}", result.pareto_frontier.len());
+            for (schedule, cost) in result.pareto_frontier.iter() {
+                let circuit =
+                    mat_factory.create()
+                    .run(&result.inlined_program, &schedule).unwrap();
+                println!("schedule:\n{}\ncost:\n{:?}", schedule, cost);
+                println!("circuit:\n{}", circuit);
+            }
         }
+    }
+
+    #[test]
+    fn test_imgblur0() {
+        test_scheduler_from_src(
+            "input img: [16,16] from client
+            for x: 16 {
+                for y: 16 {
+                    img[x][y] + img[x+1][y+1]
+                }
+            }",
+        );
     }
 
     #[test]
@@ -333,14 +369,14 @@ mod tests {
         test_scheduler_from_src(
             "input img: [16,16] from client
             let conv1 = 
-                for x: 15 {
-                    for y: 15 {
+                for x: 16 {
+                    for y: 16 {
                         img[x][y] + img[x+1][y+1]
                     }
                 }
             in
-            for x: 14 {
-                for y: 14 {
+            for x: 15 {
+                for y: 15 {
                     conv1[x][y] + conv1[x+1][y+1]
                 }
             }

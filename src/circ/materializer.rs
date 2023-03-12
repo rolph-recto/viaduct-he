@@ -245,7 +245,6 @@ impl<'a> Materializer<'a> {
                 }
             }
 
-            // TODO this is assumed to be a transformation of an input array
             InlinedExpr::ExprRef(indexing_id, transform) => {
                 let schedule = &schedule.schedule_map[indexing_id];
                 if program.is_expr(&transform.array) {

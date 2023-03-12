@@ -1,11 +1,12 @@
 use std::{
     collections::{hash_set, HashSet},
-    hash::{Hasher, *},
+    hash::{Hasher, *}, array,
 };
 
 use disjoint_sets::UnionFind;
 use gcollections::ops::Bounded;
 use indexmap::IndexMap;
+use log::debug;
 
 use crate::lang::{elaborated::ElaboratedProgram, *};
 
@@ -89,7 +90,7 @@ pub struct InlinedProgram {
 
 impl InlinedProgram {
     pub fn is_expr(&self, array: &ArrayName) -> bool {
-        self.expr_map.contains_key(array)
+        !self.is_input(array)
     }
 
     pub fn is_input(&self, array: &ArrayName) -> bool {
@@ -649,10 +650,10 @@ impl IndexElimination {
         let mut worklist: Vec<String> = vec![String::from(OUTPUT_EXPR_NAME)];
 
         while worklist.len() > 0 {
-            let cur_array_name = worklist.pop().unwrap();
-            let expr = program.expr_map.get(&cur_array_name).unwrap();
-            let shape = self.store.get(&cur_array_name).unwrap();
-            let transform = ArrayTransform::from_shape(String::from(&cur_array_name), shape);
+            let indexing_id = worklist.pop().unwrap();
+            let expr = program.expr_map.get(&indexing_id).unwrap();
+            let shape = self.store.get(&indexing_id).unwrap();
+            let transform = ArrayTransform::from_shape(String::from(&indexing_id), shape);
 
             let transformed_expr = self.transform_expr(
                 inline_set,
@@ -663,15 +664,23 @@ impl IndexElimination {
                 &PathContext::new(im::Vector::new()),
             )?;
 
-            let indexed_arrays: HashSet<ArrayName> = transformed_expr
+            let indexed_arrays: HashSet<ArrayName> =
+                transformed_expr
                 .get_indexing_sites()
                 .into_iter()
-                .filter(|(indexing_id, _)| !program.is_input(indexing_id))
-                .map(|(_, transform)| transform.array)
+                .filter_map(|(indexing_id, _)| {
+                    if !program.is_input(&indexing_id) {
+                        Some(indexing_id)
+
+                    } else {
+                        None
+                    }
+                })
                 .collect();
 
+            let array_name = array_group_map[&indexing_id].clone();
             worklist.extend(indexed_arrays);
-            expr_map.insert(String::from(cur_array_name), transformed_expr);
+            expr_map.insert(array_name, transformed_expr);
         }
 
         // the expressions were processed backwards from the output expr,
@@ -698,7 +707,7 @@ mod tests {
 
         let elaborated: ElaboratedProgram = Elaborator::new().run(program);
         println!("{}", elaborated);
-        for inline_set in elaborated.inline_set_iter() {
+        for inline_set in elaborated.inline_sets() {
             println!("inline set: {:?}", inline_set)
         }
 

@@ -46,10 +46,10 @@ impl VectorDeriver {
     }
 
     // find immediate parent for each vector
-    pub fn compute_immediate_parents(&mut self) {
-        for (vector_id, _) in self.vector_map.iter() {
-            let parent_id = self.find_immediate_parent(*vector_id);
-            self.parent_map.insert(*vector_id, parent_id);
+    pub fn compute_immediate_parents(&mut self, vector_ids: Vec<usize>) {
+        for vector_id in vector_ids {
+            let parent_id = self.find_immediate_parent(vector_id);
+            self.parent_map.insert(vector_id, parent_id);
         }
     }
 
@@ -96,7 +96,11 @@ impl VectorDeriver {
             vector_id_map.insert(coord, vector_id);
         }
 
-        self.compute_immediate_parents();
+        let vector_ids =
+            vector_id_map.iter()
+            .map(|(_, id)| *id)
+            .collect();
+        self.compute_immediate_parents(vector_ids);
 
         // find transitive parents
         for coord in coords {
@@ -431,20 +435,38 @@ impl VectorDeriver {
         } else {
             // there is only a single vector
             let index_map: HashMap<DimName, usize> = HashMap::new();
-            let vector = VectorInfo::get_input_vector_at_coord(
-                index_map,
-                array_shape,
-                schedule,
-                transform,
-                preprocessing,
-            );
 
-            VectorDeriver::gen_circuit_expr(
-                CircuitValue::Single(T::input_vector(vector)),
-                CircuitValue::Single(0),
-                CircuitValue::Single(PlaintextObject::Const(1)),
-                registry,
-            )
+            let vector =
+                VectorInfo::get_input_vector_at_coord(
+                    index_map,
+                    array_shape,
+                    schedule,
+                    transform,
+                    preprocessing,
+                );
+
+            let vector_id = self.register_vector(vector.clone());
+            self.compute_immediate_parents(vec![vector_id]);
+
+            let parent_id = self.find_transitive_parent(vector_id);
+            if vector_id != parent_id {
+                let parent = self.get_vector(parent_id);
+                let (steps, mask) = parent.derive(&vector).unwrap();
+                VectorDeriver::gen_circuit_expr(
+                    CircuitValue::Single(T::input_vector(parent.clone())),
+                    CircuitValue::Single(steps),
+                    CircuitValue::Single(mask),
+                    registry,
+                )
+
+            } else {
+                VectorDeriver::gen_circuit_expr(
+                    CircuitValue::Single(T::input_vector(vector)),
+                    CircuitValue::Single(0),
+                    CircuitValue::Single(PlaintextObject::Const(1)),
+                    registry,
+                )
+            }
         }
     }
 }

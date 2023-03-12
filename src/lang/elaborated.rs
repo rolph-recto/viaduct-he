@@ -85,20 +85,29 @@ impl ElaboratedProgram {
             }
         }
 
+        let output_name = String::from(OUTPUT_EXPR_NAME);
+        array_group_map.insert(output_name.clone(), output_name);
         array_group_map
     }
 
-    pub fn inline_set_iter(&self) -> impl Iterator<Item=HashSet<IndexingId>> {
-        let sites = self.expr_indexing_sites();
-        sites.iter()
-        .map(|_| vec![true, false])
-        .multi_cartesian_product()
-        .map(move |mask| {
-            sites.iter().zip(mask.iter())
-            .filter(|(_, contain)| **contain)
-            .map(|(site, _)| site.clone())
-            .collect::<HashSet<IndexingId>>()
-        })
+    pub fn inline_sets(&self) -> Vec<HashSet<IndexingId>> {
+        let sites: Vec<IndexingId> = self.expr_indexing_sites();
+
+        if sites.len() > 0 {
+            sites.iter()
+            .map(|_| vec![true, false])
+            .multi_cartesian_product()
+            .map(move |mask| {
+                sites.iter()
+                .zip(mask.iter())
+                .filter(|(_, contain)| **contain)
+                .map(|(site, _)| site.clone())
+                .collect::<HashSet<IndexingId>>()
+            }).collect()
+
+        } else {
+            vec![HashSet::new()]
+        }
     }
 }
 

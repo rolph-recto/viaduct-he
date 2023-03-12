@@ -156,7 +156,6 @@ impl CostEstimator {
         cost
     }
 
-    // TODO finish
     fn estimate_cost_expr(
         &self,
         id: CircuitId,
