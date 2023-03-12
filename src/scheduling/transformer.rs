@@ -4,22 +4,38 @@ use super::*;
 
 /// object that takes an input schedule and returns a set of "nearby" schedules.
 pub trait ScheduleTransformer {
-    fn transform(&mut self, schedule: &Schedule) -> HashSet<Schedule>;
+    fn transform(&self, schedule: &Schedule) -> HashSet<Schedule>;
+}
+
+pub trait ScheduleTransformerFactory<'a> {
+    fn create(&self, program: &InlinedProgram) -> Vec<Box<dyn ScheduleTransformer + 'a>>;
+}
+
+pub struct DefaultScheduleTransformerFactory;
+
+impl<'a> ScheduleTransformerFactory<'a> for DefaultScheduleTransformerFactory {
+    fn create(&self, program: &InlinedProgram) -> Vec<Box<dyn ScheduleTransformer + 'a>> {
+        let dim_classes = program.get_dim_equiv_classes();
+        vec![
+            Box::new(VectorizeDimTransformer::new(dim_classes))
+        ]
+    }
 }
 
 /// a transformer that turns exploded dims to vectorized dims
-pub struct VectorizeDimTransformer<'a> {
-    dim_classes: &'a HashMap<(IndexingId, DimIndex), usize>
+#[derive(Default)]
+pub struct VectorizeDimTransformer {
+    dim_classes: HashMap<(IndexingId, DimIndex), usize>
 }
 
-impl<'a> VectorizeDimTransformer<'a> {
-    pub fn new(dim_classes: &'a HashMap<(IndexingId, DimIndex), usize>) -> Self {
+impl VectorizeDimTransformer {
+    pub fn new(dim_classes: HashMap<(IndexingId, DimIndex), usize>) -> Self {
         Self { dim_classes }
     }
 }
 
-impl<'a> ScheduleTransformer for VectorizeDimTransformer<'a> {
-    fn transform(&mut self, schedule: &Schedule) -> HashSet<Schedule> {
+impl ScheduleTransformer for VectorizeDimTransformer {
+    fn transform(&self, schedule: &Schedule) -> HashSet<Schedule> {
         let mut neighbors = HashSet::new();
 
         // find candidate dims to be vectorized
@@ -148,7 +164,7 @@ mod tests {
 
         let schedule = Schedule { schedule_map };
 
-        let mut transformer = VectorizeDimTransformer::new(&dim_classes);
+        let transformer = VectorizeDimTransformer::new(dim_classes);
         let neighbors = transformer.transform(&schedule);
         assert_eq!(neighbors.len(), 2);
 

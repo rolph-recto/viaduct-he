@@ -11,8 +11,8 @@ use crate::{
     },
 };
 
-mod transformer;
 mod scheduler;
+mod transformer;
 
 // a schedule for a dimension
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -392,7 +392,7 @@ impl Schedule {
     // the initial schedule explodes *all* dims
     pub fn gen_initial_schedule(program: &InlinedProgram) -> Self {
         let mut schedule_map: im::HashMap<IndexingId, IndexingSiteSchedule> = im::HashMap::new();
-        let dim_class_map: HashMap<ArrayDim, usize> = program.compute_dim_equiv_classes();
+        let dim_class_map: HashMap<ArrayDim, usize> = program.get_dim_equiv_classes();
 
         for (_, expr) in program.expr_map.iter() {
             for (indexing_id, transform) in expr.get_indexing_sites() {
@@ -573,10 +573,12 @@ mod tests {
         let program: SourceProgram = parser.parse(src).unwrap();
 
         let elaborated = Elaborator::new().run(program);
-        let inline_set = elaborated.get_default_inline_set();
-        let array_group_map = elaborated.get_default_array_group_map();
+        let inline_set = elaborated.default_inline_set();
+        let array_group_map = elaborated.default_array_group_map();
 
-        let res = IndexElimination::new().run(&inline_set, &array_group_map, elaborated);
+        let res =
+            IndexElimination::new()
+            .run(&inline_set, &array_group_map, &elaborated);
 
         assert!(res.is_ok());
 

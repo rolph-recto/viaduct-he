@@ -102,7 +102,7 @@ impl SourceExpr {
 
             SourceExpr::ExprOp(_, expr1, expr2) => {
                 let mut arrays1 = expr1.get_indexed_arrays();
-                let mut arrays2 = expr2.get_indexed_arrays();
+                let arrays2 = expr2.get_indexed_arrays();
                 arrays1.extend(arrays2);
                 arrays1
             }

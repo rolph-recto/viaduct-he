@@ -28,20 +28,18 @@ pub trait InputArrayMaterializer<'a> {
     ) -> CircuitId;
 }
 
-pub struct MaterializerFactory<'a> {
-    array_materializers: Vec<Box<dyn InputArrayMaterializer<'a> + 'a>>,
+pub trait MaterializerFactory {
+    fn create<'a>(&self) -> Materializer<'a>;
 }
 
-impl<'a> MaterializerFactory<'a> {
-    pub fn new(array_materializers: Vec<Box<dyn InputArrayMaterializer<'a> + 'a>>) -> Self {
-        Self { array_materializers }
-    }
+pub struct DefaultMaterializerFactory;
 
-    pub fn create(&self) -> Materializer {
+impl MaterializerFactory for DefaultMaterializerFactory {
+    fn create<'a>(&self) -> Materializer<'a> {
         let amats: Vec<Box<dyn InputArrayMaterializer + 'a>> =
-            self.array_materializers.iter().map(|amat| {
-                amat.create()
-            }).collect();
+            vec![
+                Box::new(DefaultArrayMaterializer::new())
+            ];
 
         Materializer::new(amats)
     }
@@ -724,10 +722,12 @@ mod tests {
         let program: SourceProgram = parser.parse(src).unwrap();
 
         let elaborated = Elaborator::new().run(program);
-        let inline_set = elaborated.get_default_inline_set();
-        let array_group_map = elaborated.get_default_array_group_map();
+        let inline_set = elaborated.default_inline_set();
+        let array_group_map = elaborated.default_array_group_map();
 
-        let res = IndexElimination::new().run(&inline_set, &array_group_map, elaborated);
+        let res =   
+            IndexElimination::new()
+            .run(&inline_set, &array_group_map, &elaborated);
 
         assert!(res.is_ok());
 

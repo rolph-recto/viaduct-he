@@ -100,7 +100,7 @@ impl InlinedProgram {
         &self.expr_map.get(OUTPUT_EXPR_NAME).unwrap()
     }
 
-    pub fn compute_dim_equiv_classes(&self) -> HashMap<ArrayDim, usize> {
+    pub fn get_dim_equiv_classes(&self) -> HashMap<ArrayDim, usize> {
         let mut dim_eqs: Vec<(ArrayDim, ArrayDim)> = Vec::new();
         for (_, expr) in self.expr_map.iter() {
             let (eqs, _) = self.compute_dim_equalities(expr);
@@ -641,7 +641,7 @@ impl IndexElimination {
         &mut self,
         inline_set: &HashSet<IndexingId>,
         array_group_map: &HashMap<IndexingId, ArrayName>,
-        program: ElaboratedProgram,
+        program: &ElaboratedProgram,
     ) -> Result<InlinedProgram, String> {
         self.compute_shape_program(&program);
 
@@ -679,7 +679,7 @@ impl IndexElimination {
         expr_map.reverse();
 
         let transformed_program = InlinedProgram {
-            input_map: program.input_map,
+            input_map: program.input_map.clone(),
             expr_map,
         };
 
@@ -698,10 +698,15 @@ mod tests {
 
         let elaborated: ElaboratedProgram = Elaborator::new().run(program);
         println!("{}", elaborated);
-        let inline_set = elaborated.get_default_inline_set();
-        let array_group_map = elaborated.get_default_array_group_map();
+        for inline_set in elaborated.inline_set_iter() {
+            println!("inline set: {:?}", inline_set)
+        }
 
-        let res = IndexElimination::new().run(&inline_set, &array_group_map, elaborated);
+        let inline_set = elaborated.default_inline_set();
+        let array_group_map = elaborated.default_array_group_map();
+
+        let res =
+            IndexElimination::new().run(&inline_set, &array_group_map, &elaborated);
 
         assert!(res.is_ok());
 

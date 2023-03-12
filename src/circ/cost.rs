@@ -93,10 +93,8 @@ impl CostFeatures {
             ct_pt_muldepth: self.ct_pt_muldepth * other.ct_pt_muldepth,
         }
     }
-}
 
-impl PartialOrd for CostFeatures {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    pub fn dominates(&self, other: &Self) -> bool {
         let pairs = vec![
             (self.input_ciphertexts, other.input_ciphertexts),
             (self.input_plaintexts, other.input_plaintexts),
@@ -116,22 +114,7 @@ impl PartialOrd for CostFeatures {
             (self.ct_pt_muldepth, other.ct_pt_muldepth)
         ];
 
-        let less = pairs.iter().all(|(s, o)| s < o);
-        let equal = pairs.iter().all(|(s, o)| s == o);
-        let greater = pairs.iter().all(|(s, o)| s > o);
-
-        if less {
-            Some(Ordering::Less)
-
-        } else if equal {
-            Some(Ordering::Equal)
-
-        } else if greater {
-            Some(Ordering::Greater)
-
-        } else {
-            None
-        }
+        pairs.iter().all(|(s, o)| s <= o)
     }
 }
 
@@ -334,10 +317,12 @@ mod tests {
         let program: SourceProgram = parser.parse(src).unwrap();
 
         let elaborated = Elaborator::new().run(program);
-        let inline_set = elaborated.get_default_inline_set();
-        let array_group_map = elaborated.get_default_array_group_map();
+        let inline_set = elaborated.default_inline_set();
+        let array_group_map = elaborated.default_array_group_map();
 
-        let res = IndexElimination::new().run(&inline_set, &array_group_map, elaborated);
+        let res =
+            IndexElimination::new()
+            .run(&inline_set, &array_group_map, &elaborated);
 
         assert!(res.is_ok());
 

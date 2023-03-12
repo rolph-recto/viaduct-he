@@ -83,11 +83,13 @@ fn main() {
     info!("elaboration...");
     let elaborated = Elaborator::new().run(source);
 
-    let inline_set = elaborated.get_default_inline_set();
-    let array_group_map = elaborated.get_default_array_group_map();
+    let inline_set = elaborated.default_inline_set();
+    let array_group_map = elaborated.default_array_group_map();
 
     info!("index elimination...");
-    let res_index_elim = IndexElimination::new().run(&inline_set, &array_group_map, elaborated);
+    let res_index_elim =
+        IndexElimination::new()
+        .run(&inline_set, &array_group_map, &elaborated);
 
     let inlined = res_index_elim.unwrap();
     let init_schedule = Schedule::gen_initial_schedule(&inlined);

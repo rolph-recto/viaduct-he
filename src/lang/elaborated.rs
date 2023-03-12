@@ -1,9 +1,10 @@
 use std::{
     collections::{HashMap, HashSet},
-    fmt::Display,
+    fmt::Display, array,
 };
 
 use indexmap::IndexMap;
+use itertools::Itertools;
 
 use crate::util::NameGenerator;
 
@@ -46,28 +47,58 @@ impl ElaboratedProgram {
         self.input_map.contains_key(&self.rename_map[indexing_id])
     }
 
+    pub fn indexing_sites(&self) -> Vec<IndexingId> {
+        self.expr_map.iter()
+        .flat_map(|(_, expr)| expr.get_indexed_arrays())
+        .collect()
+    }
+
+    pub fn expr_indexing_sites(&self) -> Vec<IndexingId> {
+        self.expr_map.iter()
+        .flat_map(|(_, expr)| expr.get_indexed_arrays())
+        .filter(|id| self.is_expr(id))
+        .collect()
+    }
+
     /// the default inline set contains all indexing ids
-    pub fn get_default_inline_set(&self) -> HashSet<IndexingId> {
+    /// (i.e. inline everything)
+    pub fn default_inline_set(&self) -> HashSet<IndexingId> {
         self.expr_map.iter().map(|(id, _)| id.clone()).collect()
     }
 
     /// the default array group map just contains mappings for indexing ids for inputs
-    pub fn get_default_array_group_map(&self) -> HashMap<IndexingId, ArrayName> {
+    pub fn default_array_group_map(&self) -> HashMap<IndexingId, ArrayName> {
+        self.array_group_from_inline_set(&self.default_inline_set())
+    }
+
+    /// build array group map from
+    pub fn array_group_from_inline_set(&self, inline_set: &HashSet<IndexingId>) -> HashMap<IndexingId, ArrayName> {
         let mut array_group_map: HashMap<IndexingId, ArrayName> = HashMap::new();
 
-        // indexing ids for the same input array must be mapped together
-        for (_, expr) in self.expr_map.iter() {
-            for indexing_id in expr.get_indexed_arrays() {
-                if self.is_input(&indexing_id) {
-                    let array = self.rename_map.get(&indexing_id).unwrap().clone();
-                    array_group_map.insert(indexing_id, array);
-                } else {
-                    array_group_map.insert(indexing_id.clone(), indexing_id);
-                }
+        for indexing_id in self.indexing_sites() {
+            if self.is_input(&indexing_id) || !inline_set.contains(&indexing_id) {
+                let array = self.rename_map.get(&indexing_id).unwrap().clone();
+                array_group_map.insert(indexing_id, array);
+
+            } else { // NOT an input AND contained in inline_set
+                array_group_map.insert(indexing_id.clone(), indexing_id);
             }
         }
 
         array_group_map
+    }
+
+    pub fn inline_set_iter(&self) -> impl Iterator<Item=HashSet<IndexingId>> {
+        let sites = self.expr_indexing_sites();
+        sites.iter()
+        .map(|_| vec![true, false])
+        .multi_cartesian_product()
+        .map(move |mask| {
+            sites.iter().zip(mask.iter())
+            .filter(|(_, contain)| **contain)
+            .map(|(site, _)| site.clone())
+            .collect::<HashSet<IndexingId>>()
+        })
     }
 }
 

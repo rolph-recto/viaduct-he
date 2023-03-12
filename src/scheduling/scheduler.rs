@@ -1,92 +1,173 @@
-use std::{collections::{HashSet, HashMap}, cmp::Ordering};
+use std::{collections::{HashSet, HashMap}};
 
 use crate::{
-    lang::index_elim::InlinedProgram,
+    lang::{index_elim::{InlinedProgram}},
     circ::{materializer::MaterializerFactory, cost::{CostEstimator, CostFeatures}},
     scheduling::{
         Schedule,
-        transformer::ScheduleTransformer,
+        transformer::{ScheduleTransformer, ScheduleTransformerFactory}
     },
 };
 
-/// scheduler for a particular indexing for a particular inline set / array group map
-pub struct Scheduler<'a, 'b, 'c> {
-    transformers: Vec<Box<dyn ScheduleTransformer + 'b>>,
-    program: &'a InlinedProgram,
-    materializer_factory: MaterializerFactory<'c>,
+struct InlineScheduler<'a> {
+    pub program: InlinedProgram,
+    pub transformers: Vec<Box<dyn ScheduleTransformer + 'a>>,
+    pub visited: HashSet<Schedule>,
+    pub frontier: HashSet<Schedule>
+}
+
+impl<'t> InlineScheduler<'t> {
+    pub fn new(
+        program: InlinedProgram,
+        transformers: Vec<Box<dyn ScheduleTransformer + 't>>,
+        init_schedule: Schedule
+    ) -> Self {
+        Self {
+            program,
+            transformers,
+            visited: HashSet::from([init_schedule.clone()]),
+            frontier: HashSet::from([init_schedule]),
+        }
+    }
+
+    pub fn iterate<'m>(
+        &mut self,
+        materializer_factory: &dyn MaterializerFactory,
+        cost_estimator: &CostEstimator,
+    ) -> (bool, Vec<(Schedule, CostFeatures)>) {
+        let mut has_new = false;
+
+        let mut cur: HashSet<Schedule> = HashSet::new();
+        std::mem::swap(&mut self.frontier, &mut cur);
+        let mut neighbor_list: Vec<(Schedule, CostFeatures)> = Vec::new();
+        for schedule in cur {
+            for transformer in self.transformers.iter() {
+                let neighbors = transformer.transform(&schedule);
+                for neighbor in neighbors {
+                    if !self.visited.contains(&neighbor) && neighbor.is_schedule_valid(&self.program) {
+                        // neighbor is a newly visited schedule;
+                        // try to materialize it into a circuit
+                        let mat = materializer_factory.create();
+
+                        // if the schedule can be materialized into a circuit,
+                        // give a cost to the schedule and save it if it's
+                        // in the Pareto frontier
+                        if let Ok(circuit) = mat.run(&self.program, &neighbor) {
+                            let cost = cost_estimator.estimate_cost(&circuit);
+                            neighbor_list.push((neighbor.clone(), cost));
+                        }
+
+                        self.frontier.insert(neighbor.clone());
+                        self.visited.insert(neighbor);
+                        has_new = true;
+                    }
+                }
+            }
+        }
+
+        (has_new, neighbor_list)
+    }
+}
+
+/// scheduler for a particular inlined program
+/// (identified by array group map and inline set)
+pub struct Scheduler<'m, 't> {
+    materializer_factory: Box<dyn MaterializerFactory + 'm>,
     cost_estimator: CostEstimator,
-
-    // schedules that have been visited for all iterations
-    visited: HashSet<Schedule>,
-
-    // the schedules visited during the previous iteration
-    previous: HashSet<Schedule>,
+    inline_schedulers: HashMap<usize, (bool, InlineScheduler<'t>)>,
 
     // schedules in the Pareto frontier
     // (i.e. no visited schedule is strictly cheaper than these)
-    pub pareto_frontier: HashMap<Schedule, CostFeatures>
+    pareto_frontier: HashMap<(usize, Schedule), CostFeatures>
 }
 
-impl<'a, 'b, 'c> Scheduler<'a, 'b, 'c> {
+impl<'m, 't> Scheduler<'m, 't> {
     pub fn new(
-        transformers: Vec<Box<dyn ScheduleTransformer + 'b>>,
-        program: &'a InlinedProgram,
-        materializer_factory: MaterializerFactory<'c>,
-        initial: Schedule
+        inlined_programs: Vec<InlinedProgram>,
+        transformer_factory: Box<dyn ScheduleTransformerFactory<'t> + 't>,
+        materializer_factory: Box<dyn MaterializerFactory + 'm>,
     ) -> Self {
         let cost_estimator = CostEstimator::default();
-        let previous = HashSet::from([initial.clone()]);
-        let visited = HashSet::from([initial.clone()]);
-        let pareto_frontier: HashMap<Schedule, CostFeatures> = HashMap::new();
-        let mat = materializer_factory.create();
-        
-        let cost_opt =
-            if let Ok(circuit) = mat.run(program, &initial) {
-                Some(cost_estimator.estimate_cost(&circuit))
+        let mut init_schedules: Vec<(usize, Schedule, CostFeatures)> = Vec::new();
+        let mut inline_schedulers: HashMap<usize, (bool, InlineScheduler)> = HashMap::new();
+        let mut inline_id = 1;
 
-            } else {
-                None
-            };
+        for inlined_program in inlined_programs {
+            let init_schedule =
+                Schedule::gen_initial_schedule(&inlined_program);
+
+            let mat = materializer_factory.create();
+            let mat_res = mat.run(&inlined_program, &init_schedule);
+            if let Ok(circuit) = mat_res {
+                let cost = cost_estimator.estimate_cost(&circuit);
+                init_schedules.push((inline_id, init_schedule.clone(), cost));
+            }
+
+            let transformers =
+                transformer_factory.create(&inlined_program);
+
+            let inline_scheduler =
+                InlineScheduler::new(
+                    inlined_program,
+                    transformers,
+                    init_schedule
+                );
+
+            inline_schedulers.insert(inline_id, (true, inline_scheduler));
+            inline_id += 1;
+        }
 
         let mut scheduler = 
             Self {
-                transformers,
-                program,
                 materializer_factory,
                 cost_estimator,
-                visited,
-                previous,
-                pareto_frontier,
+                inline_schedulers,
+                pareto_frontier: HashMap::new(),
             };
 
-        if let Some(cost) = cost_opt {
-            scheduler.update_pareto_frontier(initial, cost);
+        for (inline_id, init_schedule, cost) in init_schedules {
+            scheduler.update_pareto_frontier(inline_id, init_schedule, cost);
         }
 
         scheduler
     }
 
-    /// add a schedule to the pareto frontier, unless it is strictly dominated
-    /// by another schedule in the frontier
-    pub fn update_pareto_frontier(&mut self, schedule: Schedule, cost: CostFeatures) {
-        let mut to_remove: Vec<Schedule> = Vec::new();
-        let mut add_new = true;
-        for (pschedule, pcost) in self.pareto_frontier.iter() {
-            match cost.partial_cmp(pcost) {
-                // if the new schedule is strictly costlier, don't add it to the frontier
-                Some(Ordering::Greater) => {
-                    add_new = false;
-                    break;
+    pub fn get_pareto_frontier(mut self) -> Vec<(InlinedProgram, Vec<(Schedule, CostFeatures)>)> {
+        let mut pareto_map: HashMap<usize, Vec<(Schedule, CostFeatures)>> = HashMap::new();
+        for ((id, schedule), cost) in self.pareto_frontier.into_iter() {
+            match pareto_map.get_mut(&id) {
+                Some(schedule_list) => {
+                    schedule_list.push((schedule, cost));
                 },
 
-                // if the new schedule is strictly cheaper than a schedule s2,
-                // currently in the frontier, add the new schedule
-                // and remove s2 from the frontier
-                Some(Ordering::Less) => {
-                    to_remove.push(pschedule.clone());
+                None => {
+                    pareto_map.insert(id, vec![(schedule, cost)]);
                 }
+            }
+        }
 
-                Some(Ordering::Equal) | None => {}
+        pareto_map.into_iter().map(|(id, schedule_list)| {  
+            let (_, inline_sched) = self.inline_schedulers.remove(&id).unwrap();
+            (inline_sched.program, schedule_list)
+        }).collect()
+    }
+
+    /// add a schedule to the pareto frontier, unless it is strictly dominated
+    /// by another schedule in the frontier
+    pub fn update_pareto_frontier(&mut self, id: usize, schedule: Schedule, cost: CostFeatures) {
+        let mut to_remove: Vec<(usize, Schedule)> = Vec::new();
+        let mut add_new = true;
+        'l: for ((pid, pschedule), pcost) in self.pareto_frontier.iter() {
+            let pcost_dominates = pcost.dominates(&cost);
+            let cost_dominates = cost.dominates(pcost);
+
+            // if the new schedule is strictly costlier, don't add it to the frontier
+            if pcost_dominates {
+                add_new = false;
+                break 'l;
+
+            } else if cost_dominates {
+                to_remove.push((*pid, pschedule.clone()));
             }
         }
 
@@ -95,7 +176,7 @@ impl<'a, 'b, 'c> Scheduler<'a, 'b, 'c> {
         }
 
         if add_new {
-            self.pareto_frontier.insert(schedule, cost);
+            self.pareto_frontier.insert((id, schedule), cost);
         }
     }
 
@@ -104,38 +185,32 @@ impl<'a, 'b, 'c> Scheduler<'a, 'b, 'c> {
     /// returns true if new schedules were visited; otherwise
     pub fn iterate(&mut self) -> bool {
         let mut has_new = false;
+        let mut new_schedules: Vec<(usize, Vec<(Schedule, CostFeatures)>)> = Vec::new();
+        for (id, (do_run, scheduler)) in self.inline_schedulers.iter_mut() {
+            if *do_run {
+                let (changed, new_inline_schedules) =
+                    scheduler.iterate(
+                        self.materializer_factory.as_ref(),
+                        &self.cost_estimator
+                    );
 
-        let mut cur: HashSet<Schedule> = HashSet::new();
-        std::mem::swap(&mut self.previous, &mut cur);
-        let mut neighbor_list: Vec<(Schedule, CostFeatures)> = Vec::new();
-        for schedule in cur {
-            for transformer in self.transformers.iter_mut() {
-                let neighbors = transformer.transform(&schedule);
-                for neighbor in neighbors {
-                    if !self.visited.contains(&neighbor) && neighbor.is_schedule_valid(self.program) {
-                        // neighbor is a newly visited schedule;
-                        // try to materialize it into a circuit
-                        let mat = self.materializer_factory.create();
+                if new_inline_schedules.len() > 0 { 
+                    new_schedules.push((*id, new_inline_schedules));
+                }
 
-                        // if the schedule can be materialized into a circuit,
-                        // give a cost to the schedule and save it if it's
-                        // in the Pareto frontier
-                        if let Ok(circuit) = mat.run(self.program, &neighbor) {
-                            let cost = self.cost_estimator.estimate_cost(&circuit);
-                            neighbor_list.push((neighbor.clone(), cost));
-                        }
+                if changed {
+                    has_new = true;
 
-                        self.previous.insert(neighbor.clone());
-                        self.visited.insert(neighbor);
-                        has_new = true;
-                    }
+                } else {
+                    *do_run = false;
                 }
             }
         }
 
-        // try to add new schedules to the pareto frontier
-        for (neighbor, cost) in neighbor_list {
-            self.update_pareto_frontier(neighbor, cost);
+        for (id, new_inline_schedules) in new_schedules {
+            for (schedule, cost) in new_inline_schedules {
+                self.update_pareto_frontier(id, schedule, cost);
+            }
         }
 
         has_new
@@ -161,7 +236,16 @@ impl<'a, 'b, 'c> Scheduler<'a, 'b, 'c> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{circ::{ParamCircuitProgram, materializer::{InputArrayMaterializer, DefaultArrayMaterializer}}, lang::{index_elim::IndexElimination, elaborated::Elaborator, source::SourceProgram, parser::ProgramParser}, scheduling::transformer::VectorizeDimTransformer};
+    use crate::{
+        circ::materializer::DefaultMaterializerFactory,
+        lang::{
+            index_elim::IndexElimination,
+            elaborated::Elaborator,
+            source::SourceProgram,
+            parser::ProgramParser
+        },
+        scheduling::transformer::DefaultScheduleTransformerFactory
+    };
     use super::*;
 
     fn test_scheduler_from_src(src: &str) {
@@ -169,40 +253,99 @@ mod tests {
         let program: SourceProgram = parser.parse(src).unwrap();
 
         let elaborated = Elaborator::new().run(program);
-        let inline_set = elaborated.get_default_inline_set();
-        let array_group_map = elaborated.get_default_array_group_map();
 
-        let res = IndexElimination::new().run(&inline_set, &array_group_map, elaborated);
+        /*
+        let inlined_programs: Vec<InlinedProgram> =
+            elaborated.inline_set_iter().filter_map(|inline_set| {
+                let array_group_map = elaborated.array_group_from_inline_set(&inline_set);
+                let index_elim_res =
+                    IndexElimination::new()
+                    .run(&inline_set, &array_group_map, &elaborated);
 
-        assert!(res.is_ok());
-
-        let inlined = res.unwrap();
-        let init_schedule = Schedule::gen_initial_schedule(&inlined);
-        let dim_classes = inlined.compute_dim_equiv_classes();
-
-        let transformers: Vec<Box<dyn ScheduleTransformer + '_>> = vec![
-            Box::new(VectorizeDimTransformer::new(&dim_classes))
+                match index_elim_res {
+                    Ok(inlined_program) => Some(inlined_program),
+                    Err(_) => None
+                }
+            }).collect();
+        */
+        let inlined_programs = vec![
+            IndexElimination::new().run(
+                &elaborated.default_inline_set(),
+                &elaborated.default_array_group_map(),
+                &elaborated
+            ).unwrap()
         ];
-
-        let amats: Vec<Box<dyn InputArrayMaterializer + '_>> =
-            vec![Box::new(DefaultArrayMaterializer::new())];
-
-        let mat_factory = MaterializerFactory::new(amats);
 
         let mut scheduler =
             Scheduler::new(
-                transformers, 
-                &inlined, 
-                mat_factory, 
-                init_schedule
+                inlined_programs,
+                Box::new(DefaultScheduleTransformerFactory), 
+                Box::new(DefaultMaterializerFactory), 
             );
         
         scheduler.run(None);
-        println!("pareto frontier:");
-        for (schedule, cost) in scheduler.pareto_frontier.iter() {
+        let pareto_frontier: Vec<(Schedule, CostFeatures)> =
+            scheduler.get_pareto_frontier()
+            .into_iter()
+            .flat_map(|(_, sched_list)| sched_list)
+            .collect();
+
+        println!("pareto frontier size: {}", pareto_frontier.len());
+        for (schedule, cost) in pareto_frontier {
             println!("schedule:\n{}\ncost:\n{:?}", schedule, cost);
         }
-        drop(scheduler);
+    }
+
+    #[test]
+    fn test_imgblur() {
+        test_scheduler_from_src(
+            "input img: [16,16] from client
+            for x: 16 {
+                for y: 16 {
+                    img[x-1][y-1] + img[x+1][y+1]
+                }
+            }",
+        );
+    }
+
+    #[test]
+    fn test_imgblur2() {
+        test_scheduler_from_src(
+            "input img: [16,16] from client
+            let res = 
+                for x: 16 {
+                    for y: 16 {
+                        img[x-1][y-1] + img[x+1][y+1]
+                    }
+                }
+            in
+            for x: 16 {
+                for y: 16 {
+                    res[x-2][y-2] + res[x+2][y+2]
+                }
+            }
+            ",
+        );
+    }
+
+    #[test]
+    fn test_convolve() {
+        test_scheduler_from_src(
+            "input img: [16,16] from client
+            let conv1 = 
+                for x: 15 {
+                    for y: 15 {
+                        img[x][y] + img[x+1][y+1]
+                    }
+                }
+            in
+            for x: 14 {
+                for y: 14 {
+                    conv1[x][y] + conv1[x+1][y+1]
+                }
+            }
+            ",
+        );
     }
     
     #[test]
@@ -215,6 +358,19 @@ mod tests {
                 sum(M[i] * v)
             }
             ",
+        );
+    }
+
+    #[test]
+    fn test_matmatmul() {
+        test_scheduler_from_src(
+            "input A: [4,4] from client
+            input B: [4,4] from client
+            for i: 4 {
+                for j: 4 {
+                    sum(for k: 4 { A[i][k] * B[k][j] })
+                }
+            }",
         );
     }
 
@@ -236,6 +392,17 @@ mod tests {
                     sum(for k: 4 { A2[i][k] * res[k][j] })
                 }
             }
+            ",
+        );
+    }
+
+    #[test]
+    fn test_dotprod_pointless() {
+        test_scheduler_from_src(
+            "
+            input A: [3] from client
+            input B: [3] from client
+            sum(A * B)
             ",
         );
     }
