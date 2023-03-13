@@ -3,6 +3,8 @@ use std::{
     fmt::Display, ops::Index,
 };
 
+use indexmap::IndexMap;
+
 use crate::{
     circ::{vector_info::VectorInfo, CircuitValue, IndexCoordinateMap},
     lang::{
@@ -141,7 +143,7 @@ pub struct IndexingSiteSchedule {
 
 impl IndexingSiteSchedule {
     // compute the scheduled tiling for a given dimension
-    pub fn get_tiling(&self, dim: DimIndex) -> Vec<usize> {
+    pub fn get_dim_tiling(&self, dim: DimIndex) -> Vec<usize> {
         let mut sdims: Vec<(usize, usize)> = Vec::new();
 
         sdims.extend(
@@ -151,16 +153,49 @@ impl IndexingSiteSchedule {
                 .map(|edim| (edim.stride, edim.extent)),
         );
 
-        sdims.extend(self.vectorized_dims.iter().flat_map(|vdim| {
+        sdims.extend(self.vectorized_dims.iter().filter_map(|vdim| {
             if vdim.index == dim {
-                vec![(vdim.stride, vdim.extent)]
+                Some((vdim.stride, vdim.extent))
             } else {
-                vec![]
+                None
             }
         }));
 
         sdims.sort_by(|(s1, _), (s2, _)| s1.cmp(s2));
         sdims.into_iter().map(|(_, extent)| extent).collect()
+    }
+
+    pub fn get_tiling(&self) -> Vec<Vec<usize>> {
+        let mut sdims_map: IndexMap<DimIndex, Vec<(usize, usize)>> = IndexMap::new();
+
+        let mut dims_index: Vec<DimIndex> =
+            self.exploded_dims.iter()
+            .map(|dim| dim.index)
+            .chain(
+                self.vectorized_dims.iter()
+                .map(|dim| dim.index)
+            )
+            .collect();
+        dims_index.sort();
+
+        for index in dims_index.iter() {
+            sdims_map.insert(*index, vec![]);
+        }
+
+        for edim in self.exploded_dims.iter() {
+            let dim_list = sdims_map.get_mut(&edim.index).unwrap();
+            dim_list.push((edim.stride, edim.extent));
+        }
+
+        for vdim in self.vectorized_dims.iter() {
+            let dim_list = sdims_map.get_mut(&vdim.index).unwrap();
+            dim_list.push((vdim.stride, vdim.extent));
+        }
+
+        sdims_map.into_iter().map(|(_, mut dims_list)| {
+            dims_list.sort_by(|(s1, _), (s2, _)| s1.cmp(s2));
+            dims_list.into_iter().map(|(_, extent)| extent).collect()
+        }).collect()
     }
 
     pub fn to_expr_schedule(&self, shape: Shape) -> ExprSchedule {

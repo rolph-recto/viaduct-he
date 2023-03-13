@@ -247,8 +247,6 @@ impl<'m, 't> Scheduler<'m, 't> {
 
 #[cfg(test)]
 mod tests {
-    use std::array;
-
     use crate::{
         circ::materializer::DefaultMaterializerFactory,
         lang::{
@@ -257,7 +255,7 @@ mod tests {
             source::SourceProgram,
             parser::ProgramParser
         },
-        scheduling::transformer::DefaultScheduleTransformerFactory
+        scheduling::transformer::{DefaultScheduleTransformerFactory, FastScheduleTransformerFactory}
     };
     use super::*;
 
@@ -299,7 +297,7 @@ mod tests {
         let mut scheduler =
             Scheduler::new(
                 inlined_programs,
-                Box::new(DefaultScheduleTransformerFactory), 
+                Box::new(FastScheduleTransformerFactory), 
                 Box::new(DefaultMaterializerFactory), 
             );
         

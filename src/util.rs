@@ -11,6 +11,17 @@ impl NameGenerator {
         }
     }
 
+    /// register a name; returns true if it is fresh,
+    /// false if it's already been registered
+    pub fn register(&mut self, name: &str) -> bool {
+        let fresh = !self.name_map.contains_key(name);
+        if fresh {
+            self.name_map.insert(String::from(name), 2);
+        }
+
+        fresh
+    }
+
     pub fn get_fresh_name(&mut self, name: &str) -> String {
         if self.name_map.contains_key(name) {
             let n = self.name_map[name];
@@ -58,19 +69,22 @@ pub fn gen_pow2_list(n: usize) -> Vec<usize> {
     res
 }
 
-#[cfg(test)]
-mod test {
-    use super::gen_pow2_list;
+// get a list of factor pairs of n
+// excludes the trivial factor pair (1, n)
+pub fn get_factor_pairs(n: usize) -> Vec<(usize, usize)> {
+    let mut pairs = Vec::new();
+    for i in (2..).take_while(|x| x * x <= n) {
+        if n % i == 0 {
+            let q = n / i;
+            pairs.push((i, q));
 
-    #[test]
-    fn test_pow2() {
-        assert!(gen_pow2_list(4) == vec![4, 2, 1])
+            if i != q {
+                pairs.push((q, i));
+            }
+        }
     }
 
-    #[test]
-    fn test_pow2_2() {
-        assert!(gen_pow2_list(1) == vec![1])
-    }
+    pairs
 }
 
 #[cfg(test)]
@@ -87,5 +101,23 @@ mod tests {
         assert_ne!(name1, name2);
         assert_ne!(name2, name3);
         assert_ne!(name1, name3);
+    }
+
+    #[test]
+    fn test_pow2() {
+        assert!(gen_pow2_list(4) == vec![4, 2, 1])
+    }
+
+    #[test]
+    fn test_pow2_2() {
+        assert!(gen_pow2_list(1) == vec![1])
+    }
+
+    #[test]
+    fn test_factor_pairs() {
+        assert_eq!(get_factor_pairs(4), vec![(2,2)]);
+        assert_eq!(get_factor_pairs(10), vec![(2,5),(5,2)]);
+        assert_eq!(get_factor_pairs(12), vec![(2,6),(6,2),(3,4),(4,3)]);
+        assert_eq!(get_factor_pairs(16), vec![(2,8),(8,2),(4,4)]);
     }
 }

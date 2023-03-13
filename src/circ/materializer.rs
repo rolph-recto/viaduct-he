@@ -581,8 +581,8 @@ impl<'a> InputArrayMaterializer<'a> for DiagonalArrayMaterializer {
             // dim i and j must have both have the same tiling that corresponds
             // to the permutation transform
             // TODO: for now, assume i and j are NOT tiled
-            let tiling_i = schedule.get_tiling(dim_i);
-            let tiling_j = schedule.get_tiling(dim_j);
+            let tiling_i = schedule.get_dim_tiling(dim_i);
+            let tiling_j = schedule.get_dim_tiling(dim_j);
 
             // dim i and j cannot have any padding
             let no_padding = schedule.vectorized_dims.iter().all(|dim| {
