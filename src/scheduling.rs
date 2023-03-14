@@ -358,6 +358,57 @@ impl Display for ExprSchedule {
 }
 
 impl ExprSchedule {
+    /// this schedule can be derived from the expr schedule of indexed array
+    /// this can used to fast reject schedules instead of full materialization
+    pub fn can_derive(&self, transform: &ArrayTransform, array_sched: &ExprSchedule) -> bool {
+        // first, check that the vectorized dimensions match
+        let same_num_vectorized_dims =
+            self.vectorized_dims.len() == array_sched.vectorized_dims.len();
+
+        if !same_num_vectorized_dims {
+            return false
+        }
+
+        let dims_valid =
+            self.vectorized_dims.iter()
+            .zip(array_sched.vectorized_dims.iter())
+            .all(|(dim1, dim2)| -> bool {
+                match (dim1, dim2) {
+                    (VectorScheduleDim::Filled(fdim1), VectorScheduleDim::Filled(fdim2)) => {
+                        let same_extent = fdim1.extent == fdim2.extent;
+                        let dims_match =
+                            match transform.dims[fdim1.index] {
+                                DimContent::FilledDim { dim, extent, stride } =>
+                                    dim == fdim2.index,
+
+                                DimContent::EmptyDim { extent } =>
+                                    false,
+                            };
+
+                        same_extent && dims_match
+                    },
+
+                    (VectorScheduleDim::Filled(fdim1), VectorScheduleDim::ReducedRepeated(extent)) |
+                    (VectorScheduleDim::Filled(fdim1), VectorScheduleDim::Reduced(extent)) => {
+                        let same_extent = fdim1.extent == *extent;
+                        let is_empty = 
+                            if let DimContent::EmptyDim { extent: _ } = transform.dims[fdim1.index] {
+                                true
+                            } else {
+                                false
+                            };
+
+                        same_extent && is_empty
+                    },
+
+                    // dim1 has to be filled, so these are impossible cases
+                    _ => false
+                }
+            });
+
+        dims_valid
+    }
+
     /// size of a vector (the product of vectorized dims' extents)
     pub fn vector_size(&self) -> usize {
         self.vectorized_dims
@@ -461,17 +512,33 @@ impl Schedule {
     pub fn compute_output_schedule(
         &self,
         program: &InlinedProgram,
+        output_schedules: &HashMap<ArrayName, ExprSchedule>,
         expr: &InlinedExpr,
     ) -> Result<ExprScheduleType, String> {
         match expr {
             InlinedExpr::ReduceNode(reduced_index, _, body) => {
-                let body_sched = self.compute_output_schedule(program, body)?;
+                let body_sched =
+                    self.compute_output_schedule(
+                        program,
+                        output_schedules,
+                        body
+                    )?;
                 Schedule::schedule_reduce(*reduced_index, &body_sched)
             }
 
             InlinedExpr::Op(_, expr1, expr2) => {
-                let sched1 = self.compute_output_schedule(program, expr1)?;
-                let sched2 = self.compute_output_schedule(program, expr2)?;
+                let sched1 =
+                    self.compute_output_schedule(
+                        program,
+                        output_schedules,
+                        expr1
+                    )?;
+                let sched2 =
+                    self.compute_output_schedule(
+                        program,
+                        output_schedules,
+                        expr2
+                    )?;
                 Schedule::schedule_op(&sched1, &sched2)
             }
 
@@ -480,7 +547,18 @@ impl Schedule {
             InlinedExpr::ExprRef(indexing_id, transform) => {
                 if let Some(indexing_sched) = self.schedule_map.get(indexing_id) {
                     let expr_schedule = indexing_sched.to_expr_schedule(transform.as_shape());
-                    Ok(ExprScheduleType::Specific(expr_schedule))
+                    if let Some(array_sched) = output_schedules.get(&transform.array) {
+                        if expr_schedule.can_derive(transform, array_sched) {
+                            Ok(ExprScheduleType::Specific(expr_schedule))
+
+                        } else {
+                            Err(String::from("cannot derive"))
+                        }
+
+                    } else { // indexed array is input
+                        Ok(ExprScheduleType::Specific(expr_schedule))
+                    }
+
                 } else {
                     Err(String::from("indexing site has no schedule"))
                 }
@@ -587,10 +665,27 @@ impl Schedule {
     }
 
     pub fn is_schedule_valid(&self, program: &InlinedProgram) -> bool {
-        program
-            .expr_map
-            .iter()
-            .all(|(_, expr)| self.compute_output_schedule(program, expr).is_ok())
+        let mut output_schedules: HashMap<ArrayName, ExprSchedule> = HashMap::new();
+        for (array_name, expr) in program.expr_map.iter() {
+            match self.compute_output_schedule(program, &output_schedules, expr) {
+                Ok(out_sched_type) => {
+                    match out_sched_type {
+                        ExprScheduleType::Any =>
+                            panic!("array literals not supported yet"),
+
+                        ExprScheduleType::Specific(out_sched) => {
+                            output_schedules.insert(array_name.clone(), out_sched);
+                        }
+                    }
+                },
+                
+                Err(_) => {
+                    return false
+                }
+            }
+        }
+
+        return true
     }
 }
 

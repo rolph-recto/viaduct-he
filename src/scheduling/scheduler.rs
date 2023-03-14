@@ -1,8 +1,8 @@
-use std::{collections::{HashSet, HashMap}};
+use std::{collections::{HashSet, HashMap}, time::Instant};
 
 use crate::{
     lang::{index_elim::{InlinedProgram}},
-    circ::{materializer::MaterializerFactory, cost::{CostEstimator, CostFeatures}},
+    circ::{materializer::MaterializerFactory, cost::{CostEstimator, CostFeatures}, pseudomaterializer::PseudoMaterializer},
     scheduling::{
         Schedule,
         transformer::{ScheduleTransformer, ScheduleTransformerFactory}
@@ -13,7 +13,8 @@ struct InlineScheduler<'a> {
     pub program: InlinedProgram,
     pub transformers: Vec<Box<dyn ScheduleTransformer + 'a>>,
     pub visited: HashSet<Schedule>,
-    pub frontier: HashSet<Schedule>
+    pub frontier: HashSet<Schedule>,
+    pub valid_schedules_visited: usize,
 }
 
 impl<'t> InlineScheduler<'t> {
@@ -27,6 +28,7 @@ impl<'t> InlineScheduler<'t> {
             transformers,
             visited: HashSet::from([init_schedule.clone()]),
             frontier: HashSet::from([init_schedule]),
+            valid_schedules_visited: 1,
         }
     }
 
@@ -47,14 +49,17 @@ impl<'t> InlineScheduler<'t> {
                     if !self.visited.contains(&neighbor) && neighbor.is_schedule_valid(&self.program) {
                         // neighbor is a newly visited schedule;
                         // try to materialize it into a circuit
-                        let mat = materializer_factory.create();
+
+                        // let mat = materializer_factory.create();
+                        let mat = PseudoMaterializer::new();
 
                         // if the schedule can be materialized into a circuit,
                         // give a cost to the schedule and save it if it's
                         // in the Pareto frontier
                         if let Ok(circuit) = mat.run(&self.program, &neighbor) {
-                            let cost = cost_estimator.estimate_cost(&circuit);
+                            let cost = cost_estimator.estimate_pseudo_cost(&circuit);
                             neighbor_list.push((neighbor.clone(), cost));
+                            self.valid_schedules_visited += 1;
                         }
 
                         self.frontier.insert(neighbor.clone());
@@ -73,6 +78,7 @@ pub struct SchedulingResult {
     pub inlined_program: InlinedProgram,
     pub pareto_frontier: Vec<(Schedule, CostFeatures)>,
     pub visited: HashSet<Schedule>,
+    pub valid_schedules_visited: usize,
 }
 
 /// scheduler for a particular inlined program
@@ -158,7 +164,8 @@ impl<'m, 't> Scheduler<'m, 't> {
             SchedulingResult {
                 inlined_program: inline_sched.program,
                 visited: inline_sched.visited,
-                pareto_frontier: schedule_list
+                pareto_frontier: schedule_list,
+                valid_schedules_visited: inline_sched.valid_schedules_visited,
             }
         }).collect()
     }
@@ -194,7 +201,8 @@ impl<'m, 't> Scheduler<'m, 't> {
     /// apply transformers to the current set of visited
     /// this uses a trick similar to semi-naive evaluation to Datalog
     /// returns true if new schedules were visited; otherwise
-    pub fn iterate(&mut self) -> bool {
+    pub fn iterate(&mut self) -> (bool, usize) {
+        let mut new_count = 0;
         let mut has_new = false;
         let mut new_schedules: Vec<(usize, Vec<(Schedule, CostFeatures)>)> = Vec::new();
         for (id, (do_run, scheduler)) in self.inline_schedulers.iter_mut() {
@@ -206,6 +214,7 @@ impl<'m, 't> Scheduler<'m, 't> {
                     );
 
                 if new_inline_schedules.len() > 0 { 
+                    new_count += new_inline_schedules.len();
                     new_schedules.push((*id, new_inline_schedules));
                 }
 
@@ -224,7 +233,7 @@ impl<'m, 't> Scheduler<'m, 't> {
             }
         }
 
-        has_new
+        (has_new, new_count)
     }
 
     /// run a certain number of iterations, or until reaching quiescence
@@ -239,7 +248,9 @@ impl<'m, 't> Scheduler<'m, 't> {
         };
 
         while changed && within_limit(iter) {
-            changed = self.iterate();
+            let iter_res = self.iterate();
+            changed = iter_res.0;
+            println!("iteration {}, new schedules explored: {}", iter, iter_res.1);
             iter += 1;
         }
     }
@@ -247,6 +258,8 @@ impl<'m, 't> Scheduler<'m, 't> {
 
 #[cfg(test)]
 mod tests {
+    use std::fs::File;
+
     use crate::{
         circ::materializer::DefaultMaterializerFactory,
         lang::{
@@ -265,7 +278,6 @@ mod tests {
 
         let elaborated = Elaborator::new().run(program);
 
-        /*
         let inlined_programs: Vec<InlinedProgram> =
             elaborated.inline_sets().iter()
             .filter_map(|inline_set| {
@@ -285,7 +297,7 @@ mod tests {
                     Err(_) => None
                 }
             }).collect();
-        */
+        /*
         let inlined_programs = vec![
             IndexElimination::new().run(
                 &elaborated.default_inline_set(),
@@ -293,11 +305,12 @@ mod tests {
                 &elaborated
             ).unwrap()
         ];
+        */
 
         let mut scheduler =
             Scheduler::new(
                 inlined_programs,
-                Box::new(FastScheduleTransformerFactory), 
+                Box::new(DefaultScheduleTransformerFactory), 
                 Box::new(DefaultMaterializerFactory), 
             );
         
@@ -306,14 +319,15 @@ mod tests {
         let mat_factory = DefaultMaterializerFactory;
         for result in scheduler.get_results() {
             println!("inlined program:\n{}", result.inlined_program);
-            println!("visited schedules: {}", result.visited.len());
+            println!("schedules visited: {}", result.visited.len());
+            println!("valid schedules visited: {}", result.valid_schedules_visited);
             println!("pareto frontier size: {}", result.pareto_frontier.len());
             for (schedule, cost) in result.pareto_frontier.iter() {
                 let circuit =
                     mat_factory.create()
                     .run(&result.inlined_program, &schedule).unwrap();
                 println!("schedule:\n{}\ncost:\n{:?}", schedule, cost);
-                println!("circuit:\n{}", circuit);
+                // println!("circuit:\n{}", circuit);
             }
         }
     }

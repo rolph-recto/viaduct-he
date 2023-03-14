@@ -4,6 +4,7 @@ use super::*;
 
 /// object that takes an input schedule and returns a set of "nearby" schedules.
 pub trait ScheduleTransformer {
+    fn name(&self) -> &str;
     fn transform(&self, schedule: &Schedule) -> HashSet<Schedule>;
 }
 
@@ -49,6 +50,8 @@ impl VectorizeDimTransformer {
 }
 
 impl ScheduleTransformer for VectorizeDimTransformer {
+    fn name(&self) -> &str { "VectorizeDimTransformer "}
+
     fn transform(&self, schedule: &Schedule) -> HashSet<Schedule> {
         let mut neighbors = HashSet::new();
 
@@ -133,6 +136,8 @@ impl SplitDimTransformer {
 }
 
 impl ScheduleTransformer for SplitDimTransformer {
+    fn name(&self) -> &str { "SplitDimTransformer "}
+
     fn transform(&self, schedule: &Schedule) -> HashSet<Schedule> {
         let mut neighbors = HashSet::new();
 

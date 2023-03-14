@@ -327,6 +327,10 @@ impl<'a> Materializer<'a> {
             }
         }
     }
+
+    // method to fast reject 
+    // used to speed up scheduling
+    // fn can_materialize()
 }
 
 // array materializer that doesn't attempt to derive vectors

@@ -8,7 +8,7 @@ use crate::{
     lang::Operator,
 };
 
-use super::{CircuitId, CircuitObjectRegistry};
+use super::{CircuitId, CircuitObjectRegistry, pseudomaterializer::PseudoCircuitProgram};
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub struct CostFeatures {
@@ -151,6 +151,35 @@ impl CostEstimator {
         cost.input_plaintexts += program.registry.get_plaintext_input_vectors(None).len();
         cost.input_plaintexts += program.registry.get_constants(None, None).len();
         cost.input_plaintexts += program.registry.get_masks(None).len();
+        cost.output_ciphertexts += output_multiplicity;
+
+        cost
+    }
+
+    pub fn estimate_pseudo_cost(&self, program: &PseudoCircuitProgram) -> CostFeatures {
+        let mut cost: CostFeatures =
+            program.expr_list.iter()
+            .fold(CostFeatures::default(), |acc, (multiplicity, id)| {
+                let (_, cost) =
+                    self.estimate_cost_expr(
+                        *id,
+                        *multiplicity,
+                        &program.registry, 
+                        &mut HashMap::new()
+                    );
+
+                acc.combine(&cost)
+            });
+
+        let (output_multiplicity, _) = program.expr_list.last().unwrap();
+        // cost.input_ciphertexts += program.registry.get_ciphertext_input_vectors(None).len();
+        // cost.input_plaintexts += program.registry.get_plaintext_input_vectors(None).len();
+
+        cost.input_plaintexts += program.registry.get_constants(None, None).len();
+
+        // assume the circuit only uses 1 mask globally
+        cost.input_plaintexts += 1;
+
         cost.output_ciphertexts += output_multiplicity;
 
         cost
