@@ -1,0 +1,21 @@
+input a_id: [128, 8] from client
+input a_data: [128] from client
+input b_id: [128, 8] from client
+input b_data: [128] from client
+let a_sum = sum(a_data) in
+let b_sum =
+sum(for j: 128 {
+	b_data[j] *
+	product(for i: 128 {
+		product(for k: 8 {
+			1 - /* not equal */
+			(1 * /* equal */
+				(1 - /* not XOR */
+					/* XOR */
+					(a_id[i][k] - b_id[j][k]) *  (a_id[i][k] - b_id[j][k])
+				)
+			)
+		})
+	})
+}) in
+a_sum + b_sum

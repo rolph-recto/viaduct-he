@@ -14,6 +14,7 @@ use crate::{
 
 pub mod cost;
 pub mod materializer;
+pub mod pseudomaterializer;
 pub mod optimizer;
 pub mod partial_eval;
 pub mod vector_deriver;

@@ -8,7 +8,8 @@ use crate::{
     lang::Operator,
 };
 
-use super::{CircuitId, CircuitObjectRegistry, pseudomaterializer::PseudoCircuitProgram};
+use super::{CircuitId, CircuitObjectRegistry};
+use crate::circ::pseudomaterializer::PseudoCircuitProgram;
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub struct CostFeatures {

@@ -375,7 +375,9 @@ impl ExprSchedule {
             .all(|(dim1, dim2)| -> bool {
                 match (dim1, dim2) {
                     (VectorScheduleDim::Filled(fdim1), VectorScheduleDim::Filled(fdim2)) => {
-                        let same_extent = fdim1.extent == fdim2.extent;
+                        let same_extent =
+                            fdim1.pad_left + fdim1.extent + fdim1.pad_right ==
+                            fdim2.pad_left + fdim2.extent + fdim2.pad_right;
                         let dims_match =
                             match transform.dims[fdim1.index] {
                                 DimContent::FilledDim { dim, extent, stride } =>
@@ -586,8 +588,27 @@ impl Schedule {
             }
 
             (ExprScheduleType::Specific(sched1), ExprScheduleType::Specific(sched2)) => {
-                if sched1 == sched2 {
+                // it's okay if the number of dimensions of sched1 and sched2 don't match;
+                // some of the outermost dimensions (empty dims and reduced repeated)
+                // can be safely ignored as they only repeat elements anyway
+                let mut sched1_new = sched1.clone();
+                let mut sched2_new = sched1.clone();
+
+                while sched1_new.vectorized_dims.len() < sched2_new.vectorized_dims.len() {
+                    if let VectorScheduleDim::ReducedRepeated(_) = sched2_new.vectorized_dims.front().unwrap() {
+                        sched2_new.vectorized_dims.pop_front();
+                    }
+                }
+
+                while sched2_new.vectorized_dims.len() > sched2_new.vectorized_dims.len() {
+                    if let VectorScheduleDim::ReducedRepeated(_) = sched1_new.vectorized_dims.front().unwrap() {
+                        sched1_new.vectorized_dims.pop_front();
+                    }
+                }
+
+                if sched1_new == sched2_new {
                     Ok(ExprScheduleType::Specific(sched1.clone()))
+
                 } else {
                     Err(String::from("Operand schedules don't match"))
                 }
@@ -831,5 +852,63 @@ mod tests {
             }
             ",
         );
+    }
+
+    #[test]
+    fn test_pop_reduced_repeated() {
+        let sched1: ExprSchedule = ExprSchedule {
+            shape: im::vector![16],
+            preprocessing: None,
+            exploded_dims: im::Vector::new(),
+            vectorized_dims: im::vector![
+                VectorScheduleDim::ReducedRepeated(16),
+                VectorScheduleDim::Filled(
+                    ScheduleDim {
+                        index: 0,
+                        stride: 1,
+                        extent: 16,
+                        name: String::from("i"),
+                        pad_left: 0,
+                        pad_right: 0,
+                    }
+                ),
+            ]
+        };
+
+        let sched2: ExprSchedule = ExprSchedule {
+            shape: im::vector![16],
+            preprocessing: None,
+            exploded_dims: im::Vector::new(),
+            vectorized_dims: im::vector![
+                VectorScheduleDim::Filled(
+                    ScheduleDim {
+                        index: 0,
+                        stride: 1,
+                        extent: 16,
+                        name: String::from("i"),
+                        pad_left: 0,
+                        pad_right: 0,
+                    }
+                ),
+            ]
+        };
+
+        let sched_type1 = ExprScheduleType::Specific(sched1);
+        let sched_type2 = ExprScheduleType::Specific(sched2);
+
+        let out_sched1 =
+            Schedule::schedule_op(
+                &sched_type1,
+                &sched_type2,
+            );
+
+        let out_sched2 =
+            Schedule::schedule_op(
+                &sched_type2,
+                &sched_type1,
+            );
+
+        assert!(out_sched1.is_ok());
+        assert!(out_sched2.is_ok());
     }
 }
