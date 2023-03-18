@@ -705,7 +705,7 @@ mod tests {
     };
 
     fn test_materializer(program: InlinedProgram, schedule: Schedule) -> ParamCircuitProgram {
-        assert!(schedule.is_schedule_valid(&program));
+        assert!(schedule.is_schedule_valid(&program).is_ok());
 
         let amats: Vec<Box<dyn InputArrayMaterializer>> = vec![Box::new(DefaultArrayMaterializer::new())];
         let materializer = Materializer::new(amats);

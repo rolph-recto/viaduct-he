@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    fmt::Display, ops::Index,
+    fmt::Display, ops::Index, mem::MaybeUninit,
 };
 
 use indexmap::IndexMap;
@@ -357,16 +357,31 @@ impl Display for ExprSchedule {
     }
 }
 
+pub enum ScheduleDerivationFailure {
+    // the derivation is a dead end; do not try to transform it further
+    DeadEnd,
+
+    // further transformations can maybe make schedule valid
+    MaybeTransformableToValid
+}
+
 impl ExprSchedule {
     /// this schedule can be derived from the expr schedule of indexed array
-    /// this can used to fast reject schedules instead of full materialization
-    pub fn can_derive(&self, transform: &ArrayTransform, array_sched: &ExprSchedule) -> bool {
+    /// this can used to prune schedules out of the search space
+    pub fn can_derive(
+        &self,
+        transform: &ArrayTransform,
+        array_sched: &ExprSchedule
+    ) -> Option<ScheduleDerivationFailure> {
         // first, check that the vectorized dimensions match
-        let same_num_vectorized_dims =
-            self.vectorized_dims.len() == array_sched.vectorized_dims.len();
+        let transform_vec_dims  = self.vectorized_dims.len();
+        let array_vec_dims = array_sched.vectorized_dims.len();
 
-        if !same_num_vectorized_dims {
-            return false
+        if transform_vec_dims < array_vec_dims {
+            return Some(ScheduleDerivationFailure::MaybeTransformableToValid)
+
+        } else if transform_vec_dims > array_vec_dims {
+            return Some(ScheduleDerivationFailure::DeadEnd)
         }
 
         let dims_valid =
@@ -408,7 +423,12 @@ impl ExprSchedule {
                 }
             });
 
-        dims_valid
+        if dims_valid {
+            None
+
+        } else {
+            Some(ScheduleDerivationFailure::DeadEnd)
+        }
     }
 
     /// size of a vector (the product of vectorized dims' extents)
@@ -480,7 +500,7 @@ impl Schedule {
     // the initial schedule explodes *all* dims
     pub fn gen_initial_schedule(program: &InlinedProgram) -> Self {
         let mut schedule_map: im::HashMap<IndexingId, IndexingSiteSchedule> = im::HashMap::new();
-        let dim_class_map: HashMap<ArrayDim, usize> = program.get_dim_equiv_classes();
+        let dim_class_map: HashMap<ArrayDim, usize> = program.get_dim_classes();
 
         for (_, expr) in program.expr_map.iter() {
             for (indexing_id, transform) in expr.get_indexing_sites() {
@@ -516,7 +536,7 @@ impl Schedule {
         program: &InlinedProgram,
         output_schedules: &HashMap<ArrayName, ExprSchedule>,
         expr: &InlinedExpr,
-    ) -> Result<ExprScheduleType, String> {
+    ) -> Result<ExprScheduleType, ScheduleDerivationFailure> {
         match expr {
             InlinedExpr::ReduceNode(reduced_index, _, body) => {
                 let body_sched =
@@ -526,6 +546,7 @@ impl Schedule {
                         body
                     )?;
                 Schedule::schedule_reduce(*reduced_index, &body_sched)
+                .map_err(|_| ScheduleDerivationFailure::DeadEnd)
             }
 
             InlinedExpr::Op(_, expr1, expr2) => {
@@ -541,20 +562,25 @@ impl Schedule {
                         output_schedules,
                         expr2
                     )?;
+
                 Schedule::schedule_op(&sched1, &sched2)
+                .map_err(|_| ScheduleDerivationFailure::DeadEnd)
             }
 
-            InlinedExpr::Literal(_) => Schedule::schedule_literal(),
+            InlinedExpr::Literal(_) =>
+                Schedule::schedule_literal()
+                .map_err(|_| ScheduleDerivationFailure::DeadEnd),
 
             InlinedExpr::ExprRef(indexing_id, transform) => {
                 if let Some(indexing_sched) = self.schedule_map.get(indexing_id) {
                     let expr_schedule = indexing_sched.to_expr_schedule(transform.as_shape());
                     if let Some(array_sched) = output_schedules.get(&transform.array) {
-                        if expr_schedule.can_derive(transform, array_sched) {
-                            Ok(ExprScheduleType::Specific(expr_schedule))
+                        match expr_schedule.can_derive(transform, array_sched) {
+                            Some(failure) => Err(failure),
 
-                        } else {
-                            Err(String::from("cannot derive"))
+                            None => {
+                                Ok(ExprScheduleType::Specific(expr_schedule))
+                            }
                         }
 
                     } else { // indexed array is input
@@ -562,7 +588,7 @@ impl Schedule {
                     }
 
                 } else {
-                    Err(String::from("indexing site has no schedule"))
+                    Err(ScheduleDerivationFailure::DeadEnd)
                 }
             }
         }
@@ -685,7 +711,7 @@ impl Schedule {
         }
     }
 
-    pub fn is_schedule_valid(&self, program: &InlinedProgram) -> bool {
+    pub fn is_schedule_valid(&self, program: &InlinedProgram) -> Result<(), ScheduleDerivationFailure> {
         let mut output_schedules: HashMap<ArrayName, ExprSchedule> = HashMap::new();
         for (array_name, expr) in program.expr_map.iter() {
             match self.compute_output_schedule(program, &output_schedules, expr) {
@@ -696,17 +722,17 @@ impl Schedule {
 
                         ExprScheduleType::Specific(out_sched) => {
                             output_schedules.insert(array_name.clone(), out_sched);
+                            return Ok(())
                         }
-                    }
+                    };
                 },
                 
-                Err(_) => {
-                    return false
-                }
+                Err(failure) =>
+                    return Err(failure)
             }
         }
 
-        return true
+        return Ok(())
     }
 }
 
@@ -740,7 +766,7 @@ mod tests {
         println!("{}", &init_schedule);
 
         // the initial schedule should always be valid!
-        assert!(init_schedule.is_schedule_valid(&tprogram));
+        assert!(init_schedule.is_schedule_valid(&tprogram).is_ok());
     }
 
     #[test]

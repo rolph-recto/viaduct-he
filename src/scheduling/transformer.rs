@@ -1,4 +1,6 @@
-use crate::util::{self, NameGenerator};
+use std::cmp::max;
+
+use crate::util;
 
 use super::*;
 
@@ -16,10 +18,11 @@ pub struct DefaultScheduleTransformerFactory;
 
 impl<'a> ScheduleTransformerFactory<'a> for DefaultScheduleTransformerFactory {
     fn create(&self, program: &InlinedProgram) -> Vec<Box<dyn ScheduleTransformer + 'a>> {
-        let dim_classes = program.get_dim_equiv_classes();
+        let dim_classes = program.get_dim_classes();
+        let indexing_levels = program.get_indexing_levels();
         vec![
-            Box::new(VectorizeDimTransformer::new(dim_classes.clone())),
-            Box::new(SplitDimTransformer::new(Some(2), dim_classes))
+            Box::new(VectorizeDimTransformer::new(dim_classes.clone(), indexing_levels.clone())),
+            Box::new(SplitDimTransformer::new(Some(2), Some(1), dim_classes, indexing_levels.clone()))
         ]
     }
 }
@@ -30,9 +33,10 @@ pub struct FastScheduleTransformerFactory;
 
 impl<'a> ScheduleTransformerFactory<'a> for FastScheduleTransformerFactory {
     fn create(&self, program: &InlinedProgram) -> Vec<Box<dyn ScheduleTransformer + 'a>> {
-        let dim_classes = program.get_dim_equiv_classes();
+        let dim_classes = program.get_dim_classes();
+        let indexing_levels = program.get_indexing_levels();
         vec![
-            Box::new(VectorizeDimTransformer::new(dim_classes.clone())),
+            Box::new(VectorizeDimTransformer::new(dim_classes.clone(), indexing_levels.clone())),
         ]
     }
 }
@@ -40,12 +44,16 @@ impl<'a> ScheduleTransformerFactory<'a> for FastScheduleTransformerFactory {
 /// a transformer that turns exploded dims to vectorized dims
 #[derive(Default)]
 pub struct VectorizeDimTransformer {
-    dim_classes: HashMap<(IndexingId, DimIndex), usize>
+    dim_classes: HashMap<(IndexingId, DimIndex), usize>,
+    indexing_levels: HashMap<IndexingId, usize>,
 }
 
 impl VectorizeDimTransformer {
-    pub fn new(dim_classes: HashMap<(IndexingId, DimIndex), usize>) -> Self {
-        Self { dim_classes }
+    pub fn new(
+        dim_classes: HashMap<(IndexingId, DimIndex), usize>,
+        indexing_levels: HashMap<IndexingId, usize>,
+    ) -> Self {
+        Self { dim_classes, indexing_levels }
     }
 }
 
@@ -55,23 +63,32 @@ impl ScheduleTransformer for VectorizeDimTransformer {
     fn transform(&self, schedule: &Schedule) -> HashSet<Schedule> {
         let mut neighbors = HashSet::new();
 
+        let cur_level: usize = 
+            schedule.schedule_map.iter()
+            .filter(|(_, isched)| {
+                isched.get_tiling().iter().any(|dim| dim.len() > 1) ||
+                isched.vectorized_dims.len() > 0
+            })
+            .fold(0, |acc, (site, _)| {
+                max(acc, self.indexing_levels[site])
+            });
+
         // find candidate dims to be vectorized
         let mut candidate_dims: HashSet<(usize, usize, usize)> = HashSet::new();
         for (site, ischedule) in schedule.schedule_map.iter() {
-            let last_vdim_index =
-                ischedule.vectorized_dims.last()
-                .map(|vdim| vdim.index);
+            if self.indexing_levels[site] >= cur_level { 
+                let vectorized_dims: HashSet<DimIndex> =
+                    ischedule.vectorized_dims.iter()
+                    .map(|vdim| vdim.index)
+                    .collect();
 
-            for edim in ischedule.exploded_dims.iter() {
-                // don't add vectorization candidate if it will be next
-                // to a dim of the same index
-                let adjacent_same_index =
-                    last_vdim_index
-                    .map_or(false, |index| edim.index == index);
-
-                if !adjacent_same_index {
-                    let class = self.dim_classes[&(site.clone(), edim.index)];
-                    candidate_dims.insert((class, edim.stride, edim.extent));
+                for edim in ischedule.exploded_dims.iter() {
+                    // don't add vectorization candidate if some tile of the dimension
+                    // has already been vectorized
+                    if !vectorized_dims.contains(&edim.index) {
+                        let class = self.dim_classes[&(site.clone(), edim.index)];
+                        candidate_dims.insert((class, edim.stride, edim.extent));
+                    }
                 }
             }
         }
@@ -123,15 +140,19 @@ impl ScheduleTransformer for VectorizeDimTransformer {
 
 pub struct SplitDimTransformer {
     split_limit: Option<usize>,
+    num_dims_to_split: Option<usize>,
     dim_classes: HashMap<(IndexingId, DimIndex), usize>,
+   indexing_levels: HashMap<IndexingId, usize>,
 }
 
 impl SplitDimTransformer {
     pub fn new(
         split_limit: Option<usize>,
-        dim_classes: HashMap<(IndexingId, DimIndex), usize>
+        num_dims_to_split: Option<usize>,
+        dim_classes: HashMap<(IndexingId, DimIndex), usize>,
+        indexing_levels: HashMap<IndexingId, usize>,
     ) -> Self {
-        Self { split_limit, dim_classes }
+        Self { split_limit, num_dims_to_split, dim_classes, indexing_levels, }
     }
 }
 
@@ -139,25 +160,56 @@ impl ScheduleTransformer for SplitDimTransformer {
     fn name(&self) -> &str { "SplitDimTransformer "}
 
     fn transform(&self, schedule: &Schedule) -> HashSet<Schedule> {
+        let num_split_dims =
+            schedule.schedule_map.iter()
+            .fold(0, |acc,(_, isched)| {
+                let isched_tiled_dims =
+                    isched.get_tiling().iter().filter(|t| t.len() > 1).count();
+
+                acc + isched_tiled_dims
+            });
+
+        let num_split_dims_within_limit =
+            self.num_dims_to_split
+            .map_or(true, |limit| num_split_dims <= limit);
+
+        if !num_split_dims_within_limit {
+            return HashSet::new()
+        }
+
         let mut neighbors = HashSet::new();
+
+        let cur_level: usize =
+            schedule.schedule_map.iter()
+            .filter(|(_, isched)| {
+                isched.get_tiling().iter().any(|dim| dim.len() > 1) ||
+                isched.vectorized_dims.len() > 0
+            })
+            .fold(0, |acc, (site, _)| {
+                max(acc, self.indexing_levels[site])
+            });
+
 
         // find candidate dims to be vectorized
         let mut candidate_dims: HashSet<(usize, usize, usize)> = HashSet::new();
         for (site, ischedule) in schedule.schedule_map.iter() {
             let tiling = ischedule.get_tiling();
-            for edim in ischedule.exploded_dims.iter() {
-                let dim_tiling = tiling[edim.index].len();
 
-                // the dimension has not been split beyond the limit (if there is one)
-                let within_tiling_limit = 
-                    self.split_limit.map_or(true, |l| dim_tiling < l);
+            if self.indexing_levels[site] >= cur_level && num_split_dims_within_limit {
+                for edim in ischedule.exploded_dims.iter() {
+                    let dim_tiling = tiling[edim.index].len();
 
-                // only split innermost dims (stride = 1)
-                let innermost_dim = edim.stride == 1;
+                    // the dimension has not been split beyond the limit (if there is one)
+                    let within_tiling_limit = 
+                        self.split_limit.map_or(true, |l| dim_tiling < l);
 
-                if within_tiling_limit && innermost_dim {
-                    let class = self.dim_classes[&(site.clone(), edim.index)];
-                    candidate_dims.insert((class, edim.stride, edim.extent));
+                    // only split innermost dims (stride = 1)
+                    let innermost_dim = edim.stride == 1;
+
+                    if within_tiling_limit && innermost_dim {
+                        let class = self.dim_classes[&(site.clone(), edim.index)];
+                        candidate_dims.insert((class, edim.stride, edim.extent));
+                    }
                 }
             }
         }
@@ -241,6 +293,11 @@ mod tests {
             ((String::from("b1"), 1), 1),
         ]);
 
+        let indexing_levels = HashMap::from([
+            (String::from("a1"), 1),
+            (String::from("b1"), 1),
+        ]);
+
         let mut schedule_map: im::HashMap<IndexingId, IndexingSiteSchedule> = im::HashMap::new();
         schedule_map.insert(
             String::from("a1"),
@@ -295,7 +352,7 @@ mod tests {
 
         let schedule = Schedule { schedule_map };
 
-        let transformer = VectorizeDimTransformer::new(dim_classes);
+        let transformer = VectorizeDimTransformer::new(dim_classes, indexing_levels);
         let neighbors = transformer.transform(&schedule);
         assert_eq!(neighbors.len(), 2);
 

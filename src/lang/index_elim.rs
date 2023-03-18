@@ -101,7 +101,19 @@ impl InlinedProgram {
         &self.expr_map.get(OUTPUT_EXPR_NAME).unwrap()
     }
 
-    pub fn get_dim_equiv_classes(&self) -> HashMap<ArrayDim, usize> {
+    pub fn get_indexing_levels(&self) -> HashMap<IndexingId, usize> {
+        let mut level_map: HashMap<IndexingId, usize> = HashMap::new();
+
+        for (i, (_, expr)) in self.expr_map.iter().enumerate() {
+            for (site, _) in expr.get_indexing_sites() {
+                level_map.insert(site, i+1);
+            }
+        }
+
+        level_map
+    }
+
+    pub fn get_dim_classes(&self) -> HashMap<ArrayDim, usize> {
         let mut dim_eqs: Vec<(ArrayDim, ArrayDim)> = Vec::new();
         for (_, expr) in self.expr_map.iter() {
             let (eqs, _) = self.compute_dim_equalities(expr);
