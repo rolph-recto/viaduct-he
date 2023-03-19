@@ -224,20 +224,28 @@ impl<'a> Materializer<'a> {
                                 reduce_id
                             });
 
-                    let expr = reduction_list.into_iter().fold(expr_vec, |acc, n| {
-                        let rot_id = self.registry.register_circuit(ParamCircuitExpr::Rotate(
-                            OffsetExpr::Literal(-(n as isize)),
-                            acc,
-                        ));
+                    let expr =
+                        reduction_list.into_iter()
+                        .fold(expr_vec, |acc, n| {
+                            let rot_id =
+                                self.registry.register_circuit(
+                                    ParamCircuitExpr::Rotate(
+                                        OffsetExpr::Literal(-(n as isize)),
+                                        acc,
+                                    )
+                                );
 
-                        let op_id = self.registry.register_circuit(ParamCircuitExpr::Op(
-                            Operator::Add,
-                            acc,
-                            rot_id,
-                        ));
+                            let op_id =
+                                self.registry.register_circuit(
+                                    ParamCircuitExpr::Op(
+                                        Operator::Add,
+                                        acc,
+                                        rot_id,
+                                    )
+                                );
 
-                        op_id
-                    });
+                            op_id
+                        });
 
                     Ok((schedule, body_type, expr))
                 } else {
@@ -725,8 +733,8 @@ mod tests {
         let program: SourceProgram = parser.parse(src).unwrap();
 
         let elaborated = Elaborator::new().run(program);
-        let inline_set = elaborated.default_inline_set();
-        let array_group_map = elaborated.default_array_group_map();
+        let inline_set = elaborated.all_inlined_set();
+        let array_group_map = elaborated.array_group_from_inline_set(&inline_set);
 
         let res =   
             IndexElimination::new()

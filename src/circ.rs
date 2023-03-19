@@ -714,21 +714,48 @@ impl CircuitObjectRegistry {
     // this starts from children and proceeds to the circuit root
     pub fn expr_list(&self, id: CircuitId) -> Vec<CircuitId> {
         let mut expr_ids: Vec<CircuitId> = vec![id];
+        let mut parent_map: HashMap<CircuitId, Vec<CircuitId>> = HashMap::new();
+        let mut deps_map: HashMap<CircuitId, usize> = HashMap::new();
         let mut worklist: LinkedList<CircuitId> = LinkedList::from([id]);
 
         while !worklist.is_empty() {
-            let id = worklist.pop_front().unwrap();
-            let circuit = self.circuit_map.get(&id).unwrap();
-            for child_id in circuit.circuit_refs() {
+            let cur_id = worklist.pop_front().unwrap();
+            let circuit = self.circuit_map.get(&cur_id).unwrap();
+            let refs = circuit.circuit_refs();
+            deps_map.insert(cur_id, refs.len());
+            for child_id in refs {
                 if !expr_ids.contains(&child_id) {
                     expr_ids.push(child_id);
                     worklist.push_back(child_id);
                 }
+
+                if let Some(parents) = parent_map.get_mut(&child_id) {
+                    parents.push(cur_id);
+
+                } else {
+                    parent_map.insert(child_id, vec![cur_id]);
+                }
             }
         }
 
-        expr_ids.reverse();
-        expr_ids
+        // compute toposort of expr_ids
+        let mut toposort: Vec<CircuitId> = Vec::new();
+        while deps_map.len() > 0 {
+            let (&cur, _) =
+                deps_map.iter()
+                .find(|(_, count)| **count == 0)
+                .unwrap();
+
+            toposort.push(cur);
+            deps_map.remove(&cur);
+            if let Some(parents) = parent_map.get(&cur) {
+                for parent in parents.iter() {
+                    *deps_map.get_mut(parent).unwrap() -= 1;
+                }
+            }
+        }
+
+        toposort
     }
 
     pub fn circuit_ciphertext_vars(&self, id: CircuitId) -> HashSet<VarName> {

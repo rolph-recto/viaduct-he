@@ -1,8 +1,7 @@
-input A1: [(0,1),(0,1)]
-input A2: [(0,1),(0,1)]
-input B: [(0,1),(0,1)]
-for i: (0,1) {
-    for j: (0,1) {
-        sum(for k: (0,1) { A1[i][k] * B[k][j] })
+input A: [4,4] from client
+input B: [4,4] from client
+for i: 4 {
+    for j: 4 {
+        sum(for k: 4 { A[i][k] * B[k][j] })
     }
 }

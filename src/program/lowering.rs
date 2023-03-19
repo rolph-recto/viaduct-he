@@ -471,219 +471,220 @@ impl CircuitLowering {
         stmts: &mut Vec<HEStatement>,
     ) -> InstructionId {
         if let Some(instr_id) = self.circuit_instr_map.get(&expr_id) {
-            *instr_id
+            return *instr_id
+        }
 
-        } else {
-            match registry.get_circuit(expr_id) {
-                ParamCircuitExpr::CiphertextVar(var) => {
-                    let instr_id = self.fresh_instr_id();
-                    if let Some(var_ref) = ct_inline_map.get(var) {
-                        ref_map.insert(instr_id, (var_ref.clone(), HEType::Ciphertext));
-                    } else {
-                        let index_vars =
-                            match registry.get_ct_var_value(var) {
-                                CircuitValue::CoordMap(coord_map) => {
-                                    let index_vars = coord_map.index_vars_and_extents();
-                                    assert!(index_vars.iter().all(|ve| indices.contains(ve)));
-                                    index_vars.iter().map(|(v, _)| {
-                                        HEIndex::Var(v.clone())
-                                    }).collect()
-                                },
-                                CircuitValue::Single(_) => vec![]
-                            };
-
-                        let var_ref = HERef::Array(var.clone(), index_vars);
-                        ref_map.insert(instr_id, (var_ref, HEType::Ciphertext));
-                    }
-
-                    self.circuit_instr_map.insert(expr_id, instr_id);
-                    instr_id
-                }
-
-                ParamCircuitExpr::PlaintextVar(var) => {
-                    let instr_id = self.fresh_instr_id();
-                    if let Some(var_ref) = pt_inline_map.get(var) {
-                        ref_map.insert(instr_id, (var_ref.clone(), HEType::Plaintext));
-                    } else {
-                        let index_vars =
-                            match registry.get_pt_var_value(var) {
-                                CircuitValue::CoordMap(coord_map) => {
-                                    let index_vars = coord_map.index_vars_and_extents();
-                                    assert!(index_vars.iter().all(|ve| indices.contains(ve)));
-                                    index_vars.iter().map(|(v, _)| {
-                                        HEIndex::Var(v.clone())
-                                    }).collect()
-                                },
-                                CircuitValue::Single(_) => vec![]
-                            };
-
-                        let var_ref = HERef::Array(var.clone(), index_vars);
-                        ref_map.insert(instr_id, (var_ref, HEType::Plaintext));
-                    }
-
-                    instr_id
-                }
-
-                ParamCircuitExpr::Literal(val) => {
-                    let lit_ref = context.const_map.get(val).unwrap();
-                    let instr_id = self.fresh_instr_id();
-                    let lit_ref = HERef::Array(lit_ref.clone(), vec![]);
-                    ref_map.insert(instr_id, (lit_ref, HEType::Plaintext));
-                    self.circuit_instr_map.insert(expr_id, instr_id);
-                    instr_id
-                }
-
-                ParamCircuitExpr::Op(op, expr1, expr2) => {
-                    let id1 = self.gen_circuit_expr_instrs(
-                        *expr1,
-                        registry,
-                        context,
-                        indices,
-                        ct_inline_map,
-                        pt_inline_map,
-                        ref_map,
-                        stmts,
-                    );
-
-                    let id2 = self.gen_circuit_expr_instrs(
-                        *expr2,
-                        registry,
-                        context,
-                        indices,
-                        ct_inline_map,
-                        pt_inline_map,
-                        ref_map,
-                        stmts,
-                    );
-
-                    let (ref1, type1) = ref_map.get(&id1).unwrap().clone();
-                    let (ref2, type2) = ref_map.get(&id2).unwrap().clone();
-
-                    // make sure that operand 1 is always ciphertext
-                    let (optype, ref1_final, ref2_final) =
-                        match (type1, type2) {
-                            (HEType::Ciphertext, HEType::Ciphertext) =>
-                                (HEInstructionType::CipherCipher, ref1, ref2),
-
-                            (HEType::Plaintext, HEType::Ciphertext) =>
-                                (HEInstructionType::CipherPlain, ref2, ref1),
-
-                            (HEType::Ciphertext, HEType::Plaintext) =>
-                                (HEInstructionType::CipherPlain, ref1, ref2),
-
-                            (HEType::Native, _) | (_, HEType::Native) |
-                            (HEType::Plaintext, HEType::Plaintext) =>
-                                unreachable!()
+        return match registry.get_circuit(expr_id) {
+            ParamCircuitExpr::CiphertextVar(var) => {
+                let instr_id = self.fresh_instr_id();
+                if let Some(var_ref) = ct_inline_map.get(var) {
+                    ref_map.insert(instr_id, (var_ref.clone(), HEType::Ciphertext));
+                } else {
+                    let index_vars =
+                        match registry.get_ct_var_value(var) {
+                            CircuitValue::CoordMap(coord_map) => {
+                                let index_vars = coord_map.index_vars_and_extents();
+                                assert!(index_vars.iter().all(|ve| indices.contains(ve)));
+                                index_vars.iter().map(|(v, _)| {
+                                    HEIndex::Var(v.clone())
+                                }).collect()
+                            },
+                            CircuitValue::Single(_) => vec![]
                         };
 
-                    let id = self.fresh_instr_id();
-                    let instr = match op {
-                        Operator::Add =>
-                            HEInstruction::Add(optype, id, ref1_final, ref2_final),
+                    let var_ref = HERef::Array(var.clone(), index_vars);
+                    ref_map.insert(instr_id, (var_ref, HEType::Ciphertext));
+                }
 
-                        Operator::Sub =>
-                            HEInstruction::Sub(optype, id, ref1_final, ref2_final),
+                self.circuit_instr_map.insert(expr_id, instr_id);
+                instr_id
+            }
 
-                        Operator::Mul =>
-                            HEInstruction::Mul(optype, id, ref1_final, ref2_final),
+            ParamCircuitExpr::PlaintextVar(var) => {
+                let instr_id = self.fresh_instr_id();
+                if let Some(var_ref) = pt_inline_map.get(var) {
+                    ref_map.insert(instr_id, (var_ref.clone(), HEType::Plaintext));
+                } else {
+                    let index_vars =
+                        match registry.get_pt_var_value(var) {
+                            CircuitValue::CoordMap(coord_map) => {
+                                let index_vars = coord_map.index_vars_and_extents();
+                                assert!(index_vars.iter().all(|ve| indices.contains(ve)));
+                                index_vars.iter().map(|(v, _)| {
+                                    HEIndex::Var(v.clone())
+                                }).collect()
+                            },
+                            CircuitValue::Single(_) => vec![]
+                        };
+
+                    let var_ref = HERef::Array(var.clone(), index_vars);
+                    ref_map.insert(instr_id, (var_ref, HEType::Plaintext));
+                }
+
+                self.circuit_instr_map.insert(expr_id, instr_id);
+                instr_id
+            }
+
+            ParamCircuitExpr::Literal(val) => {
+                let lit_ref = context.const_map.get(val).unwrap();
+                let instr_id = self.fresh_instr_id();
+                let lit_ref = HERef::Array(lit_ref.clone(), vec![]);
+                ref_map.insert(instr_id, (lit_ref, HEType::Plaintext));
+                self.circuit_instr_map.insert(expr_id, instr_id);
+                instr_id
+            }
+
+            ParamCircuitExpr::Op(op, expr1, expr2) => {
+                let id1 = self.gen_circuit_expr_instrs(
+                    *expr1,
+                    registry,
+                    context,
+                    indices,
+                    ct_inline_map,
+                    pt_inline_map,
+                    ref_map,
+                    stmts,
+                );
+
+                let id2 = self.gen_circuit_expr_instrs(
+                    *expr2,
+                    registry,
+                    context,
+                    indices,
+                    ct_inline_map,
+                    pt_inline_map,
+                    ref_map,
+                    stmts,
+                );
+
+                let (ref1, type1) = ref_map.get(&id1).unwrap().clone();
+                let (ref2, type2) = ref_map.get(&id2).unwrap().clone();
+
+                // make sure that operand 1 is always ciphertext
+                let (optype, ref1_final, ref2_final) =
+                    match (type1, type2) {
+                        (HEType::Ciphertext, HEType::Ciphertext) =>
+                            (HEInstructionType::CipherCipher, ref1, ref2),
+
+                        (HEType::Plaintext, HEType::Ciphertext) =>
+                            (HEInstructionType::CipherPlain, ref2, ref1),
+
+                        (HEType::Ciphertext, HEType::Plaintext) =>
+                            (HEInstructionType::CipherPlain, ref1, ref2),
+
+                        (HEType::Native, _) | (_, HEType::Native) |
+                        (HEType::Plaintext, HEType::Plaintext) =>
+                            unreachable!()
                     };
 
-                    stmts.push(HEStatement::Instruction(instr));
-                    ref_map.insert(id, (HERef::Instruction(id), HEType::Ciphertext));
-                    id
-                }
+                let instr_id = self.fresh_instr_id();
+                let instr = match op {
+                    Operator::Add =>
+                        HEInstruction::Add(optype, instr_id, ref1_final, ref2_final),
 
-                ParamCircuitExpr::Rotate(steps, body) => {
-                    let body_id = self.gen_circuit_expr_instrs(
-                        *body,
-                        registry,
-                        context,
-                        indices,
-                        ct_inline_map,
-                        pt_inline_map,
-                        ref_map,
-                        stmts,
-                    );
+                    Operator::Sub =>
+                        HEInstruction::Sub(optype, instr_id, ref1_final, ref2_final),
 
-                    let id = self.fresh_instr_id();
+                    Operator::Mul =>
+                        HEInstruction::Mul(optype, instr_id, ref1_final, ref2_final),
+                };
 
-                    let (body_operand, body_type) = ref_map.get(&body_id).unwrap().clone();
+                stmts.push(HEStatement::Instruction(instr));
+                ref_map.insert(instr_id, (HERef::Instruction(instr_id), HEType::Ciphertext));
+                self.circuit_instr_map.insert(expr_id, instr_id);
+                instr_id
+            }
 
-                    assert!(body_type == HEType::Ciphertext);
+            ParamCircuitExpr::Rotate(steps, body) => {
+                let body_id = self.gen_circuit_expr_instrs(
+                    *body,
+                    registry,
+                    context,
+                    indices,
+                    ct_inline_map,
+                    pt_inline_map,
+                    ref_map,
+                    stmts,
+                );
 
-                    stmts.push(HEStatement::Instruction(HEInstruction::Rot(
-                        HEInstructionType::CipherCipher,
-                        id,
-                        steps.clone(),
-                        body_operand,
-                    )));
-                    ref_map.insert(id, (HERef::Instruction(id), HEType::Ciphertext));
+                let instr_id = self.fresh_instr_id();
 
-                    id
-                }
+                let (body_operand, body_type) = ref_map.get(&body_id).unwrap().clone();
 
-                ParamCircuitExpr::ReduceDim(dim, extent, op, body) => {
-                    let mut body_indices = indices.clone();
-                    body_indices.push((dim.clone(), *extent));
+                assert!(body_type == HEType::Ciphertext);
 
-                    let mut body_stmts: Vec<HEStatement> = Vec::new();
+                stmts.push(HEStatement::Instruction(HEInstruction::Rot(
+                    HEInstructionType::CipherCipher,
+                    instr_id,
+                    steps.clone(),
+                    body_operand,
+                )));
+                ref_map.insert(instr_id, (HERef::Instruction(instr_id), HEType::Ciphertext));
+                self.circuit_instr_map.insert(expr_id, instr_id);
+                instr_id
+            }
 
-                    let body_id = self.gen_circuit_expr_instrs(
-                        *body,
-                        registry,
-                        context,
-                        &body_indices,
-                        ct_inline_map,
-                        pt_inline_map,
-                        ref_map,
-                        &mut body_stmts,
-                    );
+            ParamCircuitExpr::ReduceDim(dim, extent, op, body) => {
+                let mut body_indices = indices.clone();
+                body_indices.push((dim.clone(), *extent));
 
-                    let (body_operand, body_type) = ref_map.get(&body_id).unwrap().clone();
+                let mut body_stmts: Vec<HEStatement> = Vec::new();
 
-                    // the body must be ciphertext, or else
-                    // it would've been partially evaluated
-                    assert!(body_type == HEType::Ciphertext);
+                let body_id = self.gen_circuit_expr_instrs(
+                    *body,
+                    registry,
+                    context,
+                    &body_indices,
+                    ct_inline_map,
+                    pt_inline_map,
+                    ref_map,
+                    &mut body_stmts,
+                );
 
-                    let reduce_var = self.name_generator.get_fresh_name("__reduce");
+                let (body_operand, body_type) = ref_map.get(&body_id).unwrap().clone();
 
-                    let reduce_var_ref = HERef::Array(reduce_var.clone(), vec![]);
+                // the body must be ciphertext, or else
+                // it would've been partially evaluated
+                assert!(body_type == HEType::Ciphertext);
 
-                    let reduce_id = self.fresh_instr_id();
+                let reduce_var = self.name_generator.get_fresh_name("__reduce");
 
-                    let reduce_type = HEInstructionType::CipherCipher;
+                let reduce_var_ref = HERef::Array(reduce_var.clone(), vec![]);
 
-                    let reduce_stmt = match op {
-                        Operator::Add => {
-                            HEInstruction::Add(reduce_type, reduce_id, reduce_var_ref.clone(), body_operand)
-                        }
+                let reduce_id = self.fresh_instr_id();
 
-                        Operator::Sub => {
-                            HEInstruction::Sub(reduce_type, reduce_id, reduce_var_ref.clone(), body_operand)
-                        }
+                let reduce_type = HEInstructionType::CipherCipher;
 
-                        Operator::Mul => {
-                            HEInstruction::Mul(reduce_type, reduce_id, reduce_var_ref.clone(), body_operand)
-                        }
-                    };
+                let reduce_stmt = match op {
+                    Operator::Add => {
+                        HEInstruction::Add(reduce_type, reduce_id, reduce_var_ref.clone(), body_operand)
+                    }
 
-                    body_stmts.push(HEStatement::Instruction(reduce_stmt));
-                    body_stmts.push(HEStatement::AssignVar(
-                        reduce_var.clone(),
-                        vec![],
-                        HEOperand::Ref(HERef::Instruction(reduce_id)),
-                    ));
+                    Operator::Sub => {
+                        HEInstruction::Sub(reduce_type, reduce_id, reduce_var_ref.clone(), body_operand)
+                    }
 
-                    stmts.extend([
-                        HEStatement::DeclareVar(reduce_var.clone(), HEType::Ciphertext, vec![]),
-                        HEStatement::ForNode(dim.clone(), *extent, body_stmts),
-                    ]);
+                    Operator::Mul => {
+                        HEInstruction::Mul(reduce_type, reduce_id, reduce_var_ref.clone(), body_operand)
+                    }
+                };
 
-                    let id = self.fresh_instr_id();
-                    ref_map.insert(id, (reduce_var_ref, HEType::Ciphertext));
+                body_stmts.push(HEStatement::Instruction(reduce_stmt));
+                body_stmts.push(HEStatement::AssignVar(
+                    reduce_var.clone(),
+                    vec![],
+                    HEOperand::Ref(HERef::Instruction(reduce_id)),
+                ));
 
-                    id
-                }
+                stmts.extend([
+                    HEStatement::DeclareVar(reduce_var.clone(), HEType::Ciphertext, vec![]),
+                    HEStatement::ForNode(dim.clone(), *extent, body_stmts),
+                ]);
+
+                let instr_id = self.fresh_instr_id();
+                ref_map.insert(instr_id, (reduce_var_ref, HEType::Ciphertext));
+                self.circuit_instr_map.insert(expr_id, instr_id);
+                instr_id
             }
         }
     }
@@ -699,169 +700,170 @@ impl CircuitLowering {
         stmts: &mut Vec<HEStatement>,
     ) -> InstructionId {
         if let Some(instr_id) = self.circuit_instr_map.get(&expr_id) {
-            *instr_id
+            return *instr_id
 
-        } else {
-            match registry.get_circuit(expr_id) {
-                ParamCircuitExpr::CiphertextVar(_) => {
-                    unreachable!()
-                },
+        }
+        return match registry.get_circuit(expr_id) {
+            ParamCircuitExpr::CiphertextVar(_) => {
+                unreachable!()
+            },
 
-                ParamCircuitExpr::PlaintextVar(var) => {
-                    let instr_id = self.fresh_instr_id();
-                    if let Some(var_ref) = native_inline_map.get(var) {
-                        ref_map.insert(instr_id, var_ref.clone());
+            ParamCircuitExpr::PlaintextVar(var) => {
+                let instr_id = self.fresh_instr_id();
+                if let Some(var_ref) = native_inline_map.get(var) {
+                    ref_map.insert(instr_id, var_ref.clone());
 
-                    } else {
-                        let index_vars =
-                            match registry.get_pt_var_value(var) {
-                                CircuitValue::CoordMap(coord_map) => {
-                                    let index_vars = coord_map.index_vars_and_extents();
-                                    assert!(index_vars.iter().all(|ve| indices.contains(ve)));
-                                    index_vars.iter().map(|(v, _)| {
-                                        HEIndex::Var(v.clone())
-                                    }).collect()
+                } else {
+                    let index_vars =
+                        match registry.get_pt_var_value(var) {
+                            CircuitValue::CoordMap(coord_map) => {
+                                let index_vars = coord_map.index_vars_and_extents();
+                                assert!(index_vars.iter().all(|ve| indices.contains(ve)));
+                                index_vars.iter().map(|(v, _)| {
+                                    HEIndex::Var(v.clone())
+                                }).collect()
 
-                                },
-                                CircuitValue::Single(_) => vec![]
-                            };
+                            },
+                            CircuitValue::Single(_) => vec![]
+                        };
 
-                        let var_ref = HERef::Array(var.clone(), index_vars);
-                        ref_map.insert(instr_id, var_ref);
-                    }
-
-                    instr_id
-                },
-
-                ParamCircuitExpr::Literal(val) => {
-                    let lit_ref = context.const_map.get(val).unwrap();
-                    let instr_id = self.fresh_instr_id();
-                    let lit_ref = HERef::Array(lit_ref.clone(), vec![]);
-                    ref_map.insert(instr_id, lit_ref);
-                    self.circuit_instr_map.insert(expr_id, instr_id);
-                    instr_id
-                },
-
-                ParamCircuitExpr::Op(op, expr1, expr2) => {
-                    let id1 = self.gen_native_expr_instrs(
-                        *expr1,
-                        registry,
-                        context,
-                        indices,
-                        native_inline_map,
-                        ref_map,
-                        stmts,
-                    );
-
-                    let id2 = self.gen_native_expr_instrs(
-                        *expr2,
-                        registry,
-                        context,
-                        indices,
-                        native_inline_map,
-                        ref_map,
-                        stmts,
-                    );
-
-                    let ref1 = ref_map.get(&id1).unwrap().clone();
-                    let ref2 = ref_map.get(&id2).unwrap().clone();
-
-                    let optype = HEInstructionType::Native;
-                    let id = self.fresh_instr_id();
-                    let instr = match op {
-                        Operator::Add => HEInstruction::Add(optype, id, ref1, ref2),
-                        Operator::Sub => HEInstruction::Sub(optype, id, ref1, ref2),
-                        Operator::Mul => HEInstruction::Mul(optype, id, ref1, ref2),
-                    };
-
-                    stmts.push(HEStatement::Instruction(instr));
-                    ref_map.insert(id, HERef::Instruction(id));
-                    id
-                },
-
-                ParamCircuitExpr::Rotate(steps, body) => {
-                    let body_id = self.gen_native_expr_instrs(
-                        *body,
-                        registry,
-                        context,
-                        indices,
-                        native_inline_map,
-                        ref_map,
-                        stmts,
-                    );
-
-                    let id = self.fresh_instr_id();
-
-                    let body_operand = ref_map.get(&body_id).unwrap().clone();
-
-                    stmts.push(HEStatement::Instruction(HEInstruction::Rot(
-                        HEInstructionType::Native,
-                        id,
-                        steps.clone(),
-                        body_operand,
-                    )));
-                    ref_map.insert(id, HERef::Instruction(id));
-
-                    id
+                    let var_ref = HERef::Array(var.clone(), index_vars);
+                    ref_map.insert(instr_id, var_ref);
                 }
 
-                ParamCircuitExpr::ReduceDim(dim, extent, op, body) => {
-                    let mut body_indices = indices.clone();
-                    body_indices.push((dim.clone(), *extent));
+                self.circuit_instr_map.insert(expr_id, instr_id);
+                instr_id
+            },
 
-                    let mut body_stmts: Vec<HEStatement> = Vec::new();
+            ParamCircuitExpr::Literal(val) => {
+                let lit_ref = context.const_map.get(val).unwrap();
+                let instr_id = self.fresh_instr_id();
+                let lit_ref = HERef::Array(lit_ref.clone(), vec![]);
+                ref_map.insert(instr_id, lit_ref);
+                self.circuit_instr_map.insert(expr_id, instr_id);
+                instr_id
+            },
 
-                    let body_id = self.gen_native_expr_instrs(
-                        *body,
-                        registry,
-                        context,
-                        &body_indices,
-                        native_inline_map,
-                        ref_map,
-                        &mut body_stmts,
-                    );
+            ParamCircuitExpr::Op(op, expr1, expr2) => {
+                let id1 = self.gen_native_expr_instrs(
+                    *expr1,
+                    registry,
+                    context,
+                    indices,
+                    native_inline_map,
+                    ref_map,
+                    stmts,
+                );
 
-                    let body_operand = ref_map.get(&body_id).unwrap().clone();
+                let id2 = self.gen_native_expr_instrs(
+                    *expr2,
+                    registry,
+                    context,
+                    indices,
+                    native_inline_map,
+                    ref_map,
+                    stmts,
+                );
 
-                    let reduce_var = self.name_generator.get_fresh_name("reduce");
+                let ref1 = ref_map.get(&id1).unwrap().clone();
+                let ref2 = ref_map.get(&id2).unwrap().clone();
 
-                    let reduce_var_ref = HERef::Array(reduce_var.clone(), vec![]);
+                let optype = HEInstructionType::Native;
+                let instr_id = self.fresh_instr_id();
+                let instr = match op {
+                    Operator::Add => HEInstruction::Add(optype, instr_id, ref1, ref2),
+                    Operator::Sub => HEInstruction::Sub(optype, instr_id, ref1, ref2),
+                    Operator::Mul => HEInstruction::Mul(optype, instr_id, ref1, ref2),
+                };
 
-                    let reduce_id = self.fresh_instr_id();
+                stmts.push(HEStatement::Instruction(instr));
+                ref_map.insert(instr_id, HERef::Instruction(instr_id));
+                self.circuit_instr_map.insert(expr_id, instr_id);
+                instr_id
+            },
 
-                    let reduce_type = HEInstructionType::Native;
+            ParamCircuitExpr::Rotate(steps, body) => {
+                let body_id = self.gen_native_expr_instrs(
+                    *body,
+                    registry,
+                    context,
+                    indices,
+                    native_inline_map,
+                    ref_map,
+                    stmts,
+                );
 
-                    let reduce_stmt = match op {
-                        Operator::Add => {
-                            HEInstruction::Add(reduce_type, reduce_id, reduce_var_ref.clone(), body_operand)
-                        },
+                let instr_id = self.fresh_instr_id();
 
-                        Operator::Sub => {
-                            HEInstruction::Sub(reduce_type, reduce_id, reduce_var_ref.clone(), body_operand)
-                        },
+                let body_operand = ref_map.get(&body_id).unwrap().clone();
 
-                        Operator::Mul => {
-                            HEInstruction::Mul(reduce_type, reduce_id, reduce_var_ref.clone(), body_operand)
-                        },
-                    };
+                stmts.push(HEStatement::Instruction(HEInstruction::Rot(
+                    HEInstructionType::Native,
+                    instr_id,
+                    steps.clone(),
+                    body_operand,
+                )));
+                ref_map.insert(instr_id, HERef::Instruction(instr_id));
+                self.circuit_instr_map.insert(expr_id, instr_id);
+                instr_id
+            }
 
-                    body_stmts.push(HEStatement::Instruction(reduce_stmt));
-                    body_stmts.push(HEStatement::AssignVar(
-                        reduce_var.clone(),
-                        vec![],
-                        HEOperand::Ref(HERef::Instruction(reduce_id)),
-                    ));
+            ParamCircuitExpr::ReduceDim(dim, extent, op, body) => {
+                let mut body_indices = indices.clone();
+                body_indices.push((dim.clone(), *extent));
 
-                    stmts.extend([
-                        HEStatement::DeclareVar(reduce_var.clone(), HEType::Native, vec![]),
-                        HEStatement::ForNode(dim.clone(), *extent, body_stmts),
-                    ]);
+                let mut body_stmts: Vec<HEStatement> = Vec::new();
 
-                    let id = self.fresh_instr_id();
-                    ref_map.insert(id, reduce_var_ref);
+                let body_id = self.gen_native_expr_instrs(
+                    *body,
+                    registry,
+                    context,
+                    &body_indices,
+                    native_inline_map,
+                    ref_map,
+                    &mut body_stmts,
+                );
 
-                    id
-                }
+                let body_operand = ref_map.get(&body_id).unwrap().clone();
+
+                let reduce_var = self.name_generator.get_fresh_name("reduce");
+
+                let reduce_var_ref = HERef::Array(reduce_var.clone(), vec![]);
+
+                let reduce_id = self.fresh_instr_id();
+
+                let reduce_type = HEInstructionType::Native;
+
+                let reduce_stmt = match op {
+                    Operator::Add => {
+                        HEInstruction::Add(reduce_type, reduce_id, reduce_var_ref.clone(), body_operand)
+                    },
+
+                    Operator::Sub => {
+                        HEInstruction::Sub(reduce_type, reduce_id, reduce_var_ref.clone(), body_operand)
+                    },
+
+                    Operator::Mul => {
+                        HEInstruction::Mul(reduce_type, reduce_id, reduce_var_ref.clone(), body_operand)
+                    },
+                };
+
+                body_stmts.push(HEStatement::Instruction(reduce_stmt));
+                body_stmts.push(HEStatement::AssignVar(
+                    reduce_var.clone(),
+                    vec![],
+                    HEOperand::Ref(HERef::Instruction(reduce_id)),
+                ));
+
+                stmts.extend([
+                    HEStatement::DeclareVar(reduce_var.clone(), HEType::Native, vec![]),
+                    HEStatement::ForNode(dim.clone(), *extent, body_stmts),
+                ]);
+
+                let instr_id = self.fresh_instr_id();
+                ref_map.insert(instr_id, reduce_var_ref);
+                self.circuit_instr_map.insert(expr_id, instr_id);
+                instr_id
             }
         }
     }
@@ -969,7 +971,7 @@ mod tests {
     use crate::{
         circ::{
             CiphertextObject, CircuitObjectRegistry, CircuitValue, IndexCoordinateMap,
-            IndexCoordinateSystem, ParamCircuitExpr, ParamCircuitProgram, partial_eval::HEPartialEvaluator,
+            IndexCoordinateSystem, ParamCircuitExpr, ParamCircuitProgram, partial_eval::PlaintextHoisting,
         },
         lang::{BaseOffsetMap, Operator},
         program::lowering::CircuitLowering,
@@ -1079,7 +1081,7 @@ mod tests {
             circuit_expr_list: vec![(String::from("out"), vec![(String::from("i"), 2)], circuit)],
         };
 
-        let circuit_program2 = HEPartialEvaluator::new().run(circuit_program);
+        let circuit_program2 = PlaintextHoisting::new().run(circuit_program);
 
         test_lowering(circuit_program2);
     }
@@ -1155,7 +1157,7 @@ mod tests {
             circuit_expr_list: vec![(String::from("out"), vec![(String::from("i"), 2)], circuit)],
         };
 
-        let circuit_program2 = HEPartialEvaluator::new().run(circuit_program);
+        let circuit_program2 = PlaintextHoisting::new().run(circuit_program);
 
         test_lowering(circuit_program2);
     }

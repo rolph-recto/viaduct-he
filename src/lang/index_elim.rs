@@ -83,6 +83,7 @@ impl Display for InlinedExpr {
 
 pub type ArrayDim = (IndexingId, DimIndex);
 
+#[derive(Clone)]
 pub struct InlinedProgram {
     pub input_map: IndexMap<ArrayName, (Shape, ArrayType)>,
     pub expr_map: IndexMap<ArrayName, InlinedExpr>,
@@ -723,8 +724,8 @@ mod tests {
             println!("inline set: {:?}", inline_set)
         }
 
-        let inline_set = elaborated.default_inline_set();
-        let array_group_map = elaborated.default_array_group_map();
+        let inline_set = elaborated.all_inlined_set();
+        let array_group_map = elaborated.array_group_from_inline_set(&inline_set);
 
         let res =
             IndexElimination::new().run(&inline_set, &array_group_map, &elaborated);

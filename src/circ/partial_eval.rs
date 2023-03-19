@@ -8,9 +8,9 @@ pub enum PartialCircuit {
 }
 
 /// partially evaluate plaintexts to remove them from the HE circuit
-pub struct HEPartialEvaluator { name_generator: NameGenerator }
+pub struct PlaintextHoisting { name_generator: NameGenerator }
 
-impl HEPartialEvaluator {
+impl PlaintextHoisting {
     pub fn new() -> Self {
         Self { name_generator: NameGenerator::new() }
     }

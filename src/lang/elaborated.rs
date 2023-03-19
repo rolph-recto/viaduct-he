@@ -60,15 +60,16 @@ impl ElaboratedProgram {
         .collect()
     }
 
-    /// the default inline set contains all indexing ids
+    /// the inline set contains all indexing ids
     /// (i.e. inline everything)
-    pub fn default_inline_set(&self) -> HashSet<IndexingId> {
+    pub fn all_inlined_set(&self) -> HashSet<IndexingId> {
         self.expr_map.iter().map(|(id, _)| id.clone()).collect()
     }
 
-    /// the default array group map just contains mappings for indexing ids for inputs
-    pub fn default_array_group_map(&self) -> HashMap<IndexingId, ArrayName> {
-        self.array_group_from_inline_set(&self.default_inline_set())
+    /// the inline set contains no indexing ids
+    /// (i.e. inline nothing)
+    pub fn no_inlined_set(&self) -> HashSet<IndexingId> {
+        HashSet::new()
     }
 
     /// build array group map from
@@ -108,6 +109,11 @@ impl ElaboratedProgram {
         } else {
             vec![HashSet::new()]
         }
+    }
+
+    // only contains the all inlined and no inlined sets
+    pub fn simple_inline_sets(&self) -> Vec<HashSet<IndexingId>> {
+        vec![self.all_inlined_set(), self.no_inlined_set()]
     }
 }
 

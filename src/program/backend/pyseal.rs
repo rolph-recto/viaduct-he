@@ -1092,7 +1092,7 @@ mod tests {
             circuit_expr_list: vec![(String::from("out"), vec![(String::from("i"), 2)], circuit)],
         };
 
-        let circuit_program2 = HEPartialEvaluator::new().run(circuit_program);
+        let circuit_program2 = PlaintextHoisting::new().run(circuit_program);
 
         let mut lowering = CircuitLowering::new();
         let he_program = lowering.run(circuit_program2);
@@ -1171,7 +1171,7 @@ mod tests {
             circuit_expr_list: vec![(String::from("out"), vec![(String::from("i"), 2)], circuit)],
         };
 
-        let circuit_program2 = HEPartialEvaluator::new().run(circuit_program);
+        let circuit_program2 = PlaintextHoisting::new().run(circuit_program);
 
         let mut lowering = CircuitLowering::new();
         let he_program = lowering.run(circuit_program2);

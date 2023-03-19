@@ -10,15 +10,19 @@ use log::*;
 use he_vectorizer::{
     circ::{
         optimizer::ExtractorType,
-        materializer::{DefaultArrayMaterializer, Materializer, InputArrayMaterializer},
-        partial_eval::HEPartialEvaluator
+        materializer::{DefaultArrayMaterializer, Materializer, InputArrayMaterializer, DefaultMaterializerFactory},
+        partial_eval::PlaintextHoisting, cost::CostFeatures
     },
     lang::{
-        index_elim::IndexElimination,
+        index_elim::{IndexElimination, InlinedProgram},
         parser::ProgramParser,
         elaborated::Elaborator
     },
-    scheduling::Schedule,
+    scheduling::{
+        Schedule,
+        scheduler::Scheduler,
+        transformer::FastScheduleTransformerFactory,
+    },
     program::{
         lowering::CircuitLowering,
         backend::{
@@ -83,34 +87,57 @@ fn main() {
     info!("elaboration...");
     let elaborated = Elaborator::new().run(source);
 
-    let inline_set = elaborated.default_inline_set();
-    let array_group_map = elaborated.default_array_group_map();
+    info!("scheduling...");
+    let inline_sets = elaborated.simple_inline_sets();
+    let inlined_programs: Vec<InlinedProgram> =
+        inline_sets.into_iter().map(|inline_set| {
+            let array_group = elaborated.array_group_from_inline_set(&inline_set);
+            let inlined_program =
+                IndexElimination::new()
+                .run(&inline_set, &array_group, &elaborated)
+                .unwrap();
 
-    info!("index elimination...");
-    let res_index_elim =
-        IndexElimination::new()
-        .run(&inline_set, &array_group_map, &elaborated);
+            inlined_program
+        }).collect();
 
-    let inlined = res_index_elim.unwrap();
-    let init_schedule = Schedule::gen_initial_schedule(&inlined);
+    let mut scheduler =
+        Scheduler::new(
+            inlined_programs,
+            Box::new(FastScheduleTransformerFactory), 
+            Box::new(DefaultMaterializerFactory), 
+        );
 
-    info!("materialization...");
+    scheduler.run(None);
+    let best_opt = scheduler.get_best_schedule(CostFeatures::default_weights());
+
+    if let None = best_opt {
+        info!("No schedule found");
+        return;
+    }
+
+    let (inlined, schedule, _) = best_opt.unwrap();
+    info!("found schedule:\n{}", schedule);
+
+    info!("circuit generation...");
     let array_materializers: Vec<Box<dyn InputArrayMaterializer>> = 
         vec![Box::new(DefaultArrayMaterializer::new())];
     let materializer = Materializer::new(array_materializers);
 
     let res_materialize =
-        materializer.run(&inlined, &init_schedule);
+        materializer.run(&inlined, &schedule);
 
     let circuit = res_materialize.unwrap();
+    info!("generated circuit:\n{}", circuit);
 
-    // TODO add optimizer
+    // info!("circuit optimization...");
+    // let (opt_exprs, context) = circuit.to_opt_circuit();
 
-    info!("partial evaluation...");
-    let circuit_pe = HEPartialEvaluator::new().run(circuit);
+    info!("plaintext hoisting...");
+    let circuit_pe = PlaintextHoisting::new().run(circuit);
 
     info!("circuit lowering...");
     let program = CircuitLowering::new().run(circuit_pe);
+    info!("program:\n{}", program);
 
     info!("compiling with PySEAL backend...");
     let seal_backend =

@@ -32,6 +32,29 @@ pub struct CostFeatures {
 }
 
 impl CostFeatures {
+    // return a default weighting on features
+    // basically just turns off all plaintext weights
+    pub fn default_weights() -> Self {
+        CostFeatures {
+            input_ciphertexts: 1,
+            input_plaintexts: 0,
+            output_ciphertexts: 1,
+            ct_rotations: 1,
+            pt_rotations: 1,
+            ct_ct_add: 1,
+            ct_pt_add: 1,
+            pt_pt_add: 0,
+            ct_ct_mul: 1,
+            ct_pt_mul: 1,
+            pt_pt_mul: 0,
+            ct_ct_sub: 1,
+            ct_pt_sub: 1,
+            pt_pt_sub: 0,
+            ct_ct_muldepth: 1,
+            ct_pt_muldepth: 1
+        }
+    }
+
     pub fn weighted_cost(&self, weights: &CostFeatures) -> usize {
         let weighted = (*self).weight(*weights);
         weighted.input_ciphertexts
@@ -346,8 +369,8 @@ mod tests {
         let program: SourceProgram = parser.parse(src).unwrap();
 
         let elaborated = Elaborator::new().run(program);
-        let inline_set = elaborated.default_inline_set();
-        let array_group_map = elaborated.default_array_group_map();
+        let inline_set = elaborated.all_inlined_set();
+        let array_group_map = elaborated.array_group_from_inline_set(&inline_set);
 
         let res =
             IndexElimination::new()

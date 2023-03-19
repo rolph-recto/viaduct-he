@@ -7,6 +7,10 @@ use std::{
     time::*,
 };
 
+use crate::circ::optimizer::cost::{HECostFunction, HELatencyModel, HELpCostFunction};
+
+use self::cost::HECostContext;
+
 use super::VarName;
 
 mod greedy_extractor;
@@ -502,33 +506,37 @@ impl Optimizer {
 
     pub fn optimize(
         &self,
-        expr: &RecExpr<HEOptCircuit>,
+        exprs: Vec<RecExpr<HEOptCircuit>>,
+        context: HECostContext,
         size: usize,
         timeout: usize,
         extractor_type: ExtractorType,
-    ) -> RecExpr<HEOptCircuit> {
+    ) -> Vec<RecExpr<HEOptCircuit>> {
         info!("running equality saturation for {} seconds...", timeout);
 
         let optimization_time = Instant::now();
 
         // simplify the expression using a Runner, which creates an e-graph with
         // the given expression and runs the given rules over it
-        let mut runner = Runner::default()
-            .with_explanations_enabled()
-            .with_expr(expr)
+        let mut runner =
+            Runner::default()
             .with_node_limit(30000)
-            .with_time_limit(Duration::from_secs(timeout as u64))
-            .run(&self.rules);
+            .with_time_limit(Duration::from_secs(timeout as u64));
+
+        for expr in exprs {
+            runner = runner.with_expr(&expr);
+        }
+
+        runner = runner.run(&self.rules);
 
         info!("{}", runner.report().to_string());
 
+        let roots = runner.roots.clone();
         let egraph = &mut runner.egraph;
-        let root = egraph.add_expr(expr);
 
         let extraction_time = Instant::now();
 
-        /*
-        let opt_expr = match extractor_type {
+        let opt_exprs: Vec<RecExpr<HEOptCircuit>> = match extractor_type {
             ExtractorType::Greedy => {
                 info!("using greedy extractor to derive optimized program...");
                 // let extractor = GreedyExtractor::new(egraph, HECostFunction { egraph, count: 0 });
@@ -536,40 +544,48 @@ impl Optimizer {
                 let extractor = Extractor::new(
                     egraph,
                     HECostFunction {
-                        egraph,
                         latency: HELatencyModel::default(),
+                        context,
+                        egraph,
                     },
                 );
-                let (_, opt_expr) = extractor.find_best(root);
-                info!("optimized solution found: {}", opt_expr.pretty(20));
-                opt_expr
-            }
+
+                roots.into_iter().map(|root| {
+                    let (_, opt_expr) = extractor.find_best(root);
+                    opt_expr
+                }).collect()
+            },
+
             ExtractorType::LP => {
                 info!("using LP extractor to derive optimized program...");
                 // let mut lp_extractor = LpExtractor::new(egraph, OpSizeFunction { latency: HELatencyModel::default() });
-                let mut lp_extractor = LpExtractor::new(egraph, AstSize);
-                let solution = lp_extractor.solve(root);
+                let mut lp_extractor =
+                    LpExtractor::new(
+                        egraph,
+                        HELpCostFunction {
+                            latency: HELatencyModel::default()
+                        }
+                    );
+                let solution = lp_extractor.solve_multiple(&roots);
                 // let mut lp_extractor = HEExtractor::new(egraph, root, HELatencyModel::default());
                 // let solution = lp_extractor.solve();
-                info!("optimized solution found: {}", solution.pretty(20));
-                solution
+                todo!()
             }
         };
-        */
 
         info!(
             "Extraction time: {}ms",
             extraction_time.elapsed().as_millis()
         );
 
-        todo!()
+        opt_exprs
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{*, dijkstra_extractor::DijkstraExtractor, cost::{HECostFunction, HELatencyModel}};
-    use crate::{circ::{*, partial_eval::HEPartialEvaluator, optimizer::cost::{HELpCostFunction, HECostContext}}, program::lowering::CircuitLowering};
+    use crate::{circ::{*, partial_eval::PlaintextHoisting, optimizer::cost::{HELpCostFunction, HECostContext}}, program::lowering::CircuitLowering};
 
     fn run_optimizer(expr: &RecExpr<HEOptCircuit>, duration_opt: Option<Duration>) -> Runner<HEOptCircuit, HEData> {
         let optimizer = Optimizer::new(16);
@@ -807,12 +823,12 @@ mod tests {
 
         println!("old circuit:\n{}",
             CircuitLowering::new().run(
-                HEPartialEvaluator::new().run(circuit_program)
+                PlaintextHoisting::new().run(circuit_program)
             )
         );
         println!("new circuit:\n{}", 
             CircuitLowering::new().run(
-                HEPartialEvaluator::new().run(new_circuit_program)
+                PlaintextHoisting::new().run(new_circuit_program)
             )
         );
     }

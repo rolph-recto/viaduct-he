@@ -1,5 +1,7 @@
 use std::{collections::{HashSet, HashMap}, time::Instant};
 
+use log::info;
+
 use crate::{
     lang::{index_elim::{InlinedProgram}, DimIndex},
     circ::{materializer::MaterializerFactory, cost::{CostEstimator, CostFeatures},
@@ -100,11 +102,6 @@ impl<'t> InlineScheduler<'t> {
             }
         }
 
-        // println!("ITERATE frontier");
-        // for sched in self.frontier.iter().take(5) {
-        //     println!("{}", sched);
-        // }
-
         (self.frontier.len(), valid_neighbors)
     }
 }
@@ -176,34 +173,63 @@ impl<'m, 't> Scheduler<'m, 't> {
             scheduler.update_pareto_frontier(inline_id, init_schedule, cost);
         }
 
-        println!("inline schedulers: {:?}", scheduler.inline_schedulers.len());
-        println!("init pareto frontier size: {:?}", scheduler.pareto_frontier.len());
+        info!("inline schedulers: {:?}", scheduler.inline_schedulers.len());
+        info!("init pareto frontier size: {:?}", scheduler.pareto_frontier.len());
 
         scheduler
     }
 
-    pub fn get_results(mut self) -> Vec<SchedulingResult> {
+    pub fn get_results(&self) -> Vec<SchedulingResult> {
         let mut pareto_map: HashMap<usize, Vec<(Schedule, CostFeatures)>> = HashMap::new();
 
         for (id, _) in self.inline_schedulers.iter() {
             pareto_map.insert(*id, vec![]);
         }
 
-        for ((id, schedule), cost) in self.pareto_frontier.into_iter() {
+        for ((id, schedule), cost) in self.pareto_frontier.iter() {
             let schedule_list = pareto_map.get_mut(&id).unwrap();
-            schedule_list.push((schedule, cost));
+            schedule_list.push((schedule.clone(), cost.clone()));
         }
 
         pareto_map.into_iter().map(|(id, schedule_list)| {  
-            let (_, inline_sched) = self.inline_schedulers.remove(&id).unwrap();
+            let (_, inline_sched) = self.inline_schedulers.get(&id).unwrap();
 
             SchedulingResult {
-                inlined_program: inline_sched.program,
-                visited: inline_sched.visited,
+                inlined_program: inline_sched.program.clone(),
+                visited: inline_sched.visited.clone(),
                 pareto_frontier: schedule_list,
                 valid_schedules_visited: inline_sched.valid_schedules_visited,
             }
         }).collect()
+    }
+
+    // TODO finish
+    pub fn get_best_schedule(
+        &self,
+        weights: CostFeatures
+    ) -> Option<(InlinedProgram, Schedule, CostFeatures)> {
+        let mut best: Option<(InlinedProgram, Schedule, CostFeatures)> = None;
+        let results = self.get_results();
+
+        for res in results {
+            for (schedule, cost) in res.pareto_frontier {
+                let mut replace_best = false;
+                if let Some((_, _, best_cost)) = best {
+                    if cost.weighted_cost(&weights) < best_cost.weighted_cost(&weights) {
+                        replace_best = true;
+                    }
+
+                } else {
+                    replace_best = true
+                }
+
+                if replace_best {
+                    best = Some((res.inlined_program.clone(), schedule, cost));
+                }
+            }
+        }
+
+        best
     }
 
     /// add a schedule to the pareto frontier, unless it is strictly dominated
@@ -287,7 +313,7 @@ impl<'m, 't> Scheduler<'m, 't> {
         while changed && within_limit(iter) {
             let iter_res = self.iterate();
             changed = iter_res.0 > 0;
-            println!("iteration {}\nnew schedules visited: {}; new valid schedules found: {}",
+            info!("iteration {}\nnew schedules visited: {}; new valid schedules found: {}",
                 iter, iter_res.0, iter_res.1);
             iter += 1;
         }

@@ -1,12 +1,12 @@
-use he_vectorizer::{lang::{parser::ProgramParser, elaborated::Elaborator, index_elim::IndexElimination}, scheduling::Schedule, circ::{materializer::{DefaultArrayMaterializer, InputArrayMaterializer, Materializer}, partial_eval::HEPartialEvaluator}, program::{lowering::CircuitLowering, backend::{pyseal::SEALBackend, HEBackend}}};
+use he_vectorizer::{lang::{parser::ProgramParser, elaborated::Elaborator, index_elim::IndexElimination}, scheduling::Schedule, circ::{materializer::{DefaultArrayMaterializer, InputArrayMaterializer, Materializer}, partial_eval::PlaintextHoisting}, program::{lowering::CircuitLowering, backend::{pyseal::SEALBackend, HEBackend}}};
 
 fn test_compile(src: &str) {
     let source = ProgramParser::new().parse(&src).unwrap();
     let elaborated = Elaborator::new().run(source);
     println!("elaborated program:\n{}", elaborated);
 
-    let inline_set = elaborated.default_inline_set();
-    let array_group_map = elaborated.default_array_group_map();
+    let inline_set = elaborated.all_inlined_set();
+    let array_group_map = elaborated.array_group_from_inline_set(&inline_set);
 
     let res_index_elim =
         IndexElimination::new()
@@ -27,7 +27,7 @@ fn test_compile(src: &str) {
 
     // TODO add optimizer
 
-    let pe_circuit = HEPartialEvaluator::new().run(circuit);
+    let pe_circuit = PlaintextHoisting::new().run(circuit);
     println!("partially evaluated circuit:\n{}", pe_circuit);
 
     let program = CircuitLowering::new().run(pe_circuit);

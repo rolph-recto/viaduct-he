@@ -13,8 +13,8 @@ use crate::{
     },
 };
 
-mod scheduler;
-mod transformer;
+pub mod scheduler;
+pub mod transformer;
 
 // a schedule for a dimension
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -750,8 +750,8 @@ mod tests {
         let program: SourceProgram = parser.parse(src).unwrap();
 
         let elaborated = Elaborator::new().run(program);
-        let inline_set = elaborated.default_inline_set();
-        let array_group_map = elaborated.default_array_group_map();
+        let inline_set = elaborated.all_inlined_set();
+        let array_group_map = elaborated.array_group_from_inline_set(&inline_set);
 
         let res =
             IndexElimination::new()
