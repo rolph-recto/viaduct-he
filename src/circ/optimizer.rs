@@ -7,7 +7,7 @@ use std::{
     time::*,
 };
 
-use crate::circ::optimizer::cost::{HECostFunction, HELatencyModel, HELpCostFunction};
+use crate::circ::optimizer::{cost::{HECostFunction, HELatencyModel, HELpCostFunction}, dijkstra_extractor::DijkstraExtractor};
 
 use self::cost::HECostContext;
 
@@ -476,7 +476,7 @@ impl Optimizer {
 
             // squash nested rotations into a single rotation
             rewrite!("rot-squash";
-                "(rot ?o1 (rot ?o2 ?x))" => "(rot (+ ?o1 o2) ?x)"),
+                "(rot ?o1 (rot ?o2 ?x))" => "(rot (+ ?o1 ?o2) ?x)"),
 
             // split rotations for complex offset expressions
             rewrite!("rot-offset-split-add";
@@ -508,7 +508,6 @@ impl Optimizer {
         &self,
         exprs: Vec<RecExpr<HEOptCircuit>>,
         context: HECostContext,
-        size: usize,
         timeout: usize,
         extractor_type: ExtractorType,
     ) -> Vec<RecExpr<HEOptCircuit>> {
@@ -530,6 +529,10 @@ impl Optimizer {
         runner = runner.run(&self.rules);
 
         info!("{}", runner.report().to_string());
+        info!(
+            "Optimization time: {}ms",
+            optimization_time.elapsed().as_millis()
+        );
 
         let roots = runner.roots.clone();
         let egraph = &mut runner.egraph;
@@ -541,7 +544,7 @@ impl Optimizer {
                 info!("using greedy extractor to derive optimized program...");
                 // let extractor = GreedyExtractor::new(egraph, HECostFunction { egraph, count: 0 });
                 // let extractor = Extractor::new(egraph, HECostFunction { egraph, latency: HELatencyModel::default() });
-                let extractor = Extractor::new(
+                let extractor = DijkstraExtractor::new(
                     egraph,
                     HECostFunction {
                         latency: HELatencyModel::default(),
@@ -589,7 +592,7 @@ mod tests {
 
     fn run_optimizer(expr: &RecExpr<HEOptCircuit>, duration_opt: Option<Duration>) -> Runner<HEOptCircuit, HEData> {
         let optimizer = Optimizer::new(16);
-        let mut runner = Runner::default()
+        let runner = Runner::default()
             .with_explanations_enabled()
             .with_expr(expr)
             .with_hook(|runner: &mut Runner<HEOptCircuit, HEData>| {

@@ -9,9 +9,9 @@ use log::*;
 
 use he_vectorizer::{
     circ::{
-        optimizer::ExtractorType,
+        optimizer::{ExtractorType, Optimizer},
         materializer::{DefaultArrayMaterializer, Materializer, InputArrayMaterializer, DefaultMaterializerFactory},
-        partial_eval::PlaintextHoisting, cost::CostFeatures
+        partial_eval::PlaintextHoisting, cost::CostFeatures, ParamCircuitProgram
     },
     lang::{
         index_elim::{IndexElimination, InlinedProgram},
@@ -129,11 +129,24 @@ fn main() {
     let circuit = res_materialize.unwrap();
     info!("generated circuit:\n{}", circuit);
 
-    // info!("circuit optimization...");
-    // let (opt_exprs, context) = circuit.to_opt_circuit();
+    let opt_circuit = 
+        if args.duration > 0 {
+            info!("circuit optimization...");
+            let (opt_exprs, context) = circuit.to_opt_circuit();
+            let opt_res =
+                Optimizer::new(args.size)
+                .optimize(opt_exprs, context, args.duration, args.extractor);
+
+            let opt_circuit = circuit.from_opt_circuit(opt_res);
+            info!("optimized circuit:\n{}", opt_circuit);
+            opt_circuit
+
+        } else {
+            circuit
+        };
 
     info!("plaintext hoisting...");
-    let circuit_pe = PlaintextHoisting::new().run(circuit);
+    let circuit_pe = PlaintextHoisting::new().run(opt_circuit);
 
     info!("circuit lowering...");
     let program = CircuitLowering::new().run(circuit_pe);

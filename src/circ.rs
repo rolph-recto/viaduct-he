@@ -1,5 +1,6 @@
 use egg::{RecExpr, Symbol};
 use itertools::Itertools;
+use log::info;
 use std::{
     collections::{HashMap, HashSet, LinkedList},
     fmt::Display,
@@ -1074,22 +1075,38 @@ impl ParamCircuitProgram {
 
             HEOptCircuit::Add([id1, id2]) => {
                 let expr1 = 
-                    self.offset_from_opt_circuit_recur(id, rec_expr, new_registry);
+                    self.offset_from_opt_circuit_recur(*id1, rec_expr, new_registry);
 
                 let expr2 =
-                    self.offset_from_opt_circuit_recur(id, rec_expr, new_registry);
+                    self.offset_from_opt_circuit_recur(*id2, rec_expr, new_registry);
 
                 OffsetExpr::Add(Box::new(expr1), Box::new(expr2))
             },
 
-            HEOptCircuit::Sub(_) => todo!(),
+            HEOptCircuit::Sub([id1, id2]) => {
+                let expr1 = 
+                    self.offset_from_opt_circuit_recur(*id1, rec_expr, new_registry);
+
+                let expr2 =
+                    self.offset_from_opt_circuit_recur(*id2, rec_expr, new_registry);
+
+                OffsetExpr::Add(
+                    Box::new(expr1),
+                    Box::new(
+                        OffsetExpr::Mul(
+                            Box::new(OffsetExpr::Literal(-1)),
+                            Box::new(expr2),
+                        )
+                    )
+                )
+            },
 
             HEOptCircuit::Mul([id1, id2]) => {
                 let expr1 =
-                    self.offset_from_opt_circuit_recur(id, rec_expr, new_registry);
+                    self.offset_from_opt_circuit_recur(*id1, rec_expr, new_registry);
 
                 let expr2 =
-                    self.offset_from_opt_circuit_recur(id, rec_expr, new_registry);
+                    self.offset_from_opt_circuit_recur(*id2, rec_expr, new_registry);
 
                 OffsetExpr::Mul(Box::new(expr1), Box::new(expr2))
             },
