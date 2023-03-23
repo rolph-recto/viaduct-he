@@ -947,7 +947,6 @@ impl SEALLowering {
         let mut rename_map = HashMap::new();
         for stmt in program.statements {
             self.lower_recur(stmt, &mut server_code, &mut rename_map);
-            println!("rename_map: {:?}", rename_map);
         }
 
         server_code.push(
