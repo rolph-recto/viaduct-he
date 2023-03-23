@@ -510,7 +510,7 @@ impl Optimizer {
         context: HECostContext,
         timeout: usize,
         extractor_type: ExtractorType,
-    ) -> Vec<RecExpr<HEOptCircuit>> {
+    ) -> (Vec<RecExpr<HEOptCircuit>>, Vec<egg::Id>) {
         info!("running equality saturation for {} seconds...", timeout);
 
         let optimization_time = Instant::now();
@@ -539,7 +539,7 @@ impl Optimizer {
 
         let extraction_time = Instant::now();
 
-        let opt_exprs: Vec<RecExpr<HEOptCircuit>> = match extractor_type {
+        match extractor_type {
             ExtractorType::Greedy => {
                 info!("using greedy extractor to derive optimized program...");
                 // let extractor = GreedyExtractor::new(egraph, HECostFunction { egraph, count: 0 });
@@ -553,10 +553,18 @@ impl Optimizer {
                     },
                 );
 
-                roots.into_iter().map(|root| {
-                    let (_, opt_expr) = extractor.find_best(root);
-                    opt_expr
-                }).collect()
+                let opt_exprs = 
+                    roots.iter().map(|root| {
+                        let (_, opt_expr) = extractor.find_best(*root);
+                        opt_expr
+                    }).collect();
+
+                info!(
+                    "Extraction time: {}ms",
+                    extraction_time.elapsed().as_millis()
+                );
+
+                (opt_exprs, roots)
             },
 
             ExtractorType::LP => {
@@ -569,19 +577,17 @@ impl Optimizer {
                             latency: HELatencyModel::default()
                         }
                     );
-                let solution = lp_extractor.solve_multiple(&roots);
-                // let mut lp_extractor = HEExtractor::new(egraph, root, HELatencyModel::default());
-                // let solution = lp_extractor.solve();
-                todo!()
+                let (opt_expr, roots) = lp_extractor.solve_multiple(&roots);
+                let opt_exprs = roots.iter().map(|_| opt_expr.clone()).collect();
+
+                info!(
+                    "Extraction time: {}ms",
+                    extraction_time.elapsed().as_millis()
+                );
+
+                (opt_exprs, roots)
             }
-        };
-
-        info!(
-            "Extraction time: {}ms",
-            extraction_time.elapsed().as_millis()
-        );
-
-        opt_exprs
+        }
     }
 }
 
@@ -822,7 +828,8 @@ mod tests {
 
         println!("{}", new_expr);
 
-        let new_circuit_program = circuit_program.from_opt_circuit(vec![new_expr]);
+        let new_circuit_program =
+            circuit_program.from_opt_circuit(vec![new_expr], vec![root]);
 
         println!("old circuit:\n{}",
             CircuitLowering::new().run(

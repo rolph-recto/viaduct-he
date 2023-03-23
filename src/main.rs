@@ -133,11 +133,11 @@ fn main() {
         if args.duration > 0 {
             info!("circuit optimization...");
             let (opt_exprs, context) = circuit.to_opt_circuit();
-            let opt_res =
+            let (res_opt_exprs, opt_roots) =
                 Optimizer::new(args.size)
                 .optimize(opt_exprs, context, args.duration, args.extractor);
 
-            let opt_circuit = circuit.from_opt_circuit(opt_res);
+            let opt_circuit = circuit.from_opt_circuit(res_opt_exprs, opt_roots);
             info!("optimized circuit:\n{}", opt_circuit);
             opt_circuit
 

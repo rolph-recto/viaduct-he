@@ -1358,7 +1358,7 @@ impl ParamCircuitProgram {
         }
     }
 
-    pub fn from_opt_circuit(&self, rec_exprs: Vec<RecExpr<HEOptCircuit>>) -> Self {
+    pub fn from_opt_circuit(&self, rec_exprs: Vec<RecExpr<HEOptCircuit>>, roots: Vec<egg::Id>) -> Self {
         assert!(self.circuit_expr_list.len() == rec_exprs.len());
 
         // build extent map
@@ -1377,7 +1377,7 @@ impl ParamCircuitProgram {
         let mut new_circuit_expr_list: Vec<(ArrayName, Vec<(DimName, Extent)>, CircuitId)> = Vec::new();
         for (i, rec_expr) in rec_exprs.into_iter().enumerate() {
             let mut id_map: HashMap<egg::Id, CircuitId> = HashMap::new();
-            let root = rec_expr.as_ref().len() - 1;
+            let root = roots[i];
             let expr_circ_id =
                 self.from_opt_circuit_recur(
                     egg::Id::from(root),
