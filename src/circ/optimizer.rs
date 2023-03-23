@@ -828,8 +828,10 @@ mod tests {
 
         println!("{}", new_expr);
 
+        let new_root = egg::Id::from(new_expr.as_ref().len() - 1);
+
         let new_circuit_program =
-            circuit_program.from_opt_circuit(vec![new_expr], vec![root]);
+            circuit_program.from_opt_circuit(vec![new_expr], vec![new_root]);
 
         println!("old circuit:\n{}",
             CircuitLowering::new().run(
