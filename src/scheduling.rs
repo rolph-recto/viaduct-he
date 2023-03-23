@@ -278,7 +278,8 @@ pub enum VectorScheduleDim {
     // reduced dim with the reduced value in the first position,
     // and the rest are "junk" values
     // e.g. 1 x x x 2 x x x
-    Reduced(usize),
+    // (extent, pad_left, pad_right)
+    Reduced(usize, usize, usize),
 
     // reduced dim that is repeated with elements from other dimensions
     // e.g. 1 1 1 1 2 2 2 2
@@ -290,7 +291,8 @@ impl Display for VectorScheduleDim {
         match self {
             VectorScheduleDim::Filled(sched_dim) => write!(f, "{}", sched_dim),
 
-            VectorScheduleDim::Reduced(extent) => write!(f, "R:{}", extent),
+            VectorScheduleDim::Reduced(extent, pad_left, pad_right) =>
+                write!(f, "R:{}", extent),
 
             VectorScheduleDim::ReducedRepeated(extent) => write!(f, "RR:{}", extent),
         }
@@ -302,7 +304,8 @@ impl VectorScheduleDim {
         match self {
             VectorScheduleDim::Filled(_) => false,
 
-            VectorScheduleDim::Reduced(_) | VectorScheduleDim::ReducedRepeated(_) => true,
+            VectorScheduleDim::Reduced(_, _, _) |
+            VectorScheduleDim::ReducedRepeated(_) => true,
         }
     }
 
@@ -310,7 +313,8 @@ impl VectorScheduleDim {
         match self {
             VectorScheduleDim::Filled(dim) => dim.extent,
 
-            VectorScheduleDim::Reduced(extent) | VectorScheduleDim::ReducedRepeated(extent) => {
+            VectorScheduleDim::Reduced(extent, _, _) |
+            VectorScheduleDim::ReducedRepeated(extent) => {
                 *extent
             }
         }
@@ -405,9 +409,23 @@ impl ExprSchedule {
                         same_extent && dims_match
                     },
 
-                    (VectorScheduleDim::Filled(fdim1), VectorScheduleDim::ReducedRepeated(extent)) |
-                    (VectorScheduleDim::Filled(fdim1), VectorScheduleDim::Reduced(extent)) => {
-                        let same_extent = fdim1.extent == *extent;
+                    (VectorScheduleDim::Filled(fdim1), VectorScheduleDim::ReducedRepeated(extent)) => {
+                        let same_extent =
+                            fdim1.pad_left + fdim1.extent + fdim1.pad_right == *extent;
+                        let is_empty = 
+                            if let DimContent::EmptyDim { extent: _ } = transform.dims[fdim1.index] {
+                                true
+                            } else {
+                                false
+                            };
+
+                        same_extent && is_empty
+                    },
+
+                    (VectorScheduleDim::Filled(fdim1), VectorScheduleDim::Reduced(extent, pad_left, pad_right)) => {
+                        let same_extent =
+                            fdim1.pad_left + fdim1.extent + fdim1.pad_right ==
+                            *pad_left + *extent + *pad_right;
                         let is_empty = 
                             if let DimContent::EmptyDim { extent: _ } = transform.dims[fdim1.index] {
                                 true
@@ -675,9 +693,11 @@ impl Schedule {
                                 // the dim contents are repeated
                                 if i == 0 && sched_dim.pad_left == 0 && sched_dim.pad_right == 0 {
                                     VectorScheduleDim::ReducedRepeated(sched_dim.extent)
+
                                 } else {
-                                    VectorScheduleDim::Reduced(sched_dim.extent)
+                                    VectorScheduleDim::Reduced(sched_dim.extent, sched_dim.pad_left, sched_dim.pad_right)
                                 }
+
                             } else if sched_dim.index > reduced_index {
                                 let mut new_sched_dim = sched_dim.clone();
                                 new_sched_dim.index -= 1;
@@ -687,7 +707,8 @@ impl Schedule {
                             }
                         }
 
-                        VectorScheduleDim::Reduced(_) | VectorScheduleDim::ReducedRepeated(_) => {
+                        VectorScheduleDim::Reduced(_, _, _) |
+                        VectorScheduleDim::ReducedRepeated(_) => {
                             dim.clone()
                         }
                     };

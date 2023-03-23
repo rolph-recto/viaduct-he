@@ -272,7 +272,11 @@ impl<'a> Materializer<'a> {
                             // TODO: refactor this so we don't inline derivation logic here
                             let coord_system =
                                 IndexCoordinateSystem::new(schedule.exploded_dims.iter());
+                            
+                            // vectors of the expr array being indexed
                             let expr_circ_val = ref_expr_sched.materialize(&transform.array);
+
+                            // vectors of the indexing site
                             let transform_circ_val = VectorInfo::get_input_vector_value(
                                 coord_system,
                                 &ref_expr_sched.shape,

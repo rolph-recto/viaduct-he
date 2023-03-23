@@ -206,6 +206,7 @@ impl VectorInfo {
                     oob_right += 1;
                 }
 
+                // clip data beyond transform bounds
                 while transform_dim_offset + (dim.stride * (dim.extent - 1 - oob_right))
                     >= *transform_extent
                 {
@@ -254,7 +255,7 @@ impl VectorInfo {
                 }
 
                 VectorDimContent::EmptyDim {
-                    extent: dim.extent,
+                    extent: dim.extent - oob_right,
                     pad_left: dim.pad_left,
                     pad_right: dim.pad_right,
                     oob_right,
@@ -357,16 +358,32 @@ impl VectorInfo {
         let mut materialized_dims: im::Vector<VectorDimContent> = im::Vector::new();
         for dim in expr_schedule.vectorized_dims.iter() {
             let materialized_dim = match dim {
-                VectorScheduleDim::Filled(sched_dim) => VectorInfo::process_schedule_dim(
-                    &expr_schedule.shape,
-                    &transform,
-                    &mut clipped_offset_map,
-                    &transform_offset_map,
-                    sched_dim,
-                ),
+                VectorScheduleDim::Filled(sched_dim) =>
+                    VectorInfo::process_schedule_dim(
+                        &expr_schedule.shape,
+                        &transform,
+                        &mut clipped_offset_map,
+                        &transform_offset_map,
+                        sched_dim,
+                    ),
 
-                VectorScheduleDim::Reduced(_) => todo!(),
-                VectorScheduleDim::ReducedRepeated(_) => todo!(),
+                // treat like an empty dim
+                // this is only possible if there is no padding,
+                // so set padding to 0
+                VectorScheduleDim::ReducedRepeated(extent) =>
+                    VectorDimContent::EmptyDim {
+                        extent: *extent,
+                        pad_left: 0,
+                        pad_right: 0,
+                        oob_right: 0,
+                    },
+
+                VectorScheduleDim::Reduced(extent, pad_left, pad_right) =>
+                    VectorDimContent::ReducedDim {
+                        extent: *extent,
+                        pad_left: *pad_left,
+                        pad_right: *pad_right,
+                    }
             };
 
             materialized_dims.push_back(materialized_dim);
