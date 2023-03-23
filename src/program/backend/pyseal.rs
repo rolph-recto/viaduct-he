@@ -1,4 +1,4 @@
-/// pyseal.rs
+/// pyseal.rs;
 /// PySEAL backend
 
 use std::{collections::{HashMap, HashSet}, fs::rename};
@@ -276,13 +276,13 @@ impl UseAnalysis {
         &self,
         id: InstructionId,
         he_ref: &HERef
-    ) -> Option<(InstructionId, InstructionId)> {
+    ) -> Option<InstructionId> {
         match he_ref {
             HERef::Instruction(ref_id) => {
                 let use_map = self.0.get(&id).unwrap();
 
                 if !use_map.contains(ref_id) {
-                    Some((id, *ref_id))
+                    Some(*ref_id)
 
                 } else {
                     None
@@ -508,7 +508,7 @@ impl SEALLowering {
         }
     }
 
-    fn can_reuse(&self, id: InstructionId, r: &HERef) -> Option<(InstructionId, InstructionId)> {
+    fn can_reuse(&self, id: InstructionId, r: &HERef) -> Option<InstructionId> {
         if self.enable_inplace {
             self.use_analysis.can_reuse(id, r)
 
@@ -523,7 +523,12 @@ impl SEALLowering {
                 let mut cur = id;
 
                 while let Some(rid) = rename_map.get(&cur) {
-                    cur = *rid;
+                    if *rid != cur {
+                        cur = *rid;
+
+                    } else {
+                        break;
+                    }
                 }
                 
                 HERef::Instruction(cur)
@@ -623,14 +628,14 @@ impl SEALLowering {
                                     )
                                 },
 
-                                (None, Some((_, rid2))) => {
+                                (None, Some(rid2)) => {
                                     rename_map.insert(id, rid2);
                                     Self::get_binop(
                                         Operator::Add, optype, true, id, nref2, nref1
                                     )
                                 },
 
-                                (Some((rid1, _)), None) | (Some((rid1, _)), Some(_)) => {
+                                (Some(rid1), None) | (Some(rid1), Some(_)) => {
                                     rename_map.insert(id, rid1);
                                     Self::get_binop(
                                         Operator::Add, optype, true, id, nref1, nref2
@@ -654,7 +659,7 @@ impl SEALLowering {
                                     )
                                 },
 
-                                (Some((rid1, _)), None) | (Some((rid1, _)), Some(_)) => {
+                                (Some(rid1), None) | (Some(rid1), Some(_)) => {
                                     rename_map.insert(id, rid1);
                                     Self::get_binop(
                                         Operator::Sub, optype, true, id, nref1, nref2
@@ -678,14 +683,14 @@ impl SEALLowering {
                                     )
                                 },
 
-                                (None, Some((_, rid2))) => {
+                                (None, Some(rid2)) => {
                                     rename_map.insert(id, rid2);
                                     Self::get_binop(
                                         Operator::Mul, optype, true, id, nref2, nref1
                                     )
                                 },
 
-                                (Some((rid1, _)), None) | (Some((rid1, _)), Some(_)) => {
+                                (Some(rid1), None) | (Some(rid1), Some(_)) => {
                                     rename_map.insert(id, rid1);
                                     Self::get_binop(
                                         Operator::Mul, optype, true, id, nref1, nref2
@@ -721,7 +726,7 @@ impl SEALLowering {
                                     )
                                 },
 
-                                (HEInstructionType::Native, Some((_, rid2))) => {
+                                (HEInstructionType::Native, Some(rid2)) => {
                                     rename_map.insert(id, rid2);
                                     SEALInstruction::OpInplace(
                                         SEALOpType::RotNativeInplace,
@@ -737,7 +742,7 @@ impl SEALLowering {
                                     )
                                 },
                                 
-                                (HEInstructionType::CipherCipher, Some((_, rid2))) => {
+                                (HEInstructionType::CipherCipher, Some(rid2)) => {
                                     rename_map.insert(id, rid2);
                                     SEALInstruction::OpInplace(
                                         SEALOpType::RotInplace,
@@ -939,8 +944,10 @@ impl SEALLowering {
         self.lower_context_client(&program.context, &mut client_pre_code);
         self.lower_context_server(&program.context, &mut server_code);
 
+        let mut rename_map = HashMap::new();
         for stmt in program.statements {
-            self.lower_recur(stmt, &mut server_code, &mut HashMap::new());
+            self.lower_recur(stmt, &mut server_code, &mut rename_map);
+            println!("rename_map: {:?}", rename_map);
         }
 
         server_code.push(
