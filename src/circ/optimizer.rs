@@ -594,7 +594,7 @@ impl Optimizer {
 #[cfg(test)]
 mod tests {
     use super::{*, dijkstra_extractor::DijkstraExtractor, cost::{HECostFunction, HELatencyModel}};
-    use crate::{circ::{*, partial_eval::PlaintextHoisting, optimizer::cost::{HELpCostFunction, HECostContext}}, program::lowering::CircuitLowering};
+    use crate::{circ::{*, plaintext_hoisting::PlaintextHoisting, optimizer::cost::{HELpCostFunction, HECostContext}}, program::lowering::CircuitLowering};
 
     fn run_optimizer(expr: &RecExpr<HEOptCircuit>, duration_opt: Option<Duration>) -> Runner<HEOptCircuit, HEData> {
         let optimizer = Optimizer::new(16);

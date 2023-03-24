@@ -1043,7 +1043,7 @@ impl HEBackend for SEALBackend {
 
 #[cfg(test)]
 mod tests {
-    use crate::{circ::{*, partial_eval::*}, program::{*, lowering::*}, lang::*};
+    use crate::{circ::{*, plaintext_hoisting::*}, program::{*, lowering::*}, lang::*};
     use super::*;
 
     fn test_lowering(program: HEProgram) {

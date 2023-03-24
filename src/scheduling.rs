@@ -29,6 +29,12 @@ pub struct ScheduleDim {
     pub pad_right: usize,
 }
 
+impl ScheduleDim {
+    pub fn size(&self) -> usize {
+        self.extent + self.pad_left + self.pad_right
+    }
+}
+
 impl Display for ScheduleDim {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -309,11 +315,13 @@ impl VectorScheduleDim {
         }
     }
 
-    pub fn extent(&self) -> usize {
+    pub fn size(&self) -> usize {
         match self {
-            VectorScheduleDim::Filled(dim) => dim.extent,
+            VectorScheduleDim::Filled(dim) => dim.size(),
 
-            VectorScheduleDim::Reduced(extent, _, _) |
+            VectorScheduleDim::Reduced(extent, pad_left, pad_right) =>
+                extent + pad_left + pad_right,
+
             VectorScheduleDim::ReducedRepeated(extent) => {
                 *extent
             }
@@ -453,7 +461,7 @@ impl ExprSchedule {
     pub fn vector_size(&self) -> usize {
         self.vectorized_dims
             .iter()
-            .fold(1, |acc, dim| acc * dim.extent())
+            .fold(1, |acc, dim| acc * dim.size())
     }
 
     // materialize schedule into a coordinate map of vectors

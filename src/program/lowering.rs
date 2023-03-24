@@ -32,7 +32,10 @@ impl CircuitLowering {
             }
 
             CiphertextObject::ExprVector(array, coords) => {
-                let coord_index = coords.iter().map(|coord| HEIndex::Literal(*coord as isize));
+                let coord_index =
+                    coords.iter()
+                    .map(|coord| HEIndex::Literal(*coord as isize));
+
                 HERef::Array(array.clone(), Vec::from_iter(coord_index))
             }
         }
@@ -63,7 +66,7 @@ impl CircuitLowering {
                 let mut vector_var_set: HashSet<String> = HashSet::new();
                 let mut coord_val_map: HashMap<IndexCoord, IndexCoord> = HashMap::new();
 
-                for (coord, obj_opt) in coord_map.value_iter() {
+                for (coord, obj_opt) in coord_map.object_iter() {
                     let obj = obj_opt.unwrap();
                     match obj {
                         CiphertextObject::InputVector(vector) => {
@@ -109,7 +112,7 @@ impl CircuitLowering {
                 let mut vector_var_set: HashSet<String> = HashSet::new();
                 let mut coord_val_map: HashMap<IndexCoord, IndexCoord> = HashMap::new();
 
-                for (coord, obj_opt) in coord_map.value_iter() {
+                for (coord, obj_opt) in coord_map.object_iter() {
                     let obj = obj_opt.unwrap();
                     match obj {
                         PlaintextObject::InputVector(vector) => {
@@ -199,7 +202,7 @@ impl CircuitLowering {
                         coord_map.extents()
                     )
                 );
-                for (coords, obj) in coord_map.value_iter() {
+                for (coords, obj) in coord_map.object_iter() {
                     let operand = f(obj.unwrap(), &input);
                     let coord_index = Vec::from_iter(
                         coords.iter().map(|coord| HEIndex::Literal(*coord as isize)),
@@ -971,7 +974,8 @@ mod tests {
     use crate::{
         circ::{
             CiphertextObject, CircuitObjectRegistry, CircuitValue, IndexCoordinateMap,
-            IndexCoordinateSystem, ParamCircuitExpr, ParamCircuitProgram, partial_eval::PlaintextHoisting,
+            IndexCoordinateSystem, ParamCircuitExpr, ParamCircuitProgram,
+            plaintext_hoisting::PlaintextHoisting,
         },
         lang::{BaseOffsetMap, Operator},
         program::lowering::CircuitLowering,

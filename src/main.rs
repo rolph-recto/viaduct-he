@@ -11,7 +11,7 @@ use he_vectorizer::{
     circ::{
         optimizer::{ExtractorType, Optimizer},
         materializer::{DefaultArrayMaterializer, Materializer, InputArrayMaterializer, DefaultMaterializerFactory},
-        partial_eval::PlaintextHoisting, cost::CostFeatures, ParamCircuitProgram
+        plaintext_hoisting::PlaintextHoisting, cost::CostFeatures, ParamCircuitProgram
     },
     lang::{
         index_elim::{IndexElimination, InlinedProgram},

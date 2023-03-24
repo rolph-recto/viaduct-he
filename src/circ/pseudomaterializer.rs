@@ -128,13 +128,13 @@ impl PseudoMaterializer {
                     let mut block_size: usize = body_sched_spec.vector_size();
 
                     for dim in body_sched_spec.vectorized_dims.into_iter() {
-                        block_size /= dim.extent();
+                        block_size /= dim.size();
 
                         if let VectorScheduleDim::Filled(sched_dim) = dim {
                             // if extent is 1, there's nothing to reduce!
                             if sched_dim.index == *reduced_index && sched_dim.extent > 1 {
                                 reduction_list.extend(
-                                    util::gen_pow2_list(sched_dim.extent >> 1)
+                                    util::descending_pow2_list(sched_dim.extent >> 1)
                                         .iter()
                                         .map(|x| x * block_size),
                                 );

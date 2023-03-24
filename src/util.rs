@@ -52,8 +52,8 @@ pub fn get_nearest_pow2(n: usize) -> usize {
 }
 
 /// generate a descending list of powers of 2
-/// e.g. given n = 16, return [16, ]
-pub fn gen_pow2_list(n: usize) -> Vec<usize> {
+/// e.g. given n = 16, return [16, 8, 4, 2, 1]
+pub fn descending_pow2_list(n: usize) -> Vec<usize> {
     // n must be a power of 2
     assert!(n >= 1 && n & (n - 1) == 0);
 
@@ -105,12 +105,12 @@ mod tests {
 
     #[test]
     fn test_pow2() {
-        assert!(gen_pow2_list(4) == vec![4, 2, 1])
+        assert!(descending_pow2_list(4) == vec![4, 2, 1])
     }
 
     #[test]
     fn test_pow2_2() {
-        assert!(gen_pow2_list(1) == vec![1])
+        assert!(descending_pow2_list(1) == vec![1])
     }
 
     #[test]

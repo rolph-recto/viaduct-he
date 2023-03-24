@@ -1,10 +1,13 @@
-use std::{collections::{HashMap, HashSet}};
+use std::{
+    collections::{HashMap, HashSet},
+    hash::Hash
+};
 
 use crate::{
     circ::{vector_deriver::VectorDeriver, vector_info::VectorInfo, *},
     lang::index_elim::{InlinedExpr, InlinedProgram},
     scheduling::*,
-    util,
+    util::{self, NameGenerator},
 };
 
 pub trait InputArrayMaterializer<'a> {
@@ -52,6 +55,7 @@ pub struct Materializer<'a> {
     expr_circuit_map: HashMap<ArrayName, CircuitId>,
     expr_schedule_map: HashMap<ArrayName, ExprScheduleType>,
     expr_array_type_map: HashMap<ArrayName, ArrayType>,
+    name_generator: NameGenerator,
 }
 
 impl<'a> Materializer<'a> {
@@ -62,6 +66,7 @@ impl<'a> Materializer<'a> {
             expr_circuit_map: HashMap::new(),
             expr_schedule_map: HashMap::new(),
             expr_array_type_map: HashMap::new(),
+            name_generator: NameGenerator::new(),
         }
     }
 
@@ -71,7 +76,7 @@ impl<'a> Materializer<'a> {
         program: &InlinedProgram,
         schedule: &Schedule
     ) -> Result<ParamCircuitProgram, String> {
-        let mut circuit_list: Vec<(String, Vec<(DimName, Extent)>, CircuitId)> = vec![];
+        let mut circuit_list: Vec<CircuitDecl> = vec![];
 
         // need to clone expr_map here because the iteration through it is mutating
         let expr_list: Vec<(ArrayName, InlinedExpr)> = 
@@ -84,8 +89,9 @@ impl<'a> Materializer<'a> {
         expr_list
             .into_iter()
             .try_for_each(|(array, expr)| -> Result<(), String> {
+                let mut expr_preludes: Vec<CircuitDecl> = Vec::new();
                 let (expr_schedule, array_type, circuit_id) =
-                    self.materialize_expr(program, &expr, schedule)?;
+                    self.materialize_expr(program, &expr, schedule, &mut expr_preludes)?;
 
                 let dims = match &expr_schedule {
                     ExprScheduleType::Any => vec![],
@@ -96,6 +102,11 @@ impl<'a> Materializer<'a> {
                         .map(|dim| (dim.name.clone(), dim.extent))
                         .collect(),
                 };
+
+                // add preludes before actual circuit
+                for (array, dims, circuit_id) in expr_preludes {
+                    circuit_list.push((array, dims, circuit_id));
+                }
 
                 self.expr_circuit_map.insert(array.clone(), circuit_id);
                 self.expr_schedule_map.insert(array.clone(), expr_schedule);
@@ -111,7 +122,138 @@ impl<'a> Materializer<'a> {
         })
     }
 
-    fn materialize_expr_indexing_site<'b, T: CircuitObject>(
+    // clean and fill reduced dimensions so that they can be used again
+    fn clean_and_fill<T: CircuitObject+Eq+Hash>(
+        &mut self,
+        objects: HashSet<T>,
+        old_val: CircuitValue<T>,
+        ref_expr_sched: &ExprSchedule,
+    ) -> (CircuitValue<T>, Option<CircuitDecl>) {
+        let mut block_size = 1;
+        let mut dims_to_fill: Vec<(usize, usize)> = Vec::new();
+        let mut mask_vector: im::Vector<(usize, usize, usize)> = im::Vector::new();
+        for dim in ref_expr_sched.vectorized_dims.iter().rev() {
+            match dim {
+                VectorScheduleDim::Filled(sdim) => {
+                    let size = sdim.size();
+                    block_size *= size;
+                    mask_vector.push_front((size, 0, size-1));
+                }
+
+                VectorScheduleDim::ReducedRepeated(extent) => {
+                    block_size *= *extent;
+                    mask_vector.push_front((*extent, 0, extent-1));
+                }
+
+                VectorScheduleDim::Reduced(extent, pad_left, pad_right) => {
+                    // only fill if the extent is more than 1
+                    if *extent > 1 {
+                        dims_to_fill.push((*extent, block_size));
+                        block_size *= extent + pad_left + pad_right;
+                        mask_vector.push_front((*extent, 0, 0));
+                    } else {
+                        mask_vector.push_front((*extent, 0, extent-1));
+                    }
+                }
+            }
+        }
+
+        if dims_to_fill.len() == 0 {
+            (old_val, None)
+
+        } else {
+            let dims = vec![(String::from("i"), objects.len())];
+            let coord_system = IndexCoordinateSystem::from_dim_list(dims.clone());
+
+            let obj_var = T::get_fresh_variable(&mut self.registry);
+            let mut obj_map: IndexCoordinateMap<T> =
+                IndexCoordinateMap::from_coord_system(coord_system.clone());
+            let mut obj_index: HashMap<T, im::Vector<usize>> = HashMap::new();
+
+            let mask_var_name = self.registry.fresh_pt_var();
+            let mask_var = ParamCircuitExpr::PlaintextVar(mask_var_name.clone());
+            let mut mask_map: IndexCoordinateMap<PlaintextObject> =
+                IndexCoordinateMap::from_coord_system(coord_system.clone());
+
+            for (coord, obj) in obj_map.coord_iter().zip(objects.into_iter()) {
+                obj_index.insert(obj.clone(), coord.clone());
+                obj_map.set(coord.clone(), obj);
+                mask_map.set(coord, PlaintextObject::Mask(mask_vector.clone()));
+            }
+
+            T::set_var_value(
+                &mut self.registry,
+                obj_var.clone(),
+                CircuitValue::CoordMap(obj_map)
+            );
+
+            self.registry.set_pt_var_value(mask_var_name, CircuitValue::CoordMap(mask_map));
+
+            // multiply objects with masks
+            let obj_id = self.registry.register_circuit(obj_var);
+            let mask_id = self.registry.register_circuit(mask_var);
+            let mul_id =
+                self.registry.register_circuit(ParamCircuitExpr::Op(Operator::Mul, obj_id, mask_id));
+
+            // fill reduced dimensions!
+            let mut reduction_list: Vec<usize> = Vec::new();
+            for (extent, block_size) in dims_to_fill {
+                reduction_list.extend(
+                    util::descending_pow2_list(extent >> 1)
+                    .into_iter().rev().map(|x| x * block_size)
+                );
+            }
+
+            let expr_id = 
+                reduction_list.into_iter()
+                .fold(mul_id, |acc, n| {
+                    let rot_id =
+                        self.registry.register_circuit(
+                            ParamCircuitExpr::Rotate(
+                                OffsetExpr::Literal(n as isize),
+                                acc
+                            )
+                        );
+
+                    let op_id =
+                        self.registry.register_circuit(
+                            ParamCircuitExpr::Op(Operator::Add, acc, rot_id)
+                        );
+
+                    op_id
+                });
+
+            // create new prelude circuit for the clean and fill
+            let new_circ_name = self.name_generator.get_fresh_name("__circ");
+            let new_obj_val: CircuitValue<T> = match old_val {
+                CircuitValue::CoordMap(coord_map) => {
+                    let mut new_coord_map: IndexCoordinateMap<T> =
+                        IndexCoordinateMap::from_coord_system(coord_map.coord_system.clone());
+
+                    for (coord, obj_opt) in coord_map.object_iter() {
+                        if let Some(obj) = obj_opt {
+                            new_coord_map.set(
+                                coord,
+                                T::expr_vector(new_circ_name.clone(), obj_index[obj].clone())
+                            )
+                        }
+                    }
+
+                    CircuitValue::CoordMap(new_coord_map)
+                },
+
+                CircuitValue::Single(obj) => {
+                    CircuitValue::Single(
+                        T::expr_vector(new_circ_name.clone(), obj_index[&obj].clone())
+                    )
+                }
+            };
+
+            (new_obj_val, Some((new_circ_name, dims, expr_id)))
+        }
+    }
+
+    fn materialize_expr_indexing_site<'b, T: CircuitObject+Eq+Hash>(
         &mut self,
         indexing_id: &IndexingId,
         array_type: ArrayType,
@@ -119,7 +261,7 @@ impl<'a> Materializer<'a> {
         ref_expr_sched: &ExprSchedule,
         expr_circ_val: CircuitValue<VectorInfo>,
         transform_circ_val: CircuitValue<VectorInfo>,
-    ) -> Result<(ExprScheduleType, ArrayType, CircuitId), String>
+    ) -> Result<(ExprScheduleType, ArrayType, CircuitId, Option<CircuitDecl>), String>
     where
         CircuitObjectRegistry: CanRegisterObject<'b, T>,
         ParamCircuitExpr: CanCreateObjectVar<T>,
@@ -129,8 +271,22 @@ impl<'a> Materializer<'a> {
 
         match derivation_opt {
             Some((obj_val, step_val, mask_val)) => {
+                let objects: HashSet<T> = match &obj_val {
+                    CircuitValue::CoordMap(coord_map) => {
+                        coord_map.object_iter()
+                        .filter_map(|(_, obj_opt)| {
+                            obj_opt.map(|obj| obj.clone())
+                        }).collect()
+                    },
+
+                    CircuitValue::Single(obj) => HashSet::from([obj.clone()])
+                };
+
+                let (new_obj_val, prelude_circ_opt) =
+                    self.clean_and_fill(objects, obj_val, ref_expr_sched);
+
                 let circuit_id = VectorDeriver::gen_circuit_expr(
-                    obj_val,
+                    new_obj_val,
                     step_val,
                     mask_val,
                     &mut self.registry,
@@ -142,6 +298,7 @@ impl<'a> Materializer<'a> {
                     ExprScheduleType::Specific(expr_schedule),
                     array_type,
                     circuit_id,
+                    prelude_circ_opt,
                 ))
             }
 
@@ -154,6 +311,7 @@ impl<'a> Materializer<'a> {
         program: &InlinedProgram,
         expr: &InlinedExpr,
         schedule: &Schedule,
+        preludes: &mut Vec<CircuitDecl>,
     ) -> Result<(ExprScheduleType, ArrayType, CircuitId), String> {
         match expr {
             InlinedExpr::Literal(lit) => {
@@ -166,10 +324,10 @@ impl<'a> Materializer<'a> {
 
             InlinedExpr::Op(op, expr1, expr2) => {
                 let (sched1, type1, id1) =
-                    self.materialize_expr(program, expr1, schedule)?;
+                    self.materialize_expr(program, expr1, schedule, preludes)?;
 
                 let (sched2, type2, id2) =
-                    self.materialize_expr(program, expr2, schedule)?;
+                    self.materialize_expr(program, expr2, schedule, preludes)?;
 
                 let schedule = Schedule::schedule_op(&sched1, &sched2)?;
 
@@ -182,7 +340,7 @@ impl<'a> Materializer<'a> {
             // TODO support client transforms
             InlinedExpr::ReduceNode(reduced_index, op, body) => {
                 let (body_sched, body_type, mat_body) =
-                    self.materialize_expr(program, body, schedule)?;
+                    self.materialize_expr(program, body, schedule, preludes)?;
 
                 let schedule = Schedule::schedule_reduce(*reduced_index, &body_sched)?;
 
@@ -199,13 +357,13 @@ impl<'a> Materializer<'a> {
                     let mut block_size: usize = body_sched_spec.vector_size();
 
                     for dim in body_sched_spec.vectorized_dims.into_iter() {
-                        block_size /= dim.extent();
+                        block_size /= dim.size();
 
                         if let VectorScheduleDim::Filled(sched_dim) = dim {
                             // if extent is 1, there's nothing to reduce!
                             if sched_dim.index == *reduced_index && sched_dim.extent > 1 {
                                 reduction_list.extend(
-                                    util::gen_pow2_list(sched_dim.extent >> 1)
+                                    util::descending_pow2_list(sched_dim.extent >> 1)
                                         .iter()
                                         .map(|x| x * block_size),
                                 );
@@ -237,11 +395,7 @@ impl<'a> Materializer<'a> {
 
                             let op_id =
                                 self.registry.register_circuit(
-                                    ParamCircuitExpr::Op(
-                                        Operator::Add,
-                                        acc,
-                                        rot_id,
-                                    )
+                                    ParamCircuitExpr::Op(Operator::Add, acc, rot_id)
                                 );
 
                             op_id
@@ -285,7 +439,7 @@ impl<'a> Materializer<'a> {
                                 schedule.preprocessing,
                             );
 
-                            match array_type {
+                            let (sched_type, array_type, circ_id, prelude_circ_opt) = match array_type {
                                 ArrayType::Ciphertext => self
                                     .materialize_expr_indexing_site::<CiphertextObject>(
                                         indexing_id,
@@ -305,7 +459,13 @@ impl<'a> Materializer<'a> {
                                         expr_circ_val,
                                         transform_circ_val,
                                     ),
+                            }?;
+
+                            if let Some(prelude) = prelude_circ_opt {
+                                preludes.push(prelude);
                             }
+
+                            Ok((sched_type, array_type, circ_id))
                         }
                     }
                 } else {
@@ -978,7 +1138,7 @@ mod tests {
             // ct_var should be mapped to the same vector at all coords
             assert!(coord_map.multiplicity() == 9);
             let values: Vec<&CiphertextObject> = coord_map
-                .value_iter()
+                .object_iter()
                 .map(|(_, value)| value.unwrap())
                 .collect();
 
@@ -1079,7 +1239,7 @@ mod tests {
             // ct_var should be mapped to the same vector at all coords
             assert!(coord_map.multiplicity() == 9);
             let values: Vec<&CiphertextObject> = coord_map
-                .value_iter()
+                .object_iter()
                 .map(|(_, value)| value.unwrap())
                 .collect();
 

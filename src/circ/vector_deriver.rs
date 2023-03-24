@@ -163,11 +163,11 @@ impl VectorDeriver {
                         let mut mask_map: IndexCoordinateMap<PlaintextObject> =
                             IndexCoordinateMap::from_coord_system(dst_map.coord_system.clone());
 
-                        for (coord, dst_vector_opt) in dst_map.value_iter() {
+                        for (coord, dst_vector_opt) in dst_map.object_iter() {
                             let dst_vector = dst_vector_opt.unwrap();
 
                             let derive_opt =
-                                VectorDeriver::derive_from_list(src_map.value_iter(), dst_vector);
+                                VectorDeriver::derive_from_list(src_map.object_iter(), dst_vector);
 
                             if let Some((vector, reg_coord, steps, mask)) = derive_opt {
                                 let object = T::expr_vector(vector.array, reg_coord);
@@ -193,13 +193,14 @@ impl VectorDeriver {
                         let mut mask_map: IndexCoordinateMap<PlaintextObject> =
                             IndexCoordinateMap::from_coord_system(dst_map.coord_system.clone());
 
-                        for (coord, dst_vector_opt) in dst_map.value_iter() {
+                        for (coord, dst_vector_opt) in dst_map.object_iter() {
                             let dst_vector = dst_vector_opt.unwrap();
                             let derive_opt = src_vector.derive(dst_vector);
 
                             if let Some((steps, mask)) = derive_opt {
                                 step_map.set(coord.clone(), steps);
                                 mask_map.set(coord.clone(), mask);
+
                             } else {
                                 return None;
                             }
@@ -220,7 +221,7 @@ impl VectorDeriver {
             CircuitValue::Single(dst_vector) => match src {
                 CircuitValue::CoordMap(src_map) => {
                     let derive_opt =
-                        VectorDeriver::derive_from_list(src_map.value_iter(), dst_vector);
+                        VectorDeriver::derive_from_list(src_map.object_iter(), dst_vector);
 
                     if let Some((vector, reg_coord, steps, mask)) = derive_opt {
                         let object = T::expr_vector(vector.array, reg_coord);
@@ -314,6 +315,8 @@ impl VectorDeriver {
         Some(offset_expr)
     }
 
+    // function that uses derivation data to generate a circuit
+    // the basic pattern it uses is 
     pub fn gen_circuit_expr<'a, T: CircuitObject>(
         obj_val: CircuitValue<T>,
         step_val: CircuitValue<isize>,
@@ -325,8 +328,9 @@ impl VectorDeriver {
         ParamCircuitExpr: CanCreateObjectVar<T>,
     {
         let obj_var = registry.fresh_obj_var();
+
         let mask_is_nonconst = match &mask_val {
-            CircuitValue::CoordMap(mask_map) => mask_map.value_iter().any(|(_, mask)| {
+            CircuitValue::CoordMap(mask_map) => mask_map.object_iter().any(|(_, mask)| {
                 if let Some(PlaintextObject::Const(_)) = mask {
                     false
                 } else {
@@ -413,6 +417,12 @@ impl VectorDeriver {
                 IndexCoordinateMap::new(schedule.exploded_dims.iter());
             let mut step_map: IndexCoordinateMap<isize> =
                 IndexCoordinateMap::new(schedule.exploded_dims.iter());
+
+            // this will not be used because input array materializers
+            // do not need to fill reduced dims
+            let fill_map: IndexCoordinateMap<Vec<isize>> =
+                IndexCoordinateMap::new(schedule.exploded_dims.iter());
+
             let coords = obj_map.coord_iter();
 
             self.register_and_derive_vectors(

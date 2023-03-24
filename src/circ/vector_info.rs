@@ -403,11 +403,12 @@ impl VectorInfo {
 
         if self.dims.len() != other.dims.len() {
             None
+
         } else if self == other {
             Some((0, PlaintextObject::Const(1)))
+
         } else {
             let mut seen_dims: HashSet<DimIndex> = HashSet::new();
-            let mut dims_to_fill: Vec<usize> = Vec::new();
 
             // check derivability conditions
             let dims_derivable =
@@ -654,11 +655,10 @@ impl VectorInfo {
                             mask_dim_info.push((dim_size, dim_mask));
                         },
 
+                        // an empty dim can be derived from a reduced dim by a clean-and-fill
                         (ReducedDim { extent: extent1, pad_left: pad_left1, pad_right: pad_right1 },
                         EmptyDim { extent: extent2, pad_left: pad_left2, pad_right: pad_right2, oob_right: oob_right2  }) => {
                             let dim_size = pad_left1 + extent1 + pad_right1;
-                            block_size *= dim_size;
-
                             let dim_mask =
                                 // don't mask anything
                                 if pad_left1 == pad_left2 && pad_right1 == pad_right2 + oob_right2 {
@@ -668,8 +668,8 @@ impl VectorInfo {
                                     Some((pad_left2, dim_size - pad_right2 - oob_right2 -1))
                                 };
 
-                            dims_to_fill.push(self.dims.len() - 1 -i);
                             mask_dim_info.push((dim_size, dim_mask));
+                            block_size *= dim_size;
                         },
 
                         (ReducedDim { extent:_, pad_left:_, pad_right:_ },

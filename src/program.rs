@@ -83,7 +83,7 @@ pub enum HERef {
     // reference to a previous instruction's output
     Instruction(InstructionId),
 
-    // index to a ciphertext array (variable if no indices)
+    // index to an array (variable if no indices)
     Array(ArrayName, Vec<HEIndex>),
 }
 
