@@ -87,7 +87,7 @@ fn main() {
     info!("elaboration...");
     let elaborated = Elaborator::new().run(source);
 
-    info!("scheduling...");
+    info!("generating inline sets and array groups...");
     let inline_sets = elaborated.simple_inline_sets();
     let inlined_programs: Vec<InlinedProgram> =
         inline_sets.into_iter().map(|inline_set| {
@@ -100,13 +100,16 @@ fn main() {
             inlined_program
         }).collect();
 
+    info!("scheduling...");
     let mut scheduler =
         Scheduler::new(
             inlined_programs,
             Box::new(FastScheduleTransformerFactory), 
             Box::new(DefaultMaterializerFactory), 
+            args.size
         );
 
+    info!("running scheduler...");
     scheduler.run(None);
     let best_opt = scheduler.get_best_schedule(CostFeatures::default_weights());
 

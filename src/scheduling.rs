@@ -204,6 +204,12 @@ impl IndexingSiteSchedule {
         }).collect()
     }
 
+    pub fn vector_size(&self) -> usize {
+        self.vectorized_dims.iter().fold(1, |acc, dim| {
+            acc * dim.size()
+        })
+    }
+
     pub fn to_expr_schedule(&self, shape: Shape) -> ExprSchedule {
         ExprSchedule {
             shape,

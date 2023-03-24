@@ -152,16 +152,17 @@ impl CostEstimator {
             program.native_expr_list.iter()
             .chain(program.circuit_expr_list.iter())
             .fold(CostFeatures::default(), |acc, (_, dims, id)| {
-                let multiplicity =  
+                let multiplicity =
                     dims.iter().fold(1, |acc, (_, extent)| acc * extent);
 
-                let (_, cost) =
-                    self.estimate_cost_expr(
-                        *id,
-                        multiplicity,
-                        &program.registry, 
-                        &mut HashMap::new()
-                    );
+                let mut cost = CostFeatures::default();
+                self.estimate_cost_expr(
+                    *id,
+                    multiplicity,
+                    &program.registry, 
+                    &mut HashMap::new(),
+                    &mut cost
+                );
 
                 acc.combine(&cost)
             });
@@ -184,13 +185,14 @@ impl CostEstimator {
         let mut cost: CostFeatures =
             program.expr_list.iter()
             .fold(CostFeatures::default(), |acc, (multiplicity, id)| {
-                let (_, cost) =
-                    self.estimate_cost_expr(
-                        *id,
-                        *multiplicity,
-                        &program.registry, 
-                        &mut HashMap::new()
-                    );
+                let mut cost = CostFeatures::default();
+                self.estimate_cost_expr(
+                    *id,
+                    *multiplicity,
+                    &program.registry, 
+                    &mut HashMap::new(),
+                    &mut cost
+                );
 
                 acc.combine(&cost)
             });
@@ -209,39 +211,36 @@ impl CostEstimator {
         cost
     }
 
+    // this must visit subcircuits exactly once
     fn estimate_cost_expr(
         &self,
         id: CircuitId,
         multiplicity: usize,
         registry: &CircuitObjectRegistry,
-        cost_map: &mut HashMap<CircuitId, (VectorType, CostFeatures)>,
-    ) -> (VectorType, CostFeatures) {
-        if cost_map.contains_key(&id) {
-            return cost_map[&id]
+        type_map: &mut HashMap<CircuitId, VectorType>,
+        cost: &mut CostFeatures,
+    ) -> VectorType {
+        if type_map.contains_key(&id) {
+            return type_map[&id]
         }
 
         match registry.get_circuit(id) {
             ParamCircuitExpr::CiphertextVar(_) => {
-                let cost = CostFeatures::default();
-                cost_map.insert(id, (VectorType::Plaintext, cost));
-                (VectorType::Ciphertext, cost)
+                VectorType::Ciphertext
             },
 
             ParamCircuitExpr::PlaintextVar(_) |
             ParamCircuitExpr::Literal(_) => {
-                let cost = CostFeatures::default();
-                cost_map.insert(id, (VectorType::Plaintext, cost));
-                (VectorType::Plaintext, cost)
+                VectorType::Plaintext
             },
 
             ParamCircuitExpr::Op(op, id1, id2) => {
-                let (type1, cost1) =
-                    self.estimate_cost_expr(*id1, multiplicity, registry, cost_map);
+                let type1 =
+                    self.estimate_cost_expr(*id1, multiplicity, registry, type_map, cost);
 
-                let (type2, cost2) =
-                    self.estimate_cost_expr(*id2, multiplicity, registry, cost_map);
+                let type2 =
+                    self.estimate_cost_expr(*id2, multiplicity, registry, type_map, cost);
 
-                let mut cost = cost1.combine(&cost2);
                 let node_type =
                     match (op, type1, type2) {
                         (Operator::Add, VectorType::Ciphertext, VectorType::Ciphertext) => {
@@ -293,15 +292,14 @@ impl CostEstimator {
                         },
                     };
 
-                cost_map.insert(id, (node_type, cost));
-                (node_type, cost)
+                type_map.insert(id, node_type);
+                node_type
             },
 
             ParamCircuitExpr::Rotate(_, body_id) => {
-                let (body_type, body_cost) =
-                    self.estimate_cost_expr(*body_id, multiplicity, registry, cost_map);
+                let body_type =
+                    self.estimate_cost_expr(*body_id, multiplicity, registry, type_map, cost);
 
-                let mut cost = body_cost;
                 match body_type {
                     VectorType::Ciphertext => {
                         cost.ct_rotations += multiplicity;
@@ -311,14 +309,14 @@ impl CostEstimator {
                     }
                 }
 
-                (body_type, cost)
+                type_map.insert(id, body_type);
+                body_type
             },
 
             ParamCircuitExpr::ReduceDim(_, extent, op, body_id) => {
-                let (body_type, body_cost) =
-                    self.estimate_cost_expr(*body_id, extent * multiplicity, registry, cost_map);
+                let body_type =
+                    self.estimate_cost_expr(*body_id, extent * multiplicity, registry, type_map, cost);
 
-                let mut cost = body_cost;
                 match (op, body_type) {
                     (Operator::Add, VectorType::Ciphertext) => {
                         cost.ct_ct_add += extent - 1;
@@ -345,7 +343,8 @@ impl CostEstimator {
                     },
                 }
 
-                (body_type, cost)
+                type_map.insert(id, body_type);
+                body_type
             },
         }
     }

@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::{collections::{HashMap, HashSet}, fmt::Display};
 
 use crate::{
     circ::{CircuitId, ParamCircuitExpr},
@@ -15,6 +15,14 @@ use super::CircuitObjectRegistry;
 pub struct PseudoCircuitProgram {
     pub registry: CircuitObjectRegistry,
     pub expr_list: Vec<(usize, CircuitId)>
+}
+
+impl Display for PseudoCircuitProgram {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.expr_list.iter().try_for_each(|(m, expr)| {
+            write!(f, "multiplicity: {}\n{}", m, self.registry.display_circuit(*expr))
+        })
+    }
 }
 
 /// a fake materializer used to quickly estimate circuit costs during scheduling

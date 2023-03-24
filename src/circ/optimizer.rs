@@ -544,7 +544,7 @@ impl Optimizer {
                 info!("using greedy extractor to derive optimized program...");
                 // let extractor = GreedyExtractor::new(egraph, HECostFunction { egraph, count: 0 });
                 // let extractor = Extractor::new(egraph, HECostFunction { egraph, latency: HELatencyModel::default() });
-                let extractor = DijkstraExtractor::new(
+                let extractor = Extractor::new(
                     egraph,
                     HECostFunction {
                         latency: HELatencyModel::default(),
@@ -553,18 +553,23 @@ impl Optimizer {
                     },
                 );
 
-                let opt_exprs = 
+                let opt_exprs: Vec<RecExpr<HEOptCircuit>> = 
                     roots.iter().map(|root| {
                         let (_, opt_expr) = extractor.find_best(*root);
                         opt_expr
                     }).collect();
+
+                let new_roots: Vec<Id> =
+                    opt_exprs.iter()
+                    .map(|x| Id::from(x.as_ref().len() - 1))
+                    .collect();
 
                 info!(
                     "Extraction time: {}ms",
                     extraction_time.elapsed().as_millis()
                 );
 
-                (opt_exprs, roots)
+                (opt_exprs, new_roots)
             },
 
             ExtractorType::LP => {

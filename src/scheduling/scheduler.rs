@@ -20,17 +20,20 @@ struct InlineScheduler<'a> {
     pub visited: HashSet<Schedule>,
     pub frontier: HashSet<Schedule>,
     pub valid_schedules_visited: usize,
+    pub vector_size: usize,
 }
 
 impl<'t> InlineScheduler<'t> {
     pub fn new(
         program: InlinedProgram,
         transformers: Vec<Box<dyn ScheduleTransformer + 't>>,
-        init_schedule: Schedule
+        init_schedule: Schedule,
+        vector_size: usize,
     ) -> Self {
         Self {
             program,
             transformers,
+            vector_size,
             visited: HashSet::from([init_schedule.clone()]),
             frontier: HashSet::from([init_schedule]),
             valid_schedules_visited: 1,
@@ -82,12 +85,25 @@ impl<'t> InlineScheduler<'t> {
                         // give a cost to the schedule and save it if it's
                         // in the Pareto frontier
                         let neighbor_failure = neighbor.is_schedule_valid(&self.program);
-                        if self.should_estimate_cost(&neighbor) && neighbor_failure.is_ok() {
-                            let mat = materializer_factory.create();
-                            // let mat = PseudoMaterializer::new();
+                        let neighbor_within_vec_size_limit =
+                            neighbor.schedule_map.iter().all(|(_, isched)| {
+                                isched.vector_size() <= self.vector_size
+                            });
+
+                        if self.should_estimate_cost(&neighbor)
+                            && neighbor_failure.is_ok()
+                            && neighbor_within_vec_size_limit
+                        {
+                            // let mat = materializer_factory.create();
+                            let mat = PseudoMaterializer::new();
 
                             if let Ok(circuit) = mat.run(&self.program, &neighbor) {
-                                let cost = cost_estimator.estimate_cost(&circuit);
+                                // let cost = cost_estimator.estimate_cost(&circuit);
+                                let cost = cost_estimator.estimate_pseudo_cost(&circuit);
+                                info!("visited schedule: {}", schedule);
+                                info!("cost: {:?}", cost);
+                                // info!("circuit: {}", circuit);
+
                                 valid_neighbors.push((neighbor.clone(), cost));
                                 self.valid_schedules_visited += 1;
                             }
@@ -130,6 +146,7 @@ impl<'m, 't> Scheduler<'m, 't> {
         inlined_programs: Vec<InlinedProgram>,
         transformer_factory: Box<dyn ScheduleTransformerFactory<'t> + 't>,
         materializer_factory: Box<dyn MaterializerFactory + 'm>,
+        vector_size: usize,
     ) -> Self {
         let cost_estimator = CostEstimator::default();
         let mut init_schedules: Vec<(usize, Schedule, CostFeatures)> = Vec::new();
@@ -140,10 +157,13 @@ impl<'m, 't> Scheduler<'m, 't> {
             let init_schedule =
                 Schedule::gen_initial_schedule(&inlined_program);
 
-            let mat = materializer_factory.create();
+            // let mat = materializer_factory.create();
+            // let mat_res = mat.run(&inlined_program, &init_schedule);
+            let mat = PseudoMaterializer::new();
             let mat_res = mat.run(&inlined_program, &init_schedule);
+
             if let Ok(circuit) = mat_res {
-                let cost = cost_estimator.estimate_cost(&circuit);
+                let cost = cost_estimator.estimate_pseudo_cost(&circuit);
                 init_schedules.push((inline_id, init_schedule.clone(), cost));
             }
 
@@ -154,7 +174,8 @@ impl<'m, 't> Scheduler<'m, 't> {
                 InlineScheduler::new(
                     inlined_program,
                     transformers,
-                    init_schedule
+                    init_schedule,
+                    vector_size
                 );
 
             inline_schedulers.insert(inline_id, (true, inline_scheduler));
@@ -169,6 +190,7 @@ impl<'m, 't> Scheduler<'m, 't> {
                 pareto_frontier: HashMap::new(),
             };
 
+        info!("initializing pareto frontier...");
         for (inline_id, init_schedule, cost) in init_schedules {
             scheduler.update_pareto_frontier(inline_id, init_schedule, cost);
         }
@@ -213,6 +235,8 @@ impl<'m, 't> Scheduler<'m, 't> {
 
         for res in results {
             for (schedule, cost) in res.pareto_frontier {
+                info!("pareto schedule: {}", schedule);
+                info!("cost: {:?}", cost);
                 let mut replace_best = false;
                 if let Some((_, _, best_cost)) = best {
                     if cost.weighted_cost(&weights) < best_cost.weighted_cost(&weights) {
@@ -301,6 +325,7 @@ impl<'m, 't> Scheduler<'m, 't> {
 
     /// run a certain number of iterations, or until reaching quiescence
     pub fn run(&mut self, iter_limit: Option<usize>) {
+        info!("running scheduler with iter limit: {:?}", iter_limit);
         let mut iter = 0;
         let mut changed = true;
         let within_limit = |x: usize| {
@@ -309,7 +334,7 @@ impl<'m, 't> Scheduler<'m, 't> {
                 None => true
             }
         };
-
+    
         while changed && within_limit(iter) {
             let iter_res = self.iterate();
             changed = iter_res.0 > 0;
@@ -376,6 +401,7 @@ mod tests {
                 inlined_programs,
                 Box::new(FastScheduleTransformerFactory), 
                 Box::new(DefaultMaterializerFactory), 
+                4096
             );
         
         scheduler.run(None);

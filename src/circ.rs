@@ -1,6 +1,5 @@
 use egg::{RecExpr, Symbol};
 use itertools::Itertools;
-use log::info;
 use std::{
     collections::{HashMap, HashSet, LinkedList},
     fmt::Display,
@@ -841,6 +840,15 @@ impl CircuitObjectRegistry {
             self.circuit_map.remove(&id);
         }
     }
+
+    pub fn display_circuit(&self, id: CircuitId) -> String {
+        let mut s = String::new();
+        for eid in self.expr_list(id) {
+            s.push_str(&format!("{} => {}\n", eid, self.get_circuit(eid)));
+        }
+
+        s
+    }
 }
 
 impl<'a> CanRegisterObject<'a, CiphertextObject> for CircuitObjectRegistry {
@@ -1426,38 +1434,6 @@ impl ParamCircuitProgram {
             circuit_expr_list: new_circuit_expr_list
         }
     }
-
-    fn display_circuit(&self, id: CircuitId) -> String {
-        match self.registry.get_circuit(id) {
-            ParamCircuitExpr::CiphertextVar(var) => {
-                var.clone()
-            },
-
-            ParamCircuitExpr::PlaintextVar(var) => {
-                var.clone()
-            },
-
-            ParamCircuitExpr::Literal(lit) => {
-                lit.to_string()
-            },
-
-            ParamCircuitExpr::Op(op, id1, id2) => {
-                let str1 = self.display_circuit(*id1);
-                let str2 = self.display_circuit(*id2);
-                format!("({} {} {})", str1, op, str2)
-            },
-            
-            ParamCircuitExpr::Rotate(offset, body_id) => {
-                let body_str = self.display_circuit(*body_id);
-                format!("rot({}, {})", offset, body_str)
-            },
-
-            ParamCircuitExpr::ReduceDim(dim, extent, op, body_id) => {
-                let body_str = self.display_circuit(*body_id);
-                format!("reduce_dim({}:{}, {}, {})", dim, extent, op, body_str)
-            }
-        }
-    }
 }
 
 impl Display for ParamCircuitProgram {
@@ -1469,7 +1445,7 @@ impl Display for ParamCircuitProgram {
             for dim in dims.iter() {
                 dims_str.push_str(&format!("[{}: {}]", dim.0, dim.1))
             }
-            write!(f, "let {}{} = {}\n", name, dims_str, self.display_circuit(*circuit))
+            write!(f, "let {}{} = {}\n", name, dims_str, self.registry.display_circuit(*circuit))
         })
     }
 }
