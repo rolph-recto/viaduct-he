@@ -77,13 +77,13 @@ class EmptyDim(VectorDimContent):
 class AbstractArray:
     def __init__(self, size: int, extents: list[int]):
         if len(extents) == 0:
-            self.single = CiphertextVector(size)
+            self.single = NativeVector(size, None)
 
         else:
             self.map = {}
             coords = itertools.product(*map(lambda e: tuple(range(e)), extents))
             for coord in coords:
-                self.map[coord] = CiphertextVector(size)
+                self.map[coord] = NativeVector(size, None)
 
     def set(self, coord: list[int], val):
         if len(coord) == 0:
@@ -154,7 +154,7 @@ class AbstractVector:
         pass
 
 class CiphertextVector(AbstractVector):
-    def __init__(self, size, array=None):
+    def __init__(self, size: int, array: Ciphertext):
         super().__init__(size, array)
 
     def create(self, size, array):
@@ -165,7 +165,7 @@ class CiphertextVector(AbstractVector):
 
 
 class PlaintextVector(AbstractVector):
-    def __init__(self, size, array):
+    def __init__(self, size: int, array: Plaintext):
         super().__init__(size, array)
 
     def create(self, size, array):
@@ -176,7 +176,7 @@ class PlaintextVector(AbstractVector):
 
 
 class NativeVector(AbstractVector):
-    def __init__(self, size, array):
+    def __init__(self, size: int, array: np.ndarray):
         super().__init__(size, array)
 
     def create(self, size, array):
@@ -216,7 +216,7 @@ class SEALWrapper:
             noise = self.invariant_noise_budget(arr.single)
             decrypted = self.seal["decryptor"].decrypt(arr.single.array)
             decoded = self.seal["batch_encoder"].decode(decrypted)
-            print("output: ", decoded)
+            print("output: ", decoded[0:self.size])
             print("noise budget: ", noise)
 
         else:
@@ -225,7 +225,7 @@ class SEALWrapper:
                 decrypted = self.seal["decryptor"].decrypt(val.array)
                 decoded = self.seal["batch_encoder"].decode(decrypted)
                 print("coord ", coord)
-                print("value: ", decoded)
+                print("value: ", decoded[0:self._size])
                 print("noise budget: ", noise)
 
     def client_send(self, name, arr):
@@ -237,9 +237,7 @@ class SEALWrapper:
         encoded = self.encode_vec(vec)
 
         # encrypt into ciphertext
-        encrypted = self.encrypt(encoded)
-
-        self.client_buffer[name] = CiphertextVector(self.size, encrypted)
+        self.client_buffer[name] = self.encrypt(encoded)
 
     def server_recv(self, name):
         assert(self.party == "server")
@@ -366,66 +364,95 @@ class SEALWrapper:
 
     def encode_vec(self, vec):
         assert(isinstance(vec, NativeVector))
-        return self.seal["batch_encoder"].encode(vec.array.tolist())
+        # BFV as 2xn vectors, so repeat array to encode
+        encoded = self.seal["batch_encoder"].encode(np.tile(vec.array, 2))
+        return PlaintextVector(vec.size, encoded)
 
-    def encode(self, arr, coord):
-        encoded = self.encode_vec(coord)
-        arr.set(coord, PlaintextVector(vec.size, encoded))
+    def encode(self, arr: NativeArray, coord: list[int]):
+        arr.set(coord, self.encode_vec(coord))
 
-    def encrypt(self, x):
-        return self.seal["encryptor"].encrypt(x)
+    def encrypt(self, x: PlaintextVector):
+        encrypted = self.seal["encryptor"].encrypt(x.array)
+        return CiphertextVector(x.size, encrypted)
 
-    def add(self, x, y):
-        assert(isinstance(x, CiphertextVector) and isinstance(y, CiphertextVector))
+    def add(self, x: CiphertextVector, y: CiphertextVector):
         sum = self.seal["evaluator"].add(x.array, y.array)
         return CiphertextVector(x.size, sum)
 
-    def add_plain(self, x, y):
-        assert(isinstance(x, CiphertextVector) and isinstance(y, PlaintextVector))
+    def add_plain(self, x: CiphertextVector, y: PlaintextVector):
         sum = self.seal["evaluator"].add_plain(x.array, y.array)
         return CiphertextVector(x.size, sum)
 
-    def add_inplace(self, x, y):
-        assert(isinstance(x, CiphertextVector) and isinstance(y, CiphertextVector))
+    def add_inplace(self, x: CiphertextVector, y: CiphertextVector):
         self.seal["evaluator"].add_inplace(x.array, y.array)
 
-    def add_plain_inplace(self, x, y):
-        assert(isinstance(x, CiphertextVector) and isinstance(y, PlaintextVector))
+    def add_plain_inplace(self, x: CiphertextVector, y: PlaintextVector):
         self.seal["evaluator"].add_plain_inplace(x.array, y.array)
 
-    def multiply(self, x, y):
-        assert(isinstance(x, CiphertextVector) and isinstance(y, CiphertextVector))
+    def add_native(self, x: NativeVector, y: NativeVector):
+        return NativeVector(x.size, x.array + y.array)
+
+    def add_native_inplace(self, x: NativeVector, y: NativeVector):
+        x.array = x.array + y.array
+
+    def subtract(self, x: CiphertextVector, y: CiphertextVector):
+        diff = self.seal["evaluator"].subtract(x.array, y.array)
+        return CiphertextVector(x.size, diff)
+
+    def subtract_plain(self, x: CiphertextVector, y: PlaintextVector):
+        diff = self.seal["evaluator"].subtract_plain(x.array, y.array)
+        return CiphertextVector(x.size, diff)
+
+    def subtract_inplace(self, x: CiphertextVector, y: CiphertextVector):
+        self.seal["evaluator"].subtract_inplace(x.array, y.array)
+
+    def subtract_plain_inplace(self, x: CiphertextVector, y: PlaintextVector):
+        self.seal["evaluator"].subtract_plain_inplace(x.array, y.array)
+
+    def subtract_native(self, x: NativeVector, y: NativeVector):
+        return NativeVector(x.size, x.array - y.array)
+
+    def subtract_native_inplace(self, x: NativeVector, y: NativeVector):
+        x.array = x.array - y.array
+
+    def multiply(self, x: CiphertextVector, y: CiphertextVector):
         product = self.seal["evaluator"].multiply(x.array, y.array)
         return CiphertextVector(x.size, product)
 
-    def multiply_plain(self, x, y):
-        assert(isinstance(x, CiphertextVector) and isinstance(y, PlaintextVector))
+    def multiply_plain(self, x: CiphertextVector, y: PlaintextVector):
         product = self.seal["evaluator"].multiply_plain(x.array, y.array)
         return CiphertextVector(x.size, product)
 
-    def multiply_inplace(self, x, y):
-        assert(isinstance(x, CiphertextVector) and isinstance(y, CiphertextVector))
+    def multiply_inplace(self, x: CiphertextVector, y: CiphertextVector):
         self.seal["evaluator"].multiply_inplace(x.array, y.array)
 
-    def multiply_plain_inplace(self, x, y):
-        assert(isinstance(x, CiphertextVector) and isinstance(y, PlaintextVector))
+    def multiply_plain_inplace(self, x: CiphertextVector, y: PlaintextVector):
         self.seal["evaluator"].multiply_plain_inplace(x.array, y.array)
 
-    def rotate_rows(self, amt,x ):
-        assert(isinstance(x, CiphertextVector))
+    def multiply_native(self, x: NativeVector, y: NativeVector):
+        return NativeVector(x.size, x.array * y.array)
+
+    def multiply_native_inplace(self, x: NativeVector, y: NativeVector):
+        x.array = x.array * y.array
+
+    def rotate_rows(self, amt: int, x: CiphertextVector):
         rotated = self.seal["evaluator"].rotate_rows(x.array, amt, self.seal["galois_keys"])
         return CiphertextVector(x.size, rotated)
 
-    def rotate_rows_inplace(self, amt, x):
-        assert(isinstance(x, CiphertextVector))
+    def rotate_rows_inplace(self, amt: int, x: CiphertextVector):
         self.seal["evaluator"].rotate_rows_inplace(x.array, amt, self.seal["galois_keys"])
 
-    def relinearize_inplace(self, x):
-        assert(isinstance(x, CiphertextVector))
+    def rotate_rows_native(self, amt: int, x: NativeVector):
+        rotated = x.array[[(i-amt) % self.size for i in range(self.size)]]
+        return NativeVector(x.size, rotated)
+
+    def rotate_rows_native_inplace(self, amt: int, x: NativeVector):
+        x.array = x.array[[(i-amt) % self.size for i in range(self.size)]]
+
+    def relinearize_inplace(self, x: CiphertextVector):
         self.seal["evaluator"].relinearize_inplace(x.array, self.seal["relin_keys"])
 
-    def invariant_noise_budget(self, x):
-        assert(isinstance(x, CiphertextVector))
+    def invariant_noise_budget(self, x: CiphertextVector):
         return self.seal["decryptor"].invariant_noise_budget(x.array)
 
     # TODO add native operations
