@@ -73,54 +73,54 @@ enum SEALOpType {
 impl SEALOpType {
     pub fn to_doc(&self) -> RcDoc<()> {
         match self {
-            SEALOpType::Add => RcDoc::text("seal.add"),
-            SEALOpType::AddInplace => RcDoc::text("seal.add_inplace"),
-            SEALOpType::AddPlain => RcDoc::text("seal.add_plain"),
-            SEALOpType::AddPlainInplace => RcDoc::text("seal.add_plain_inplace"),
-            SEALOpType::AddNative => RcDoc::text("seal.add_native"),
-            SEALOpType::AddNativeInplace => RcDoc::text("seal.add_native_inplace"),
+            SEALOpType::Add => RcDoc::text("wrapper.add"),
+            SEALOpType::AddInplace => RcDoc::text("wrapper.add_inplace"),
+            SEALOpType::AddPlain => RcDoc::text("wrapper.add_plain"),
+            SEALOpType::AddPlainInplace => RcDoc::text("wrapper.add_plain_inplace"),
+            SEALOpType::AddNative => RcDoc::text("wrapper.add_native"),
+            SEALOpType::AddNativeInplace => RcDoc::text("wrapper.add_native_inplace"),
 
-            SEALOpType::Sub => RcDoc::text("seal.subtract"),
-            SEALOpType::SubInplace => RcDoc::text("seal.subtract_inplace"),
-            SEALOpType::SubPlain => RcDoc::text("seal.subtract_plain"),
-            SEALOpType::SubPlainInplace => RcDoc::text("seal.subtract_plain_inplace"),
-            SEALOpType::SubNative => RcDoc::text("seal.subtract_native"),
-            SEALOpType::SubNativeInplace => RcDoc::text("seal.subtract_native_inplace"),
+            SEALOpType::Sub => RcDoc::text("wrapper.subtract"),
+            SEALOpType::SubInplace => RcDoc::text("wrapper.subtract_inplace"),
+            SEALOpType::SubPlain => RcDoc::text("wrapper.subtract_plain"),
+            SEALOpType::SubPlainInplace => RcDoc::text("wrapper.subtract_plain_inplace"),
+            SEALOpType::SubNative => RcDoc::text("wrapper.subtract_native"),
+            SEALOpType::SubNativeInplace => RcDoc::text("wrapper.subtract_native_inplace"),
 
-            SEALOpType::Mul => RcDoc::text("seal.multiply"),
-            SEALOpType::MulInplace => RcDoc::text("seal.multiply_inplace"),
-            SEALOpType::MulPlain => RcDoc::text("seal.multiply_plain"),
-            SEALOpType::MulPlainInplace => RcDoc::text("seal.multiply_plain_inplace"),
-            SEALOpType::MulNative => RcDoc::text("seal.multiply_native"),
-            SEALOpType::MulNativeInplace => RcDoc::text("seal.mul_native_inplace"),
+            SEALOpType::Mul => RcDoc::text("wrapper.multiply"),
+            SEALOpType::MulInplace => RcDoc::text("wrapper.multiply_inplace"),
+            SEALOpType::MulPlain => RcDoc::text("wrapper.multiply_plain"),
+            SEALOpType::MulPlainInplace => RcDoc::text("wrapper.multiply_plain_inplace"),
+            SEALOpType::MulNative => RcDoc::text("wrapper.multiply_native"),
+            SEALOpType::MulNativeInplace => RcDoc::text("wrapper.mul_native_inplace"),
 
-            SEALOpType::Rot => RcDoc::text("seal.rotate_row"),
-            SEALOpType::RotInplace => RcDoc::text("seal.rotate_row_inplace"),
-            SEALOpType::RotNative => RcDoc::text("seal.rotate_row_native"),
-            SEALOpType::RotNativeInplace => RcDoc::text("seal.rotate_row_native_inplace"),
+            SEALOpType::Rot => RcDoc::text("wrapper.rotate_rows"),
+            SEALOpType::RotInplace => RcDoc::text("wrapper.rotate_rows_inplace"),
+            SEALOpType::RotNative => RcDoc::text("wrapper.rotate_rows_native"),
+            SEALOpType::RotNativeInplace => RcDoc::text("wrapper.rotate_rows_native_inplace"),
 
-            SEALOpType::Encode => RcDoc::text("seal.encode"),
-            SEALOpType::RelinearizeInplace => RcDoc::text("seal.relinearize_inplace"),
+            SEALOpType::Encode => RcDoc::text("wrapper.encode"),
+            SEALOpType::RelinearizeInplace => RcDoc::text("wrapper.relinearize_inplace"),
 
-            SEALOpType::Assign => RcDoc::text("seal.set"),
+            SEALOpType::Assign => RcDoc::text("wrapper.set"),
 
-            SEALOpType::DeclareNativeArray => RcDoc::text("seal.native_array"),
-            SEALOpType::DeclareCiphertextArray => RcDoc::text("seal.ciphertext_array"),
-            SEALOpType::DeclarePlaintextArray => RcDoc::text("seal.plaintext_array"),
-            SEALOpType::DeclareMask => RcDoc::text("seal.mask"),
-            SEALOpType::DeclareConst => RcDoc::text("seal.const"),
+            SEALOpType::DeclareNativeArray => RcDoc::text("wrapper.native_array"),
+            SEALOpType::DeclareCiphertextArray => RcDoc::text("wrapper.ciphertext_array"),
+            SEALOpType::DeclarePlaintextArray => RcDoc::text("wrapper.plaintext_array"),
+            SEALOpType::DeclareMask => RcDoc::text("wrapper.mask"),
+            SEALOpType::DeclareConst => RcDoc::text("wrapper.const"),
 
-            SEALOpType::GetVector => RcDoc::text("seal.get_vector"),
-            SEALOpType::BuildVector => RcDoc::text("seal.build_vector"),
+            SEALOpType::GetVector => RcDoc::text("wrapper.get_vector"),
+            SEALOpType::BuildVector => RcDoc::text("wrapper.build_vector"),
 
-            SEALOpType::ServerInput => RcDoc::text("seal.server_input"),
-            SEALOpType::ServerRecv => RcDoc::text("seal.server_recv"),
-            SEALOpType::ServerSend => RcDoc::text("seal.server_send"),
+            SEALOpType::ServerInput => RcDoc::text("wrapper.server_input"),
+            SEALOpType::ServerRecv => RcDoc::text("wrapper.server_recv"),
+            SEALOpType::ServerSend => RcDoc::text("wrapper.server_send"),
 
-            SEALOpType::ClientInput => RcDoc::text("seal.client_input"),
-            SEALOpType::ClientOutput => RcDoc::text("seal.client_output"),
-            SEALOpType::ClientSend => RcDoc::text("seal.client_send"),
-            SEALOpType::ClientRecv => RcDoc::text("seal.client_recv"),
+            SEALOpType::ClientInput => RcDoc::text("wrapper.client_input"),
+            SEALOpType::ClientOutput => RcDoc::text("wrapper.client_output"),
+            SEALOpType::ClientSend => RcDoc::text("wrapper.client_send"),
+            SEALOpType::ClientRecv => RcDoc::text("wrapper.client_recv"),
         }
     }
 }
@@ -223,19 +223,19 @@ impl SEALProgram {
                 RcDoc::text("pass")
             };
 
-        RcDoc::text("def client_pre(seal):")
+        RcDoc::text("def client_pre(wrapper):")
         .append(
             RcDoc::hardline().append(client_pre_doc).nest(4)
         )
         .append(RcDoc::hardline())
         .append(RcDoc::hardline())
-        .append(RcDoc::text("def client_post(seal):"))
+        .append(RcDoc::text("def client_post(wrapper):"))
         .append(
             RcDoc::hardline().append(client_post_doc).nest(4)
         )
         .append(RcDoc::hardline())
         .append(RcDoc::hardline())
-        .append(RcDoc::text("def server(seal):"))
+        .append(RcDoc::text("def server(wrapper):"))
         .append(
             RcDoc::hardline().append(server_doc).nest(4)
         )

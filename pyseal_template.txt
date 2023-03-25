@@ -4,6 +4,7 @@ import json
 import numpy as np
 from time import time
 
+from seal import *
 
 class ArrayPreprocessing:
     def apply(self, arr):
@@ -143,44 +144,6 @@ class AbstractVector:
         else:
             self.array = array
 
-    def load(self, x):
-        n = len(x)
-        assert(self.size >= n)
-        self.array[:n] = np.array(x)
-
-    def get(self, n):
-        return self.array[:n]
-
-    def add_inplace(self, y):
-        assert(self.validate_operand(y))
-        self.array = self.array + y.array
-
-    def sub_inplace(self, y):
-        assert(self.validate_operand(y))
-        self.array = self.array - y.array
-
-    def multiply_inplace(self, y):
-        assert(self.validate_operand(y))
-        self.array = self.array * y.array
-
-    def rotate_inplace(self, n):
-        self.array = self.array[[(i-n) % self.size for i in range(self.size)]]
-
-    def __add__(self, x):
-        assert(self.validate_operand(x))
-        return self.create(self.size, self.array + x.array)
-
-    def __sub__(self, x):
-        assert(self.validate_operand(x))
-        return self.create(self.size, self.array - x.array)
-        
-    def __mul__(self, x):
-        assert(self.validate_operand(x))
-        return self.create(self.size, self.array * x.array)
-
-    def rotate(self, n):
-        return self.create(self.size, self.array[[(i-n) % self.size for i in range(self.size)]])
-
     def __str__(self):
         return str(self.array)
 
@@ -223,8 +186,9 @@ class NativeVector(AbstractVector):
         return isinstance(y, NativeVector)
 
 
-class TestWrapper:
-    def __init__(self, size, client_inputs={}, server_inputs={}):
+class SEALWrapper:
+    def __init__(self, seal, size, client_inputs={}, server_inputs={}):
+        self.seal = seal
         self.size = size
         self.client_inputs = client_inputs
         self.server_inputs = server_inputs
@@ -247,16 +211,35 @@ class TestWrapper:
 
     def client_output(self, arr):
         assert(self.party == "client")
-        print("client output:")
-        arr.show()
+
+        if arr.single is not None:
+            noise = self.invariant_noise_budget(arr.single)
+            decrypted = self.seal["decryptor"].decrypt(arr.single.array)
+            decoded = self.seal["batch_encoder"].decode(decrypted)
+            print("output: ", decoded)
+            print("noise budget: ", noise)
+
+        else:
+            for coord, val in self.map.items():
+                noise = self.invariant_noise_budget(val)
+                decrypted = self.seal["decryptor"].decrypt(val.array)
+                decoded = self.seal["batch_encoder"].decode(decrypted)
+                print("coord ", coord)
+                print("value: ", decoded)
+                print("noise budget: ", noise)
 
     def client_send(self, name, arr):
         assert(self.party == "client")
         vec = arr.get([])
         assert(isinstance(vec, NativeVector))
 
-        # "encrypt" whatever the client sends
-        self.client_buffer[name] = CiphertextVector(self.size, vec.array)
+        # encode into plaintext
+        encoded = self.encode_vec(vec)
+
+        # encrypt into ciphertext
+        encrypted = self.encrypt(encoded)
+
+        self.client_buffer[name] = CiphertextVector(self.size, encrypted)
 
     def server_recv(self, name):
         assert(self.party == "server")
@@ -336,7 +319,7 @@ class TestWrapper:
             for i, dim in enumerate(dims):
                 dst_offset.append(dim.offset_left())
                 dst_shape.append(dim.size())
-                dst_size = dim.size()
+                dst_size *= dim.size()
                 coords.append(range(dim.extent))
 
                 if isinstance(dim, FilledDim):
@@ -381,54 +364,77 @@ class TestWrapper:
     def set(self, arr, coord, val):
         arr.set(coord, val)
 
-    def encode(self, arr, coord):
-        vec = arr.get(coord)
+    def encode_vec(self, vec):
         assert(isinstance(vec, NativeVector))
-        arr.set(coord, PlaintextVector(vec.size, vec.array))
+        return self.seal["batch_encoder"].encode(vec.array.tolist())
+
+    def encode(self, arr, coord):
+        encoded = self.encode_vec(coord)
+        arr.set(coord, PlaintextVector(vec.size, encoded))
 
     def encrypt(self, x):
-        return x
+        return self.seal["encryptor"].encrypt(x)
 
     def add(self, x, y):
-        return x + y
+        assert(isinstance(x, CiphertextVector) and isinstance(y, CiphertextVector))
+        sum = self.seal["evaluator"].add(x.array, y.array)
+        return CiphertextVector(x.size, sum)
 
     def add_plain(self, x, y):
-        return x + y
+        assert(isinstance(x, CiphertextVector) and isinstance(y, PlaintextVector))
+        sum = self.seal["evaluator"].add_plain(x.array, y.array)
+        return CiphertextVector(x.size, sum)
 
     def add_inplace(self, x, y):
-        x.add_inplace(y)
+        assert(isinstance(x, CiphertextVector) and isinstance(y, CiphertextVector))
+        self.seal["evaluator"].add_inplace(x.array, y.array)
 
     def add_plain_inplace(self, x, y):
-        x.add_inplace(y)
+        assert(isinstance(x, CiphertextVector) and isinstance(y, PlaintextVector))
+        self.seal["evaluator"].add_plain_inplace(x.array, y.array)
 
     def multiply(self, x, y):
-        return x * y
+        assert(isinstance(x, CiphertextVector) and isinstance(y, CiphertextVector))
+        product = self.seal["evaluator"].multiply(x.array, y.array)
+        return CiphertextVector(x.size, product)
 
     def multiply_plain(self, x, y):
-        return x * y
+        assert(isinstance(x, CiphertextVector) and isinstance(y, PlaintextVector))
+        product = self.seal["evaluator"].multiply_plain(x.array, y.array)
+        return CiphertextVector(x.size, product)
 
     def multiply_inplace(self, x, y):
-        x.multiply_inplace(y)
+        assert(isinstance(x, CiphertextVector) and isinstance(y, CiphertextVector))
+        self.seal["evaluator"].multiply_inplace(x.array, y.array)
 
     def multiply_plain_inplace(self, x, y):
-        x.multiply_inplace(y)
+        assert(isinstance(x, CiphertextVector) and isinstance(y, PlaintextVector))
+        self.seal["evaluator"].multiply_plain_inplace(x.array, y.array)
 
-    def rotate_rows(self, x, amt):
-        return x.rotate(amt)
+    def rotate_rows(self, amt,x ):
+        assert(isinstance(x, CiphertextVector))
+        rotated = self.seal["evaluator"].rotate_rows(x.array, amt, self.seal["galois_keys"])
+        return CiphertextVector(x.size, rotated)
 
-    def rotate_rows_inplace(self, x, amt):
-        x.rotate_inplace(amt)
+    def rotate_rows_inplace(self, amt, x):
+        assert(isinstance(x, CiphertextVector))
+        self.seal["evaluator"].rotate_rows_inplace(x.array, amt, self.seal["galois_keys"])
 
     def relinearize_inplace(self, x):
-        pass
+        assert(isinstance(x, CiphertextVector))
+        self.seal["evaluator"].relinearize_inplace(x.array, self.seal["relin_keys"])
 
     def invariant_noise_budget(self, x):
-        return 0
+        assert(isinstance(x, CiphertextVector))
+        return self.seal["decryptor"].invariant_noise_budget(x.array)
+
+    # TODO add native operations
 
 ### START GENERATED CODE
 {{{ program }}}
 ### END GENERATED CODE
 
+init_start_time = time()
 
 input_str = None
 client_inputs = {}
@@ -447,18 +453,45 @@ for key, val in inputs["client"].items():
 for key, val in inputs["server"].items():
     server_inputs[key] = np.array(val)
 
-vec_size = {{{ size }}}
-seal = TestWrapper(vec_size, client_inputs, server_inputs)
+vec_size = {{ size }}
 
-seal.set_party("client")
-client_pre(seal)
+seal = {}
+seal["parms"] = EncryptionParameters(scheme_type.bfv)
+
+poly_modulus_degree = vec_size * 2
+seal["parms"].set_poly_modulus_degree(poly_modulus_degree)
+seal["parms"].set_coeff_modulus(CoeffModulus.BFVDefault(poly_modulus_degree))
+seal["parms"].set_plain_modulus(PlainModulus.Batching(poly_modulus_degree, 20))
+seal["context"] = SEALContext(seal["parms"])
+seal["keygen"] = KeyGenerator(seal["context"])
+seal["secret_key"] = seal["keygen"].secret_key()
+seal["public_key"] = seal["keygen"].create_public_key()
+seal["relin_keys"] = seal["keygen"].create_relin_keys()
+seal["galois_keys"] = seal["keygen"].create_galois_keys()
+
+seal["encryptor"] = Encryptor(seal["context"], seal["public_key"])
+seal["evaluator"] = Evaluator(seal["context"])
+seal["decryptor"] = Decryptor(seal["context"], seal["secret_key"])
+
+seal["batch_encoder"] = BatchEncoder(seal["context"])
+
+wrapper = SEALWrapper(seal, vec_size, client_inputs, server_inputs)
+
+init_end_time = time()
+print("init duration: {}ms".format((init_end_time - init_start_time)*1000))
 
 exec_start_time = time()
-seal.set_party("server")
-server(seal)
+
+wrapper.set_party("client")
+client_pre(wrapper)
+
+wrapper.set_party("server")
+server(wrapper)
+
+wrapper.set_party("client")
+client_post(wrapper)
+
 exec_end_time = time()
 
-seal.set_party("client")
-client_post(seal)
-
 print("exec duration: {}ms".format((exec_end_time - exec_start_time)*1000))
+# print("noise budget: {} bits".format(wrapper.invariant_noise_budget({{output}})))
