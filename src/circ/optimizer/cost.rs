@@ -7,13 +7,13 @@ use super::*;
 pub struct HELatencyModel {
     pub add_cipher: usize,
     pub add_cipherplain: usize,
-    pub add_plain: usize,
+    pub add_native: usize,
     pub sub_cipher: usize,
     pub sub_cipherplain: usize,
-    pub sub_plain: usize,
+    pub sub_native: usize,
     pub mul_cipher: usize,
     pub mul_cipherplain: usize,
-    pub mul_plain: usize,
+    pub mul_native: usize,
     pub rot_cipher: usize,
     pub rot_plain: usize,
 }
@@ -23,13 +23,13 @@ impl Default for HELatencyModel {
         Self {
             add_cipher: 20,
             add_cipherplain: 5,
-            add_plain: 1,
+            add_native: 1,
             sub_cipher: 20,
             sub_cipherplain: 5,
-            sub_plain: 1,
+            sub_native: 1,
             mul_cipher: 30,
             mul_cipherplain: 5,
-            mul_plain: 1,
+            mul_native: 1,
             rot_cipher: 40,
             rot_plain: 1,
         }
@@ -141,9 +141,9 @@ impl<'a> CostFunction<HEOptCircuit> for HECostFunction<'a> {
 
                         (HEOptNodeType::Plain, HEOptNodeType::Plain) =>
                             match enode {
-                                HEOptCircuit::Add(_) => self.latency.add_plain,
-                                HEOptCircuit::Sub(_) => self.latency.sub_plain,
-                                HEOptCircuit::Mul(_) => self.latency.mul_plain,
+                                HEOptCircuit::Add(_) => self.latency.add_native,
+                                HEOptCircuit::Sub(_) => self.latency.sub_native,
+                                HEOptCircuit::Mul(_) => self.latency.mul_native,
                                 _ => unreachable!()
                             }
                     };
@@ -214,7 +214,7 @@ impl<'a> CostFunction<HEOptCircuit> for HECostFunction<'a> {
                                 },
 
                                 HEOptNodeType::Plain => {
-                                    self.latency.add_plain * extent
+                                    self.latency.add_native * extent
                                 }
                             }
                         },
@@ -226,7 +226,7 @@ impl<'a> CostFunction<HEOptCircuit> for HECostFunction<'a> {
                                 },
 
                                 HEOptNodeType::Plain => {
-                                    self.latency.mul_plain * extent
+                                    self.latency.mul_native * extent
                                 }
                             }
                         }
@@ -266,7 +266,7 @@ impl LpCostFunction<HEOptCircuit, HEData> for HELpCostFunction {
         let muldepth = egraph[eclass].data.muldepth;
         let latency = match enode {
             HEOptCircuit::Literal(_) =>
-                0.0,
+                1.0,
 
             HEOptCircuit::Add([id1, id2]) => {
                 let type1 = &egraph[*id1].data.node_type;
@@ -282,7 +282,7 @@ impl LpCostFunction<HEOptCircuit, HEData> for HELpCostFunction {
                     },
 
                     (HEOptNodeType::Plain, HEOptNodeType::Plain) => {
-                        self.latency.add_plain as f64
+                        self.latency.add_native as f64
                     }
                 } 
             }
@@ -301,7 +301,7 @@ impl LpCostFunction<HEOptCircuit, HEData> for HELpCostFunction {
                     },
 
                     (HEOptNodeType::Plain, HEOptNodeType::Plain) => {
-                        self.latency.sub_plain as f64
+                        self.latency.sub_native as f64
                     },
                 } 
             }
@@ -320,7 +320,7 @@ impl LpCostFunction<HEOptCircuit, HEData> for HELpCostFunction {
                     },
 
                     (HEOptNodeType::Plain, HEOptNodeType::Plain) => {
-                        self.latency.mul_plain as f64
+                        self.latency.mul_native as f64
                     },
                 } 
             },
@@ -335,15 +335,15 @@ impl LpCostFunction<HEOptCircuit, HEData> for HELpCostFunction {
 
             HEOptCircuit::CiphertextVar(_) | HEOptCircuit::PlaintextVar(_) => {
                 // TODO handle multiplicity
-                0.0
+                1.0
             },
 
             HEOptCircuit::SumVectors(_) | HEOptCircuit::ProductVectors(_) => {
                 // TODO handle multiplicity
-                0.0
+                1.0
             },
 
-            HEOptCircuit::IndexVar(_) | HEOptCircuit::FunctionVar(_, _) => 0.0
+            HEOptCircuit::IndexVar(_) | HEOptCircuit::FunctionVar(_, _) => 0.1
         };
 
         ((muldepth + 1) as f64) * latency

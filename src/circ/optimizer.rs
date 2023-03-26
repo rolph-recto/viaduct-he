@@ -366,9 +366,17 @@ impl Applier<HEOptCircuit, HEData> for ConstSplit {
         let mut changed: Vec<Id> = Vec::new();
         let constval = egraph[eclass].data.constval.unwrap();
 
+        let op1_id = egraph.add(HEOptCircuit::Literal(1));
+        let op2_id = egraph.add(HEOptCircuit::Literal(constval - 1));
+        let add_id = egraph.add(HEOptCircuit::Add([op1_id, op2_id]));
+        if egraph.union(eclass, add_id) {
+            changed.push(add_id);
+        }
+
+        /*
         if constval > 0 {
             let mut counter = 1;
-            while counter <= constval {
+            while counter < constval {
                 let op1_id = egraph.add(HEOptCircuit::Literal(counter));
                 let op2_id = egraph.add(HEOptCircuit::Literal(constval - counter));
                 let add_id = egraph.add(HEOptCircuit::Add([op1_id, op2_id]));
@@ -380,7 +388,7 @@ impl Applier<HEOptCircuit, HEData> for ConstSplit {
 
         } else if constval < 0 {
             let mut counter = -1;
-            while counter >= constval {
+            while counter > constval {
                 let op1_id = egraph.add(HEOptCircuit::Literal(counter));
                 let op2_id = egraph.add(HEOptCircuit::Literal(constval - counter));
                 let add_id = egraph.add(HEOptCircuit::Add([op1_id, op2_id]));
@@ -390,6 +398,7 @@ impl Applier<HEOptCircuit, HEData> for ConstSplit {
                 counter -= 1;
             }
         }
+        */
 
         if changed.len() > 0 {
             changed.push(eclass);
@@ -469,7 +478,7 @@ impl Optimizer {
             rewrite!("constant-fold"; "?x" => ConstFold if is_const("?x")),
 
             // split a constant value into a sum 
-            rewrite!("const-split"; "?x" => { ConstSplit {} } if is_const_nonzero("?x")),
+            // rewrite!("const-split"; "?x" => { ConstSplit {} } if is_const("?x")),
 
             // rotation of 0 doesn't do anything
             rewrite!("rot-none"; "(rot 0 ?x)" => "?x"),
@@ -578,10 +587,12 @@ impl Optimizer {
                 let mut lp_extractor =
                     LpExtractor::new(
                         egraph,
-                        HELpCostFunction {
-                            latency: HELatencyModel::default()
-                        }
+                        AstSize,
+                        // HELpCostFunction {
+                        //     latency: HELatencyModel::default()
+                        // }
                     );
+
                 let (opt_expr, roots) = lp_extractor.solve_multiple(&roots);
                 let opt_exprs = roots.iter().map(|_| opt_expr.clone()).collect();
 

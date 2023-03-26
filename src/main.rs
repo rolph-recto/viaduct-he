@@ -88,7 +88,8 @@ fn main() {
     let elaborated = Elaborator::new().run(source);
 
     info!("generating inline sets and array groups...");
-    let inline_sets = elaborated.simple_inline_sets();
+    // let inline_sets = elaborated.simple_inline_sets();
+    let inline_sets = vec![elaborated.no_inlined_set()];
     let inlined_programs: Vec<InlinedProgram> =
         inline_sets.into_iter().map(|inline_set| {
             let array_group = elaborated.array_group_from_inline_set(&inline_set);
@@ -109,7 +110,6 @@ fn main() {
             args.size
         );
 
-    info!("running scheduler...");
     scheduler.run(None);
     let best_opt = scheduler.get_best_schedule(CostFeatures::default_weights());
 

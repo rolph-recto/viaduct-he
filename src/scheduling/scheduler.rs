@@ -94,15 +94,12 @@ impl<'t> InlineScheduler<'t> {
                             && neighbor_failure.is_ok()
                             && neighbor_within_vec_size_limit
                         {
-                            // let mat = materializer_factory.create();
-                            let mat = PseudoMaterializer::new();
+                            let mat = materializer_factory.create();
+                            // let mat = PseudoMaterializer::new();
 
                             if let Ok(circuit) = mat.run(&self.program, &neighbor) {
-                                // let cost = cost_estimator.estimate_cost(&circuit);
-                                let cost = cost_estimator.estimate_pseudo_cost(&circuit);
-                                info!("visited schedule: {}", schedule);
-                                info!("cost: {:?}", cost);
-                                // info!("circuit: {}", circuit);
+                                let cost = cost_estimator.estimate_cost(&circuit);
+                                // let cost = cost_estimator.estimate_pseudo_cost(&circuit);
 
                                 valid_neighbors.push((neighbor.clone(), cost));
                                 self.valid_schedules_visited += 1;
@@ -421,13 +418,7 @@ mod tests {
                     .unwrap();
 
                 println!("schedule:\n{}\ncost:\n{:?}", schedule, cost);
-                // println!("circuit:\n{}", circuit);
             }
-
-            // println!("some visited schedules:");
-            // for schedule in result.visited.iter().take(10) {
-            //     println!("{}", schedule);
-            // }
         }
     }
 
