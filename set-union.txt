@@ -1,0 +1,485 @@
+[2023-03-27T21:30:18Z INFO  he_vectorizer] parsing...
+[2023-03-27T21:30:18Z INFO  he_vectorizer] elaboration...
+[2023-03-27T21:30:18Z INFO  he_vectorizer] generating inline sets and array groups...
+[2023-03-27T21:30:18Z INFO  he_vectorizer] scheduling...
+[2023-03-27T21:30:18Z INFO  he_vectorizer::scheduling::scheduler] initializing pareto frontier...
+[2023-03-27T21:30:18Z INFO  he_vectorizer::scheduling::scheduler] inline schedulers: 1
+[2023-03-27T21:30:18Z INFO  he_vectorizer::scheduling::scheduler] init pareto frontier size: 1
+[2023-03-27T21:30:18Z INFO  he_vectorizer::scheduling::scheduler] running scheduler with iter limit: None
+[2023-03-27T21:30:18Z INFO  he_vectorizer::scheduling::scheduler] iteration 0
+    new schedules visited: 4; new valid schedules found: 4
+[2023-03-27T21:30:18Z INFO  he_vectorizer::scheduling::scheduler] iteration 1
+    new schedules visited: 9; new valid schedules found: 9
+[2023-03-27T21:30:18Z INFO  he_vectorizer::scheduling::scheduler] iteration 2
+    new schedules visited: 12; new valid schedules found: 6
+[2023-03-27T21:30:18Z INFO  he_vectorizer::scheduling::scheduler] iteration 3
+    new schedules visited: 6; new valid schedules found: 0
+[2023-03-27T21:30:18Z INFO  he_vectorizer::scheduling::scheduler] iteration 4
+    new schedules visited: 0; new valid schedules found: 0
+[2023-03-27T21:30:18Z INFO  he_vectorizer::scheduling::scheduler] pareto schedule: a_id_2 => {i2.0:8::1}[i3.1:128::1, i4.2:128::1]
+    b_data_1 => {}[i4.0:128::1]
+    b_id_1 => {i2.0:8::1}[i3.1:128::1, i4.2:128::1]
+    b_sum_1 => {}[]
+    a_sum_1 => {}[]
+    a_id_1 => {i2.0:8::1}[i3.1:128::1, i4.2:128::1]
+    a_data_1 => {i0.0:128::1}[]
+    b_id_2 => {i2.0:8::1}[i3.1:128::1, i4.2:128::1]
+    
+[2023-03-27T21:30:18Z INFO  he_vectorizer::scheduling::scheduler] cost: CostFeatures { input_ciphertexts: 6, input_plaintexts: 0, output_ciphertexts: 0, ct_rotations: 16, pt_rotations: 0, ct_ct_add: 142, ct_pt_add: 0, pt_pt_add: 0, ct_ct_mul: 16, ct_pt_mul: 10, pt_pt_mul: 0, ct_ct_sub: 16, ct_pt_sub: 16, pt_pt_sub: 0, ct_ct_muldepth: 0, ct_pt_muldepth: 0 }
+[2023-03-27T21:30:18Z INFO  he_vectorizer::scheduling::scheduler] pareto schedule: b_sum_1 => {}[]
+    b_id_2 => {i2.0:8::1, i3.1:128::1}[i4.2:128::1]
+    a_id_1 => {i2.0:8::1, i3.1:128::1}[i4.2:128::1]
+    a_id_2 => {i2.0:8::1, i3.1:128::1}[i4.2:128::1]
+    b_data_1 => {}[i4.0:128::1]
+    a_sum_1 => {}[]
+    b_id_1 => {i2.0:8::1, i3.1:128::1}[i4.2:128::1]
+    a_data_1 => {}[i0.0:128::1]
+    
+[2023-03-27T21:30:18Z INFO  he_vectorizer::scheduling::scheduler] cost: CostFeatures { input_ciphertexts: 514, input_plaintexts: 0, output_ciphertexts: 0, ct_rotations: 16, pt_rotations: 0, ct_ct_add: 15, ct_pt_add: 0, pt_pt_add: 0, ct_ct_mul: 1159, ct_pt_mul: 1026, pt_pt_mul: 0, ct_ct_sub: 2048, ct_pt_sub: 2048, pt_pt_sub: 0, ct_ct_muldepth: 0, ct_pt_muldepth: 0 }
+[2023-03-27T21:30:18Z INFO  he_vectorizer::scheduling::scheduler] pareto schedule: a_id_2 => {i2.0:8::1}[i3.1:128::1, i4.2:128::1]
+    b_id_1 => {i2.0:8::1}[i3.1:128::1, i4.2:128::1]
+    a_sum_1 => {}[]
+    b_sum_1 => {}[]
+    a_data_1 => {}[i0.0:128::1]
+    a_id_1 => {i2.0:8::1}[i3.1:128::1, i4.2:128::1]
+    b_data_1 => {}[i4.0:128::1]
+    b_id_2 => {i2.0:8::1}[i3.1:128::1, i4.2:128::1]
+    
+[2023-03-27T21:30:18Z INFO  he_vectorizer::scheduling::scheduler] cost: CostFeatures { input_ciphertexts: 6, input_plaintexts: 0, output_ciphertexts: 0, ct_rotations: 23, pt_rotations: 0, ct_ct_add: 22, ct_pt_add: 0, pt_pt_add: 0, ct_ct_mul: 16, ct_pt_mul: 10, pt_pt_mul: 0, ct_ct_sub: 16, ct_pt_sub: 16, pt_pt_sub: 0, ct_ct_muldepth: 0, ct_pt_muldepth: 0 }
+[2023-03-27T21:30:18Z INFO  he_vectorizer::scheduling::scheduler] pareto schedule: a_id_2 => {i2.0:8::1, i3.1:128::1}[i4.2:128::1]
+    b_id_1 => {i2.0:8::1, i3.1:128::1}[i4.2:128::1]
+    a_id_1 => {i2.0:8::1, i3.1:128::1}[i4.2:128::1]
+    b_data_1 => {}[i4.0:128::1]
+    a_sum_1 => {}[]
+    b_sum_1 => {}[]
+    a_data_1 => {i0.0:128::1}[]
+    b_id_2 => {i2.0:8::1, i3.1:128::1}[i4.2:128::1]
+    
+[2023-03-27T21:30:18Z INFO  he_vectorizer::scheduling::scheduler] cost: CostFeatures { input_ciphertexts: 514, input_plaintexts: 0, output_ciphertexts: 0, ct_rotations: 9, pt_rotations: 0, ct_ct_add: 135, ct_pt_add: 0, pt_pt_add: 0, ct_ct_mul: 1159, ct_pt_mul: 1026, pt_pt_mul: 0, ct_ct_sub: 2048, ct_pt_sub: 2048, pt_pt_sub: 0, ct_ct_muldepth: 0, ct_pt_muldepth: 0 }
+[2023-03-27T21:30:18Z INFO  he_vectorizer::scheduling::scheduler] pareto schedule: b_sum_1 => {}[]
+    a_data_1 => {i0.0:128::1}[]
+    a_id_2 => {i2.0:8::1, i3.1:128::1, i4.2:128::1}[]
+    a_sum_1 => {}[]
+    b_id_2 => {i2.0:8::1, i3.1:128::1, i4.2:128::1}[]
+    b_id_1 => {i2.0:8::1, i3.1:128::1, i4.2:128::1}[]
+    b_data_1 => {i4.0:128::1}[]
+    a_id_1 => {i2.0:8::1, i3.1:128::1, i4.2:128::1}[]
+    
+[2023-03-27T21:30:18Z INFO  he_vectorizer::scheduling::scheduler] cost: CostFeatures { input_ciphertexts: 33026, input_plaintexts: 0, output_ciphertexts: 0, ct_rotations: 2, pt_rotations: 0, ct_ct_add: 255, ct_pt_add: 0, pt_pt_add: 0, ct_ct_mul: 131334, ct_pt_mul: 131074, pt_pt_mul: 0, ct_ct_sub: 262144, ct_pt_sub: 262144, pt_pt_sub: 0, ct_ct_muldepth: 0, ct_pt_muldepth: 0 }
+[2023-03-27T21:30:18Z INFO  he_vectorizer] found schedule:
+    a_id_2 => {i2.0:8::1}[i3.1:128::1, i4.2:128::1]
+    b_id_1 => {i2.0:8::1}[i3.1:128::1, i4.2:128::1]
+    a_sum_1 => {}[]
+    b_sum_1 => {}[]
+    a_data_1 => {}[i0.0:128::1]
+    a_id_1 => {i2.0:8::1}[i3.1:128::1, i4.2:128::1]
+    b_data_1 => {}[i4.0:128::1]
+    b_id_2 => {i2.0:8::1}[i3.1:128::1, i4.2:128::1]
+    
+[2023-03-27T21:30:18Z INFO  he_vectorizer] circuit generation...
+[2023-03-27T21:30:18Z INFO  he_vectorizer] generated circuit:
+    ct2 => 
+    [0] => a_id[0, 0]<{0:128::1}, {128}>
+    [1] => a_id[0, 1]<{0:128::1}, {128}>
+    [2] => a_id[0, 2]<{0:128::1}, {128}>
+    [3] => a_id[0, 3]<{0:128::1}, {128}>
+    [4] => a_id[0, 4]<{0:128::1}, {128}>
+    [5] => a_id[0, 5]<{0:128::1}, {128}>
+    [6] => a_id[0, 6]<{0:128::1}, {128}>
+    [7] => a_id[0, 7]<{0:128::1}, {128}>
+    
+    ct3 => 
+    [0] => b_id[0, 0]<{128}, {0:128::1}>
+    [1] => b_id[0, 1]<{128}, {0:128::1}>
+    [2] => b_id[0, 2]<{128}, {0:128::1}>
+    [3] => b_id[0, 3]<{128}, {0:128::1}>
+    [4] => b_id[0, 4]<{128}, {0:128::1}>
+    [5] => b_id[0, 5]<{128}, {0:128::1}>
+    [6] => b_id[0, 6]<{128}, {0:128::1}>
+    [7] => b_id[0, 7]<{128}, {0:128::1}>
+    
+    ct7 => 
+    a_sum
+    ct6 => 
+    a_data[0]<{0:128::1}>
+    ct1 => 
+    b_data[0]<{0:128::1}>
+    ct5 => 
+    [0] => b_id[0, 0]<{128}, {0:128::1}>
+    [1] => b_id[0, 1]<{128}, {0:128::1}>
+    [2] => b_id[0, 2]<{128}, {0:128::1}>
+    [3] => b_id[0, 3]<{128}, {0:128::1}>
+    [4] => b_id[0, 4]<{128}, {0:128::1}>
+    [5] => b_id[0, 5]<{128}, {0:128::1}>
+    [6] => b_id[0, 6]<{128}, {0:128::1}>
+    [7] => b_id[0, 7]<{128}, {0:128::1}>
+    
+    ct4 => 
+    [0] => a_id[0, 0]<{0:128::1}, {128}>
+    [1] => a_id[0, 1]<{0:128::1}, {128}>
+    [2] => a_id[0, 2]<{0:128::1}, {128}>
+    [3] => a_id[0, 3]<{0:128::1}, {128}>
+    [4] => a_id[0, 4]<{0:128::1}, {128}>
+    [5] => a_id[0, 5]<{0:128::1}, {128}>
+    [6] => a_id[0, 6]<{0:128::1}, {128}>
+    [7] => a_id[0, 7]<{0:128::1}, {128}>
+    
+    ct8 => 
+    b_sum
+    let b_sum = 7 => CT(ct2)
+    2 => CT(ct1)
+    12 => CT(ct4)
+    5 => 1
+    9 => CT(ct3)
+    10 => (7 - 9)
+    4 => 1
+    3 => 1
+    14 => CT(ct5)
+    15 => (12 - 14)
+    16 => (10 * 15)
+    17 => (5 - 16)
+    18 => (4 * 17)
+    19 => (3 - 18)
+    20 => reduce(i2, *, 19)
+    21 => rot(-8192, 20)
+    22 => (20 + 21)
+    23 => rot(-4096, 22)
+    24 => (22 + 23)
+    25 => rot(-2048, 24)
+    26 => (24 + 25)
+    27 => rot(-1024, 26)
+    28 => (26 + 27)
+    29 => rot(-512, 28)
+    30 => (28 + 29)
+    31 => rot(-256, 30)
+    32 => (30 + 31)
+    33 => rot(-128, 32)
+    34 => (32 + 33)
+    35 => (2 * 34)
+    36 => rot(-64, 35)
+    37 => (35 + 36)
+    38 => rot(-32, 37)
+    39 => (37 + 38)
+    40 => rot(-16, 39)
+    41 => (39 + 40)
+    42 => rot(-8, 41)
+    43 => (41 + 42)
+    44 => rot(-4, 43)
+    45 => (43 + 44)
+    46 => rot(-2, 45)
+    47 => (45 + 46)
+    48 => rot(-1, 47)
+    49 => (47 + 48)
+    
+    let a_sum = 51 => CT(ct6)
+    52 => rot(-64, 51)
+    53 => (51 + 52)
+    54 => rot(-32, 53)
+    55 => (53 + 54)
+    56 => rot(-16, 55)
+    57 => (55 + 56)
+    58 => rot(-8, 57)
+    59 => (57 + 58)
+    60 => rot(-4, 59)
+    61 => (59 + 60)
+    62 => rot(-2, 61)
+    63 => (61 + 62)
+    64 => rot(-1, 63)
+    65 => (63 + 64)
+    
+    let __out = 67 => CT(ct7)
+    69 => CT(ct8)
+    70 => (67 + 69)
+    
+    
+[2023-03-27T21:30:18Z INFO  he_vectorizer] plaintext hoisting...
+[2023-03-27T21:30:18Z INFO  he_vectorizer] circuit lowering...
+[2023-03-27T21:30:18Z INFO  he_vectorizer] program:
+    val v_b_id_1: C = vector(b_id[0, 3]<{128}, {0:128::1}>)
+    val v_b_id_2: C = vector(b_id[0, 6]<{128}, {0:128::1}>)
+    val v_a_id_1: C = vector(a_id[0, 0]<{0:128::1}, {128}>)
+    val v_b_id_3: C = vector(b_id[0, 0]<{128}, {0:128::1}>)
+    val v_a_id_2: C = vector(a_id[0, 5]<{0:128::1}, {128}>)
+    val v_b_id_4: C = vector(b_id[0, 7]<{128}, {0:128::1}>)
+    val v_a_data_1: C = vector(a_data[0]<{0:128::1}>)
+    val v_b_id_5: C = vector(b_id[0, 2]<{128}, {0:128::1}>)
+    val v_b_data_1: C = vector(b_data[0]<{0:128::1}>)
+    val v_b_id_6: C = vector(b_id[0, 4]<{128}, {0:128::1}>)
+    val v_a_id_3: C = vector(a_id[0, 7]<{0:128::1}, {128}>)
+    val v_a_id_4: C = vector(a_id[0, 3]<{0:128::1}, {128}>)
+    val v_b_id_7: C = vector(b_id[0, 1]<{128}, {0:128::1}>)
+    val v_a_id_5: C = vector(a_id[0, 4]<{0:128::1}, {128}>)
+    val v_a_id_6: C = vector(a_id[0, 1]<{0:128::1}, {128}>)
+    val v_a_id_7: C = vector(a_id[0, 6]<{0:128::1}, {128}>)
+    val v_b_id_8: C = vector(b_id[0, 5]<{128}, {0:128::1}>)
+    val v_a_id_8: C = vector(a_id[0, 2]<{0:128::1}, {128}>)
+    val const_1: N = const(1)
+    encode(const_1)
+    var ct5: C[8]
+    ct5[0] = v_b_id_3
+    ct5[1] = v_b_id_7
+    ct5[2] = v_b_id_5
+    ct5[3] = v_b_id_1
+    ct5[4] = v_b_id_6
+    ct5[5] = v_b_id_8
+    ct5[6] = v_b_id_2
+    ct5[7] = v_b_id_4
+    var ct3: C[8]
+    ct3[0] = v_b_id_3
+    ct3[1] = v_b_id_7
+    ct3[2] = v_b_id_5
+    ct3[3] = v_b_id_1
+    ct3[4] = v_b_id_6
+    ct3[5] = v_b_id_8
+    ct3[6] = v_b_id_2
+    ct3[7] = v_b_id_4
+    var ct2: C[8]
+    ct2[0] = v_a_id_1
+    ct2[1] = v_a_id_6
+    ct2[2] = v_a_id_8
+    ct2[3] = v_a_id_4
+    ct2[4] = v_a_id_5
+    ct2[5] = v_a_id_2
+    ct2[6] = v_a_id_7
+    ct2[7] = v_a_id_3
+    var ct4: C[8]
+    ct4[0] = v_a_id_1
+    ct4[1] = v_a_id_6
+    ct4[2] = v_a_id_8
+    ct4[3] = v_a_id_4
+    ct4[4] = v_a_id_5
+    ct4[5] = v_a_id_2
+    ct4[6] = v_a_id_7
+    ct4[7] = v_a_id_3
+    var b_sum: C
+    var __reduce_1: C
+    for i2: 8 {
+        CC: i6 = ct2[i2] - ct3[i2]
+        CC: i9 = ct4[i2] - ct5[i2]
+        CC: i10 = i6 * i9
+        CP: i11 = i10 - const_1
+        CP: i12 = i11 * const_1
+        CP: i13 = i12 - const_1
+        CC: i14 = __reduce_1 * i13
+        __reduce_1 = i14
+    }
+    CC: i16 = rot -8192 __reduce_1
+    CC: i17 = __reduce_1 + i16
+    CC: i18 = rot -4096 i17
+    CC: i19 = i17 + i18
+    CC: i20 = rot -2048 i19
+    CC: i21 = i19 + i20
+    CC: i22 = rot -1024 i21
+    CC: i23 = i21 + i22
+    CC: i24 = rot -512 i23
+    CC: i25 = i23 + i24
+    CC: i26 = rot -256 i25
+    CC: i27 = i25 + i26
+    CC: i28 = rot -128 i27
+    CC: i29 = i27 + i28
+    CC: i30 = v_b_data_1 * i29
+    CC: i31 = rot -64 i30
+    CC: i32 = i30 + i31
+    CC: i33 = rot -32 i32
+    CC: i34 = i32 + i33
+    CC: i35 = rot -16 i34
+    CC: i36 = i34 + i35
+    CC: i37 = rot -8 i36
+    CC: i38 = i36 + i37
+    CC: i39 = rot -4 i38
+    CC: i40 = i38 + i39
+    CC: i41 = rot -2 i40
+    CC: i42 = i40 + i41
+    CC: i43 = rot -1 i42
+    CC: i44 = i42 + i43
+    b_sum = i44
+    var a_sum: C
+    CC: i46 = rot -64 v_a_data_1
+    CC: i47 = v_a_data_1 + i46
+    CC: i48 = rot -32 i47
+    CC: i49 = i47 + i48
+    CC: i50 = rot -16 i49
+    CC: i51 = i49 + i50
+    CC: i52 = rot -8 i51
+    CC: i53 = i51 + i52
+    CC: i54 = rot -4 i53
+    CC: i55 = i53 + i54
+    CC: i56 = rot -2 i55
+    CC: i57 = i55 + i56
+    CC: i58 = rot -1 i57
+    CC: i59 = i57 + i58
+    a_sum = i59
+    var __out: C
+    CC: i62 = a_sum + b_sum
+    __out = i62
+[2023-03-27T21:30:18Z INFO  he_vectorizer] compiling with PySEAL backend...
+[2023-03-27T21:30:18Z INFO  he_vectorizer] printed generated code to stdout
+def client_pre(wrapper):
+    wrapper.client_input("b_id")
+    wrapper.client_input("b_data")
+    wrapper.client_input("a_id")
+    wrapper.client_input("a_data")
+    v_b_id_1 = wrapper.build_vector("b_id", None, [0, 3], [EmptyDim(128, 0, 0, 0), FilledDim(0, 128, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_b_id_1", v_b_id_1)
+    v_b_id_2 = wrapper.build_vector("b_id", None, [0, 6], [EmptyDim(128, 0, 0, 0), FilledDim(0, 128, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_b_id_2", v_b_id_2)
+    v_a_id_1 = wrapper.build_vector("a_id", None, [0, 0], [FilledDim(0, 128, 1, 0, 0, 0, 0), EmptyDim(128, 0, 0, 0)])
+    wrapper.client_send("v_a_id_1", v_a_id_1)
+    v_b_id_3 = wrapper.build_vector("b_id", None, [0, 0], [EmptyDim(128, 0, 0, 0), FilledDim(0, 128, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_b_id_3", v_b_id_3)
+    v_a_id_2 = wrapper.build_vector("a_id", None, [0, 5], [FilledDim(0, 128, 1, 0, 0, 0, 0), EmptyDim(128, 0, 0, 0)])
+    wrapper.client_send("v_a_id_2", v_a_id_2)
+    v_b_id_4 = wrapper.build_vector("b_id", None, [0, 7], [EmptyDim(128, 0, 0, 0), FilledDim(0, 128, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_b_id_4", v_b_id_4)
+    v_a_data_1 = wrapper.build_vector("a_data", None, [0], [FilledDim(0, 128, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_a_data_1", v_a_data_1)
+    v_b_id_5 = wrapper.build_vector("b_id", None, [0, 2], [EmptyDim(128, 0, 0, 0), FilledDim(0, 128, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_b_id_5", v_b_id_5)
+    v_b_data_1 = wrapper.build_vector("b_data", None, [0], [FilledDim(0, 128, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_b_data_1", v_b_data_1)
+    v_b_id_6 = wrapper.build_vector("b_id", None, [0, 4], [EmptyDim(128, 0, 0, 0), FilledDim(0, 128, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_b_id_6", v_b_id_6)
+    v_a_id_3 = wrapper.build_vector("a_id", None, [0, 7], [FilledDim(0, 128, 1, 0, 0, 0, 0), EmptyDim(128, 0, 0, 0)])
+    wrapper.client_send("v_a_id_3", v_a_id_3)
+    v_a_id_4 = wrapper.build_vector("a_id", None, [0, 3], [FilledDim(0, 128, 1, 0, 0, 0, 0), EmptyDim(128, 0, 0, 0)])
+    wrapper.client_send("v_a_id_4", v_a_id_4)
+    v_b_id_7 = wrapper.build_vector("b_id", None, [0, 1], [EmptyDim(128, 0, 0, 0), FilledDim(0, 128, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_b_id_7", v_b_id_7)
+    v_a_id_5 = wrapper.build_vector("a_id", None, [0, 4], [FilledDim(0, 128, 1, 0, 0, 0, 0), EmptyDim(128, 0, 0, 0)])
+    wrapper.client_send("v_a_id_5", v_a_id_5)
+    v_a_id_6 = wrapper.build_vector("a_id", None, [0, 1], [FilledDim(0, 128, 1, 0, 0, 0, 0), EmptyDim(128, 0, 0, 0)])
+    wrapper.client_send("v_a_id_6", v_a_id_6)
+    v_a_id_7 = wrapper.build_vector("a_id", None, [0, 6], [FilledDim(0, 128, 1, 0, 0, 0, 0), EmptyDim(128, 0, 0, 0)])
+    wrapper.client_send("v_a_id_7", v_a_id_7)
+    v_b_id_8 = wrapper.build_vector("b_id", None, [0, 5], [EmptyDim(128, 0, 0, 0), FilledDim(0, 128, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_b_id_8", v_b_id_8)
+    v_a_id_8 = wrapper.build_vector("a_id", None, [0, 2], [FilledDim(0, 128, 1, 0, 0, 0, 0), EmptyDim(128, 0, 0, 0)])
+    wrapper.client_send("v_a_id_8", v_a_id_8)
+
+def client_post(wrapper):
+    __out = wrapper.client_recv("__out")
+    wrapper.client_output(__out)
+
+def server(wrapper):
+    v_b_id_1 = wrapper.server_recv("v_b_id_1")
+    v_b_id_2 = wrapper.server_recv("v_b_id_2")
+    v_a_id_1 = wrapper.server_recv("v_a_id_1")
+    v_b_id_3 = wrapper.server_recv("v_b_id_3")
+    v_a_id_2 = wrapper.server_recv("v_a_id_2")
+    v_b_id_4 = wrapper.server_recv("v_b_id_4")
+    v_a_data_1 = wrapper.server_recv("v_a_data_1")
+    v_b_id_5 = wrapper.server_recv("v_b_id_5")
+    v_b_data_1 = wrapper.server_recv("v_b_data_1")
+    v_b_id_6 = wrapper.server_recv("v_b_id_6")
+    v_a_id_3 = wrapper.server_recv("v_a_id_3")
+    v_a_id_4 = wrapper.server_recv("v_a_id_4")
+    v_b_id_7 = wrapper.server_recv("v_b_id_7")
+    v_a_id_5 = wrapper.server_recv("v_a_id_5")
+    v_a_id_6 = wrapper.server_recv("v_a_id_6")
+    v_a_id_7 = wrapper.server_recv("v_a_id_7")
+    v_b_id_8 = wrapper.server_recv("v_b_id_8")
+    v_a_id_8 = wrapper.server_recv("v_a_id_8")
+    const_1 = wrapper.const(1)
+    wrapper.encode(const_1, [])
+    ct5 = wrapper.ciphertext_array([8])
+    wrapper.set(ct5, [0], v_b_id_3.get())
+    wrapper.set(ct5, [1], v_b_id_7.get())
+    wrapper.set(ct5, [2], v_b_id_5.get())
+    wrapper.set(ct5, [3], v_b_id_1.get())
+    wrapper.set(ct5, [4], v_b_id_6.get())
+    wrapper.set(ct5, [5], v_b_id_8.get())
+    wrapper.set(ct5, [6], v_b_id_2.get())
+    wrapper.set(ct5, [7], v_b_id_4.get())
+    ct3 = wrapper.ciphertext_array([8])
+    wrapper.set(ct3, [0], v_b_id_3.get())
+    wrapper.set(ct3, [1], v_b_id_7.get())
+    wrapper.set(ct3, [2], v_b_id_5.get())
+    wrapper.set(ct3, [3], v_b_id_1.get())
+    wrapper.set(ct3, [4], v_b_id_6.get())
+    wrapper.set(ct3, [5], v_b_id_8.get())
+    wrapper.set(ct3, [6], v_b_id_2.get())
+    wrapper.set(ct3, [7], v_b_id_4.get())
+    ct2 = wrapper.ciphertext_array([8])
+    wrapper.set(ct2, [0], v_a_id_1.get())
+    wrapper.set(ct2, [1], v_a_id_6.get())
+    wrapper.set(ct2, [2], v_a_id_8.get())
+    wrapper.set(ct2, [3], v_a_id_4.get())
+    wrapper.set(ct2, [4], v_a_id_5.get())
+    wrapper.set(ct2, [5], v_a_id_2.get())
+    wrapper.set(ct2, [6], v_a_id_7.get())
+    wrapper.set(ct2, [7], v_a_id_3.get())
+    ct4 = wrapper.ciphertext_array([8])
+    wrapper.set(ct4, [0], v_a_id_1.get())
+    wrapper.set(ct4, [1], v_a_id_6.get())
+    wrapper.set(ct4, [2], v_a_id_8.get())
+    wrapper.set(ct4, [3], v_a_id_4.get())
+    wrapper.set(ct4, [4], v_a_id_5.get())
+    wrapper.set(ct4, [5], v_a_id_2.get())
+    wrapper.set(ct4, [6], v_a_id_7.get())
+    wrapper.set(ct4, [7], v_a_id_3.get())
+    b_sum = wrapper.ciphertext_array([])
+    __reduce_1 = wrapper.ciphertext_array([])
+    for i2 in range(8):
+        instr6 = wrapper.subtract(ct2.get([i2]), ct3.get([i2]))
+        instr9 = wrapper.subtract(ct4.get([i2]), ct5.get([i2]))
+        wrapper.multiply_inplace(instr6, instr9)
+        wrapper.relinearize_inplace(instr6)
+        wrapper.subtract_plain_inplace(instr6, const_1.get())
+        wrapper.multiply_plain_inplace(instr6, const_1.get())
+        wrapper.subtract_plain_inplace(instr6, const_1.get())
+        wrapper.multiply_inplace(instr6, __reduce_1.get())
+        wrapper.relinearize_inplace(instr6)
+        wrapper.set(__reduce_1, [], instr6)
+    
+    instr16 = wrapper.rotate_rows(-8192, __reduce_1.get())
+    wrapper.add_inplace(instr16, __reduce_1.get())
+    instr18 = wrapper.rotate_rows(-4096, instr16)
+    wrapper.add_inplace(instr16, instr18)
+    instr20 = wrapper.rotate_rows(-2048, instr16)
+    wrapper.add_inplace(instr16, instr20)
+    instr22 = wrapper.rotate_rows(-1024, instr16)
+    wrapper.add_inplace(instr16, instr22)
+    instr24 = wrapper.rotate_rows(-512, instr16)
+    wrapper.add_inplace(instr16, instr24)
+    instr26 = wrapper.rotate_rows(-256, instr16)
+    wrapper.add_inplace(instr16, instr26)
+    instr28 = wrapper.rotate_rows(-128, instr16)
+    wrapper.add_inplace(instr16, instr28)
+    wrapper.multiply_inplace(instr16, v_b_data_1.get())
+    wrapper.relinearize_inplace(instr16)
+    instr31 = wrapper.rotate_rows(-64, instr16)
+    wrapper.add_inplace(instr16, instr31)
+    instr33 = wrapper.rotate_rows(-32, instr16)
+    wrapper.add_inplace(instr16, instr33)
+    instr35 = wrapper.rotate_rows(-16, instr16)
+    wrapper.add_inplace(instr16, instr35)
+    instr37 = wrapper.rotate_rows(-8, instr16)
+    wrapper.add_inplace(instr16, instr37)
+    instr39 = wrapper.rotate_rows(-4, instr16)
+    wrapper.add_inplace(instr16, instr39)
+    instr41 = wrapper.rotate_rows(-2, instr16)
+    wrapper.add_inplace(instr16, instr41)
+    instr43 = wrapper.rotate_rows(-1, instr16)
+    wrapper.add_inplace(instr16, instr43)
+    wrapper.set(b_sum, [], instr16)
+    a_sum = wrapper.ciphertext_array([])
+    instr46 = wrapper.rotate_rows(-64, v_a_data_1.get())
+    wrapper.add_inplace(instr46, v_a_data_1.get())
+    instr48 = wrapper.rotate_rows(-32, instr46)
+    wrapper.add_inplace(instr46, instr48)
+    instr50 = wrapper.rotate_rows(-16, instr46)
+    wrapper.add_inplace(instr46, instr50)
+    instr52 = wrapper.rotate_rows(-8, instr46)
+    wrapper.add_inplace(instr46, instr52)
+    instr54 = wrapper.rotate_rows(-4, instr46)
+    wrapper.add_inplace(instr46, instr54)
+    instr56 = wrapper.rotate_rows(-2, instr46)
+    wrapper.add_inplace(instr46, instr56)
+    instr58 = wrapper.rotate_rows(-1, instr46)
+    wrapper.add_inplace(instr46, instr58)
+    wrapper.set(a_sum, [], instr46)
+    __out = wrapper.ciphertext_array([])
+    instr62 = wrapper.add(a_sum.get(), b_sum.get())
+    wrapper.set(__out, [], instr62)
+    wrapper.server_send("__out", __out)
+

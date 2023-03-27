@@ -75,7 +75,9 @@ struct HEArguments {
 // fn dumpinfo() {}
 
 fn main() {
-    env_logger::init();
+    let mut log_builder = env_logger::builder();
+    log_builder.target(env_logger::Target::Stdout);
+    log_builder.init();
 
     let args = HEArguments::parse();
     let input_str =

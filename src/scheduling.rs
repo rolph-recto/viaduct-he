@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    fmt::Display, ops::Index, mem::MaybeUninit,
+    fmt::Display, ops::Index, mem::MaybeUninit, array,
 };
 
 use indexmap::IndexMap;
@@ -394,13 +394,21 @@ impl ExprSchedule {
         array_sched: &ExprSchedule
     ) -> Option<ScheduleDerivationFailure> {
         // first, check that the vectorized dimensions match
-        let transform_vec_dims  = self.vectorized_dims.len();
-        let array_vec_dims = array_sched.vectorized_dims.len();
+        let transform_vec_dims  = self.vectorized_dims.clone();
+        let mut array_vec_dims = array_sched.vectorized_dims.clone();
 
-        if transform_vec_dims < array_vec_dims {
+        while transform_vec_dims.len() < array_vec_dims.len() {
+            if let VectorScheduleDim::ReducedRepeated(_) = array_vec_dims.front().unwrap() {
+                array_vec_dims.pop_front();
+            } else {
+                break
+            }
+        }
+
+        if transform_vec_dims.len() < array_vec_dims.len() {
             return Some(ScheduleDerivationFailure::MaybeTransformableToValid)
 
-        } else if transform_vec_dims > array_vec_dims {
+        } else if transform_vec_dims.len() > array_vec_dims.len() {
             return Some(ScheduleDerivationFailure::DeadEnd)
         }
 
@@ -767,8 +775,9 @@ impl Schedule {
                     };
                 },
                 
-                Err(failure) =>
+                Err(failure) => {
                     return Err(failure)
+                }
             }
         }
 
