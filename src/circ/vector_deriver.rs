@@ -34,7 +34,6 @@ impl VectorDeriver {
     }
 
     pub fn find_immediate_parent(&self, id: VectorId) -> VectorId {
-        info!("finding immediate parent for {}", id);
         let vector = self.vector_map.get_by_left(&id).unwrap();
         for (id2, vector2) in self.vector_map.iter() {
             if id != *id2 {
@@ -82,7 +81,6 @@ impl VectorDeriver {
         mask_map: &mut IndexCoordinateMap<PlaintextObject>,
         step_map: &mut IndexCoordinateMap<isize>,
     ) {
-        info!("registering");
         let mut vector_id_map: HashMap<IndexCoord, VectorId> = HashMap::new();
         for coord in coords.clone() {
             let index_map = obj_map.coord_as_index_map(coord.clone());
@@ -98,7 +96,6 @@ impl VectorDeriver {
             let vector_id = self.register_vector(vector);
             vector_id_map.insert(coord, vector_id);
         }
-        info!("deriving");
 
         let vector_ids =
             vector_id_map.iter()
@@ -145,6 +142,8 @@ impl VectorDeriver {
         None
     }
 
+    // pub fn probe_from_source<T
+
     // derive a circuit value from a source circuit value
     pub fn derive_from_source<T: CircuitObject>(
         src: &CircuitValue<VectorInfo>,
@@ -160,7 +159,7 @@ impl VectorDeriver {
                 match src {
                     CircuitValue::CoordMap(src_map) => {
                         // coordinate in src_map that can be used to derive dst_map vector
-                        let mut ct_map: IndexCoordinateMap<T> =
+                        let mut obj_map: IndexCoordinateMap<T> =
                             IndexCoordinateMap::from_coord_system(dst_map.coord_system.clone());
                         let mut step_map: IndexCoordinateMap<isize> =
                             IndexCoordinateMap::from_coord_system(dst_map.coord_system.clone());
@@ -176,7 +175,7 @@ impl VectorDeriver {
                             if let Some((vector, reg_coord, steps, mask)) = derive_opt {
                                 let object = T::expr_vector(vector.array, reg_coord);
 
-                                ct_map.set(coord.clone(), object);
+                                obj_map.set(coord.clone(), object);
                                 step_map.set(coord.clone(), steps);
                                 mask_map.set(coord.clone(), mask);
                             } else {
@@ -185,7 +184,7 @@ impl VectorDeriver {
                         }
 
                         Some((
-                            CircuitValue::CoordMap(ct_map),
+                            CircuitValue::CoordMap(obj_map),
                             CircuitValue::CoordMap(step_map),
                             CircuitValue::CoordMap(mask_map),
                         ))

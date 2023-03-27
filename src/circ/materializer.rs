@@ -270,6 +270,7 @@ impl<'a> Materializer<'a> {
         &mut self,
         indexing_id: &IndexingId,
         array_type: ArrayType,
+        transform: &ArrayTransform,
         schedule: &IndexingSiteSchedule,
         ref_expr_sched: &ExprSchedule,
         expr_circ_val: CircuitValue<VectorInfo>,
@@ -279,7 +280,6 @@ impl<'a> Materializer<'a> {
         CircuitObjectRegistry: CanRegisterObject<'b, T>,
         ParamCircuitExpr: CanCreateObjectVar<T>,
     {
-        info!("deriving {} from {}", expr_circ_val, transform_circ_val);
         let derivation_opt =
             VectorDeriver::derive_from_source::<T>(&expr_circ_val, &transform_circ_val);
 
@@ -316,7 +316,12 @@ impl<'a> Materializer<'a> {
                 ))
             }
 
-            None => Err(format!("expr indexing site: cannot derive transform at {}", indexing_id)),
+            None => {
+                let expr_sched = schedule.to_expr_schedule(transform.as_shape());
+                let can_derive = expr_sched.can_derive(transform, ref_expr_sched);
+                info!("can_derive: {:?}", can_derive);
+                Err(format!("{}: cannot derive {} from {}", indexing_id, expr_circ_val, transform_circ_val))
+            }
         }
     }
 
@@ -458,6 +463,7 @@ impl<'a> Materializer<'a> {
                                     .materialize_expr_indexing_site::<CiphertextObject>(
                                         indexing_id,
                                         array_type,
+                                        transform,
                                         schedule,
                                         &ref_expr_sched,
                                         expr_circ_val,
@@ -468,6 +474,7 @@ impl<'a> Materializer<'a> {
                                     .materialize_expr_indexing_site::<PlaintextObject>(
                                         indexing_id,
                                         array_type,
+                                        transform,
                                         schedule,
                                         &ref_expr_sched,
                                         expr_circ_val,

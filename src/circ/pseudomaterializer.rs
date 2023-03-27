@@ -67,7 +67,6 @@ impl<'a> PseudoMaterializer<'a> {
         expr_list
             .into_iter()
             .try_for_each(|(array, expr)| -> Result<(), String> {
-                info!("processing {}", array);
                 let (expr_schedule, array_type, circuit_id) =
                     self.materialize_expr(program, &expr, schedule, &mut ref_cost)?;
 
@@ -86,7 +85,6 @@ impl<'a> PseudoMaterializer<'a> {
                 self.expr_schedule_map.insert(array.clone(), expr_schedule);
                 self.expr_array_type_map.insert(array.clone(), array_type);
                 circuit_list.push((multiplicity, circuit_id));
-                info!("finished processing {}", array);
                 Ok(())
             })?;
 
@@ -193,7 +191,6 @@ impl<'a> PseudoMaterializer<'a> {
             },
 
             InlinedExpr::ExprRef(indexing_id, transform) => {
-                info!("processing indexing site {}", indexing_id);
                 let schedule = &schedule.schedule_map[indexing_id];
 
                 // TODO have a better estimate for expr indexing site
@@ -240,14 +237,12 @@ impl<'a> PseudoMaterializer<'a> {
 
                     for amat in self.array_materializers.iter_mut() {
                         if amat.can_materialize(*array_type, array_shape, schedule, transform) {
-                            info!("estimating cost for {}", indexing_id);
                             let cost = amat.estimate_cost(
                                 *array_type,
                                 array_shape,
                                 schedule,
                                 transform,
                             );
-                            info!("estimated cost for {}: {:?}", indexing_id, cost);
 
                             let shape = transform.as_shape();
                             let expr_schedule =

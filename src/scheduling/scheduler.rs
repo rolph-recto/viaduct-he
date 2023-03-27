@@ -84,21 +84,18 @@ impl<'t> InlineScheduler<'t> {
                         // if the schedule can be materialized into a circuit,
                         // give a cost to the schedule and save it if it's
                         // in the Pareto frontier
-                        let neighbor_failure = neighbor.is_schedule_valid(&self.program);
+                        let is_neighbor_valid = neighbor.is_schedule_valid(&self.program);
                         let neighbor_within_vec_size_limit =
                             neighbor.schedule_map.iter().all(|(_, isched)| {
                                 isched.vector_size() <= self.vector_size
                             });
 
                         if self.should_estimate_cost(&neighbor)
-                            && neighbor_failure.is_ok()
+                            && is_neighbor_valid.is_ok()
                             && neighbor_within_vec_size_limit
                         {
                             let mat = materializer_factory.create();
-                            // let mat = PseudoMaterializer::new();
-
                             if let Ok(circuit) = mat.run(&self.program, &neighbor) {
-
                                 // let cost = cost_estimator.estimate_cost(&circuit);
                                 let cost = cost_estimator.estimate_pseudo_cost(&circuit);
 
@@ -107,7 +104,7 @@ impl<'t> InlineScheduler<'t> {
                             }
                         }
 
-                        if let Err(ScheduleDerivationFailure::MaybeTransformableToValid) | Ok(()) = neighbor_failure {
+                        if let Err(ScheduleDerivationFailure::MaybeTransformableToValid) | Ok(()) = is_neighbor_valid {
                             self.frontier.insert(neighbor.clone());
                             self.visited.insert(neighbor);
                         }
@@ -161,6 +158,7 @@ impl<'m, 't> Scheduler<'m, 't> {
             let mat_res = mat.run(&inlined_program, &init_schedule);
 
             if let Ok(circuit) = mat_res {
+                // let cost = cost_estimator.estimate_cost(&circuit);
                 let cost = cost_estimator.estimate_pseudo_cost(&circuit);
                 init_schedules.push((inline_id, init_schedule.clone(), cost));
             }
@@ -259,14 +257,14 @@ impl<'m, 't> Scheduler<'m, 't> {
     pub fn update_pareto_frontier(&mut self, id: usize, schedule: Schedule, cost: CostFeatures) {
         let mut to_remove: Vec<(usize, Schedule)> = Vec::new();
         let mut add_new = true;
-        'l: for ((pid, pschedule), pcost) in self.pareto_frontier.iter() {
+        for ((pid, pschedule), pcost) in self.pareto_frontier.iter() {
             let pcost_dominates = pcost.dominates(&cost);
             let cost_dominates = cost.dominates(pcost);
 
             // if the new schedule is strictly costlier, don't add it to the frontier
             if pcost_dominates {
                 add_new = false;
-                break 'l;
+                break;
 
             } else if cost_dominates {
                 to_remove.push((*pid, pschedule.clone()));

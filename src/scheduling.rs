@@ -4,6 +4,7 @@ use std::{
 };
 
 use indexmap::IndexMap;
+use log::info;
 
 use crate::{
     circ::{vector_info::VectorInfo, CircuitValue, IndexCoordinateMap},
@@ -375,6 +376,7 @@ impl Display for ExprSchedule {
     }
 }
 
+#[derive(Copy,Clone,Debug)]
 pub enum ScheduleDerivationFailure {
     // the derivation is a dead end; do not try to transform it further
     DeadEnd,
@@ -761,7 +763,6 @@ impl Schedule {
 
                         ExprScheduleType::Specific(out_sched) => {
                             output_schedules.insert(array_name.clone(), out_sched);
-                            return Ok(())
                         }
                     };
                 },
@@ -771,7 +772,7 @@ impl Schedule {
             }
         }
 
-        return Ok(())
+        Ok(())
     }
 }
 
