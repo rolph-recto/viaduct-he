@@ -52,7 +52,7 @@ enum HEOptNodeType {
 
 impl HEOptNodeType {
     // combine the types of operands
-    fn ops(&self, other: &Self) -> Self {
+    fn combine(&self, other: &Self) -> Self {
         match (self, other) {
             (HEOptNodeType::Cipher, HEOptNodeType::Cipher) |
             (HEOptNodeType::Cipher, HEOptNodeType::Plain) |
@@ -190,7 +190,15 @@ impl Analysis<HEOptCircuit> for HEAnalysis {
 
                 let constval: Option<isize> =
                     data1.constval.and_then(|d1| {
-                        data2.constval.map(|d2| d1 + d2)
+                        match enode {
+                            HEOptCircuit::Add(_) =>
+                                data2.constval.map(|d2| d1 + d2),
+
+                            HEOptCircuit::Sub(_) =>
+                                data2.constval.map(|d2| d1 - d2),
+
+                            _ => unreachable!()
+                        }
                     });
 
                 let mut index_vars: HashSet<String> = HashSet::new();
@@ -200,7 +208,7 @@ impl Analysis<HEOptCircuit> for HEAnalysis {
                 HEData {
                     constval,
                     index_vars,
-                    node_type: data1.node_type.ops(&data2.node_type),
+                    node_type: data1.node_type.combine(&data2.node_type),
                     muldepth: max(data1.muldepth, data2.muldepth),
                     multiplicity
                 }
@@ -244,7 +252,7 @@ impl Analysis<HEOptCircuit> for HEAnalysis {
                 HEData {
                     constval,
                     index_vars,
-                    node_type: data1.node_type.ops(&data2.node_type),
+                    node_type: data1.node_type.combine(&data2.node_type),
                     muldepth,
                     multiplicity,
                 }
@@ -538,7 +546,7 @@ impl Optimizer {
             rewrite!("constant-fold"; "?x" => ConstFold if is_const("?x")),
 
             // split a constant value into a sum 
-            // rewrite!("const-split"; "?x" => { ConstSplit {} } if is_const("?x")),
+            rewrite!("const-split"; "?x" => { ConstSplit {} } if is_const_nonzero("?x")),
 
             // rotation of 0 doesn't do anything
             rewrite!("rot-none"; "(rot 0 ?x)" => "?x"),

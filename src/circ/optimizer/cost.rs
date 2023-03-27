@@ -265,7 +265,7 @@ impl LpCostFunction<HEOptCircuit, HEAnalysis> for HELpCostFunction {
     fn node_cost(&mut self, egraph: &HEGraph, eclass: Id, enode: &HEOptCircuit) -> f64 {
         let latency = match enode {
             HEOptCircuit::Literal(_) =>
-                0.0,
+                1.0,
 
             HEOptCircuit::Add([id1, id2]) => {
                 let type1 = &egraph[*id1].data.node_type;
@@ -333,16 +333,14 @@ impl LpCostFunction<HEOptCircuit, HEAnalysis> for HELpCostFunction {
             },
 
             HEOptCircuit::CiphertextVar(_) | HEOptCircuit::PlaintextVar(_) => {
-                // TODO handle multiplicity
                 1.0
             },
 
             HEOptCircuit::SumVectors(_) | HEOptCircuit::ProductVectors(_) => {
-                // TODO handle multiplicity
                 1.0
             },
 
-            HEOptCircuit::IndexVar(_) | HEOptCircuit::FunctionVar(_, _) => 0.0
+            HEOptCircuit::IndexVar(_) | HEOptCircuit::FunctionVar(_, _) => 1.0
         };
 
         let muldepth = egraph[eclass].data.muldepth;
