@@ -1,4 +1,5 @@
 use bimap::BiHashMap;
+use log::info;
 
 use crate::{
     circ::{vector_info::VectorInfo, *},
@@ -33,6 +34,7 @@ impl VectorDeriver {
     }
 
     pub fn find_immediate_parent(&self, id: VectorId) -> VectorId {
+        info!("finding immediate parent for {}", id);
         let vector = self.vector_map.get_by_left(&id).unwrap();
         for (id2, vector2) in self.vector_map.iter() {
             if id != *id2 {
@@ -80,6 +82,7 @@ impl VectorDeriver {
         mask_map: &mut IndexCoordinateMap<PlaintextObject>,
         step_map: &mut IndexCoordinateMap<isize>,
     ) {
+        info!("registering");
         let mut vector_id_map: HashMap<IndexCoord, VectorId> = HashMap::new();
         for coord in coords.clone() {
             let index_map = obj_map.coord_as_index_map(coord.clone());
@@ -95,6 +98,7 @@ impl VectorDeriver {
             let vector_id = self.register_vector(vector);
             vector_id_map.insert(coord, vector_id);
         }
+        info!("deriving");
 
         let vector_ids =
             vector_id_map.iter()
@@ -258,11 +262,11 @@ impl VectorDeriver {
     // this can compute linear offsets for a *subset* of defined coords;
     // hence this function takes in extra arguments
     // valid_coords and processed_index_vars
-    pub fn compute_linear_offset(
+    pub fn compute_linear_offset_coefficient(
         step_map: &IndexCoordinateMap<isize>,
         valid_coords: impl Iterator<Item = IndexCoord>,
         index_vars_to_process: Vec<DimName>,
-    ) -> Option<OffsetExpr> {
+    ) -> Option<(isize, Vec<isize>)> {
         let index_vars = step_map.index_vars();
 
         // probe at (0,...,0) to get the base offset
@@ -279,6 +283,35 @@ impl VectorDeriver {
             let step_offset = *step_map.get(&index_coord).unwrap();
             coefficients.push(step_offset - base_offset);
         }
+
+        // validate computed offset expr
+        for coord in valid_coords {
+            let value = *step_map.get(&coord).unwrap();
+
+            let predicted_value: isize =
+                base_offset + 
+                coord.into_iter()
+                .zip(coefficients.iter())
+                .map(|(x, c)| (x as isize) * (*c))
+                .sum::<isize>();
+
+            if value != predicted_value {
+                return None;
+            }
+        }
+
+        Some((base_offset, coefficients))
+    }
+
+    pub fn compute_linear_offset(
+        step_map: &IndexCoordinateMap<isize>,
+        valid_coords: impl Iterator<Item = IndexCoord>,
+        index_vars_to_process: Vec<DimName>,
+    ) -> Option<OffsetExpr> {
+        let (base_offset, coefficients) =
+            Self::compute_linear_offset_coefficient(step_map, valid_coords, index_vars_to_process)?;
+
+        let index_vars = step_map.index_vars();
 
         // build offset expr from base offset and coefficients
         let offset_expr = coefficients.iter().zip(index_vars.clone()).fold(
@@ -297,19 +330,6 @@ impl VectorDeriver {
                 }
             },
         );
-
-        // validate computed offset expr
-        for coord in valid_coords {
-            let value = *step_map.get(&coord).unwrap();
-            let index_map: HashMap<DimName, usize> =
-                index_vars.clone().into_iter().zip(coord.clone()).collect();
-
-            let offset_env = OffsetEnvironment::new(index_map);
-            let predicted_value = offset_expr.eval(&offset_env);
-            if value != predicted_value {
-                return None;
-            }
-        }
 
         // this expression is correct for all valid_coords; return it
         Some(offset_expr)
@@ -418,11 +438,6 @@ impl VectorDeriver {
             let mut step_map: IndexCoordinateMap<isize> =
                 IndexCoordinateMap::new(schedule.exploded_dims.iter());
 
-            // this will not be used because input array materializers
-            // do not need to fill reduced dims
-            let fill_map: IndexCoordinateMap<Vec<isize>> =
-                IndexCoordinateMap::new(schedule.exploded_dims.iter());
-
             let coords = obj_map.coord_iter();
 
             self.register_and_derive_vectors(
@@ -444,11 +459,9 @@ impl VectorDeriver {
             )
         } else {
             // there is only a single vector
-            let index_map: HashMap<DimName, usize> = HashMap::new();
-
             let vector =
                 VectorInfo::get_input_vector_at_coord(
-                    index_map,
+                    HashMap::new(),
                     array_shape,
                     schedule,
                     transform,

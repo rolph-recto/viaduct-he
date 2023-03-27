@@ -5,7 +5,7 @@ use log::info;
 use crate::{
     lang::{index_elim::{InlinedProgram}, DimIndex},
     circ::{materializer::MaterializerFactory, cost::{CostEstimator, CostFeatures},
-    pseudomaterializer::PseudoMaterializer},
+    pseudomaterializer::{PseudoMaterializer, PseudoMaterializerFactory}},
     scheduling::{
         Schedule,
         transformer::{ScheduleTransformer, ScheduleTransformerFactory}
@@ -67,7 +67,7 @@ impl<'t> InlineScheduler<'t> {
 
     pub fn iterate<'m>(
         &mut self,
-        materializer_factory: &dyn MaterializerFactory,
+        materializer_factory: &dyn PseudoMaterializerFactory,
         cost_estimator: &CostEstimator,
     ) -> (usize, Vec<(Schedule, CostFeatures)>) {
         let mut cur: HashSet<Schedule> = HashSet::new();
@@ -98,8 +98,9 @@ impl<'t> InlineScheduler<'t> {
                             // let mat = PseudoMaterializer::new();
 
                             if let Ok(circuit) = mat.run(&self.program, &neighbor) {
-                                let cost = cost_estimator.estimate_cost(&circuit);
-                                // let cost = cost_estimator.estimate_pseudo_cost(&circuit);
+
+                                // let cost = cost_estimator.estimate_cost(&circuit);
+                                let cost = cost_estimator.estimate_pseudo_cost(&circuit);
 
                                 valid_neighbors.push((neighbor.clone(), cost));
                                 self.valid_schedules_visited += 1;
@@ -129,7 +130,7 @@ pub struct SchedulingResult {
 /// scheduler for a particular inlined program
 /// (identified by array group map and inline set)
 pub struct Scheduler<'m, 't> {
-    materializer_factory: Box<dyn MaterializerFactory + 'm>,
+    materializer_factory: Box<dyn PseudoMaterializerFactory + 'm>,
     cost_estimator: CostEstimator,
     inline_schedulers: HashMap<usize, (bool, InlineScheduler<'t>)>,
 
@@ -142,7 +143,7 @@ impl<'m, 't> Scheduler<'m, 't> {
     pub fn new(
         inlined_programs: Vec<InlinedProgram>,
         transformer_factory: Box<dyn ScheduleTransformerFactory<'t> + 't>,
-        materializer_factory: Box<dyn MaterializerFactory + 'm>,
+        materializer_factory: Box<dyn PseudoMaterializerFactory + 'm>,
         vector_size: usize,
     ) -> Self {
         let cost_estimator = CostEstimator::default();
@@ -156,7 +157,7 @@ impl<'m, 't> Scheduler<'m, 't> {
 
             // let mat = materializer_factory.create();
             // let mat_res = mat.run(&inlined_program, &init_schedule);
-            let mat = PseudoMaterializer::new();
+            let mat = materializer_factory.create();
             let mat_res = mat.run(&inlined_program, &init_schedule);
 
             if let Ok(circuit) = mat_res {
@@ -347,7 +348,7 @@ mod tests {
     use std::fs::File;
 
     use crate::{
-        circ::materializer::DefaultMaterializerFactory,
+        circ::{materializer::DefaultMaterializerFactory, pseudomaterializer::DefaultPseudoMaterializerFactory},
         lang::{
             index_elim::IndexElimination,
             elaborated::Elaborator,
@@ -397,7 +398,7 @@ mod tests {
             Scheduler::new(
                 inlined_programs,
                 Box::new(FastScheduleTransformerFactory), 
-                Box::new(DefaultMaterializerFactory), 
+                Box::new(DefaultPseudoMaterializerFactory), 
                 4096
             );
         

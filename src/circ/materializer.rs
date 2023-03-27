@@ -1,7 +1,10 @@
 use std::{
     collections::{HashMap, HashSet},
-    hash::Hash
+    hash::Hash, ops::Index
 };
+
+use itertools::chain;
+use log::info;
 
 use crate::{
     circ::{vector_deriver::VectorDeriver, vector_info::VectorInfo, *},
@@ -9,6 +12,8 @@ use crate::{
     scheduling::*,
     util::{self, NameGenerator},
 };
+
+use super::cost::CostFeatures;
 
 pub trait InputArrayMaterializer<'a> {
     fn create(&self) -> Box<dyn InputArrayMaterializer + 'a>;
@@ -29,6 +34,14 @@ pub trait InputArrayMaterializer<'a> {
         transform: &ArrayTransform,
         registry: &mut CircuitObjectRegistry,
     ) -> CircuitId;
+
+    fn estimate_cost(
+        &mut self,
+        array_type: ArrayType,
+        array_shape: &Shape,
+        schedule: &IndexingSiteSchedule,
+        transform: &ArrayTransform,
+    ) -> CostFeatures;
 }
 
 pub trait MaterializerFactory {
@@ -266,6 +279,7 @@ impl<'a> Materializer<'a> {
         CircuitObjectRegistry: CanRegisterObject<'b, T>,
         ParamCircuitExpr: CanCreateObjectVar<T>,
     {
+        info!("deriving {} from {}", expr_circ_val, transform_circ_val);
         let derivation_opt =
             VectorDeriver::derive_from_source::<T>(&expr_circ_val, &transform_circ_val);
 
@@ -302,7 +316,7 @@ impl<'a> Materializer<'a> {
                 ))
             }
 
-            None => Err(format!("cannot derive transform at {}", indexing_id)),
+            None => Err(format!("expr indexing site: cannot derive transform at {}", indexing_id)),
         }
     }
 
@@ -547,6 +561,46 @@ impl<'a> InputArrayMaterializer<'a> for DummyArrayMaterializer {
         registry.set_ct_var_value(ct_var.clone(), circuit_val);
         registry.register_circuit(ParamCircuitExpr::CiphertextVar(ct_var))
     }
+
+    fn estimate_cost(
+        &mut self,
+        array_type: ArrayType,
+        array_shape: &Shape,
+        schedule: &IndexingSiteSchedule,
+        transform: &ArrayTransform,
+    ) -> CostFeatures {
+        let coord_system = IndexCoordinateSystem::new(schedule.exploded_dims.iter());
+        let dim_range: HashMap<DimName, Range<usize>> =
+            coord_system.index_vars().into_iter()
+            .map(|var| (var, 0..1)).collect();
+
+        let mut vectors: HashSet<VectorInfo> = HashSet::new();
+        for coord in coord_system.coord_iter_subset(dim_range) {
+            let vector = 
+                VectorInfo::get_input_vector_at_coord(
+                    coord_system.coord_as_index_map(coord.clone()),
+                    array_shape,
+                    schedule,
+                    transform,
+                    schedule.preprocessing,
+                );
+
+            vectors.insert(vector);
+        }
+
+        let mut cost = CostFeatures::default();
+        match array_type {
+            ArrayType::Ciphertext => {
+                cost.input_ciphertexts += vectors.len();
+            },
+
+            ArrayType::Plaintext => {
+                cost.input_plaintexts += vectors.len();
+            }
+        }
+
+        cost
+    }
 }
 
 pub struct DefaultArrayMaterializer {
@@ -557,6 +611,96 @@ impl DefaultArrayMaterializer {
     pub fn new() -> Self {
         DefaultArrayMaterializer {
             deriver: VectorDeriver::new(),
+        }
+    }
+
+    fn estimate_ciphertext_cost(
+        &mut self,
+        array_shape: &Shape,
+        schedule: &IndexingSiteSchedule,
+        transform: &ArrayTransform,
+    ) -> CostFeatures {
+        let mut obj_map: IndexCoordinateMap<CiphertextObject> =
+            IndexCoordinateMap::new(schedule.exploded_dims.iter());
+
+        if !obj_map.is_empty() {
+            // there is an array of vectors
+            let mut mask_map: IndexCoordinateMap<PlaintextObject> =
+                IndexCoordinateMap::new(schedule.exploded_dims.iter());
+            let mut step_map: IndexCoordinateMap<isize> =
+                IndexCoordinateMap::new(schedule.exploded_dims.iter());
+
+            let indices = obj_map.coord_system.index_vars();
+            let zeros: IndexCoord = indices.iter().map(|_| 0 ).collect();
+
+            let probes =
+                vec![zeros.clone()].into_iter()
+                .chain(
+                    indices.iter().enumerate().map(|(i, _)| {
+                        let mut probe = zeros.clone();
+                        probe[i] = 1;
+                        probe
+                    })
+                );
+
+            self.deriver.register_and_derive_vectors(
+                array_shape,
+                schedule,
+                transform,
+                schedule.preprocessing,
+                probes.clone(),
+                &mut obj_map,
+                &mut mask_map,
+                &mut step_map,
+            );
+
+            let linear_offset_opt = 
+                VectorDeriver::compute_linear_offset_coefficient(
+                    &step_map,
+                    probes.clone(),
+                    indices.clone()
+                );
+
+            let num_rotates = 
+                if let Some((_, coefficients)) = linear_offset_opt {
+                    let nonzero_coeff_extents: Vec<(usize, isize)> =
+                        obj_map.coord_system.extents().into_iter()
+                        .zip(coefficients)
+                        .filter(|(_, coeff)| *coeff != 0)
+                        .collect();
+
+                    if nonzero_coeff_extents.len() > 0 {
+                        nonzero_coeff_extents.into_iter()
+                        .fold(1, |acc, (extent, _)| acc * extent)
+
+                    } else {
+                        0
+                    }
+
+                } else {
+                    // rotations too complicated; assume every coordinate
+                    // needs a rotation
+                    obj_map.coord_system.extents().into_iter().product()
+                };
+
+            let distinct_vectors: usize =
+                obj_map.coord_system.extents().into_iter()
+                .zip(probes)
+                .filter(|(_, probe)| {
+                    let probe_vec = obj_map.get(probe).unwrap();
+                    let base_vec = obj_map.get(&zeros).unwrap();
+                    probe_vec != base_vec
+                }).fold(1, |acc, (extent, _)| acc * extent);
+
+            let mut cost = CostFeatures::default();
+            cost.input_ciphertexts += distinct_vectors;
+            cost.ct_rotations += num_rotates;
+            cost
+        
+        } else {
+            let mut cost = CostFeatures::default();
+            cost.input_ciphertexts += 1;
+            cost
         }
     }
 }
@@ -597,6 +741,28 @@ impl<'a> InputArrayMaterializer<'a> for DefaultArrayMaterializer {
                 .derive_vectors_and_gen_circuit_expr::<PlaintextObject>(
                     shape, schedule, transform, None, registry,
                 ),
+        }
+    }
+
+    fn estimate_cost(
+        &mut self,
+        array_type: ArrayType,
+        array_shape: &Shape,
+        schedule: &IndexingSiteSchedule,
+        transform: &ArrayTransform,
+    ) -> CostFeatures {
+        match array_type {
+            ArrayType::Ciphertext => {
+                self.estimate_ciphertext_cost(array_shape, schedule, transform)
+            },
+
+            ArrayType::Plaintext => {
+                let mut cost =
+                    self.estimate_ciphertext_cost(array_shape, schedule, transform);
+                cost.input_plaintexts = cost.input_ciphertexts;
+                cost.input_ciphertexts = 0;
+                cost
+            }
         }
     }
 }
@@ -654,7 +820,10 @@ impl DiagonalArrayMaterializer {
         let inner_j_dim = new_schedule.vectorized_dims.get_mut(0).unwrap();
         inner_j_dim.index = dim_i;
 
-        let zero_inner_j_coords = obj_map.coord_iter_subset(&inner_i_dim_name, 0..1);
+        let zero_inner_j_coords =
+            obj_map.coord_iter_subset(
+                HashMap::from([(inner_i_dim_name.clone(), 0..1)])
+            );
 
         self.deriver.register_and_derive_vectors::<T>(
             shape,
@@ -683,7 +852,9 @@ impl DiagonalArrayMaterializer {
         // given expr e is at coord where inner_j=0,
         // expr rot(inner_j, e) is at coord where inner_j != 0
         let rest_inner_j_coords =
-            obj_map.coord_iter_subset(&inner_i_dim_name, 1..inner_i_dim_extent);
+            obj_map.coord_iter_subset(
+                HashMap::from([(inner_i_dim_name.clone(), 1..inner_i_dim_extent)])
+            );
 
         for coord in rest_inner_j_coords {
             let mut ref_coord = coord.clone();
@@ -860,6 +1031,16 @@ impl<'a> InputArrayMaterializer<'a> for DiagonalArrayMaterializer {
         } else {
             unreachable!()
         }
+    }
+
+    fn estimate_cost(
+        &mut self,
+        array_type: ArrayType,
+        array_shape: &Shape,
+        schedule: &IndexingSiteSchedule,
+        transform: &ArrayTransform,
+    ) -> CostFeatures {
+        todo!()
     }
 }
 

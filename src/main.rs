@@ -10,8 +10,8 @@ use log::*;
 use he_vectorizer::{
     circ::{
         optimizer::{ExtractorType, Optimizer},
-        materializer::{DefaultArrayMaterializer, Materializer, InputArrayMaterializer, DefaultMaterializerFactory},
-        plaintext_hoisting::PlaintextHoisting, cost::CostFeatures, ParamCircuitProgram
+        materializer::{DefaultArrayMaterializer, Materializer, InputArrayMaterializer, DefaultMaterializerFactory, MaterializerFactory},
+        plaintext_hoisting::PlaintextHoisting, cost::CostFeatures, ParamCircuitProgram, pseudomaterializer::DefaultPseudoMaterializerFactory
     },
     lang::{
         index_elim::{IndexElimination, InlinedProgram},
@@ -106,7 +106,7 @@ fn main() {
         Scheduler::new(
             inlined_programs,
             Box::new(FastScheduleTransformerFactory), 
-            Box::new(DefaultMaterializerFactory), 
+            Box::new(DefaultPseudoMaterializerFactory), 
             args.size
         );
 
@@ -122,9 +122,7 @@ fn main() {
     info!("found schedule:\n{}", schedule);
 
     info!("circuit generation...");
-    let array_materializers: Vec<Box<dyn InputArrayMaterializer>> = 
-        vec![Box::new(DefaultArrayMaterializer::new())];
-    let materializer = Materializer::new(array_materializers);
+    let materializer = DefaultMaterializerFactory.create();
 
     let res_materialize =
         materializer.run(&inlined, &schedule);

@@ -143,14 +143,14 @@ impl IndexCoordinateSystem {
     // iterate through coordinates while fixing an index to be a subset of its range
     pub fn coord_iter_subset(
         &self,
-        dim: &DimName,
-        range: Range<usize>,
+        dim_range: HashMap<DimName, Range<usize>>,
     ) -> impl Iterator<Item = im::Vector<usize>> + Clone {
         self.0
             .iter()
             .map(|(idim, extent)| {
-                if idim == dim {
+                if let Some(range) = dim_range.get(idim) {
                     range.clone()
+
                 } else {
                     0..*extent
                 }
@@ -188,6 +188,21 @@ impl IndexCoordinateSystem {
     pub fn multiplicity(&self) -> usize {
         self.0.iter().fold(1, |acc, (_, extent)| acc * (*extent))
     }
+
+    pub fn coord_as_index_map(&self, coord: IndexCoord) -> HashMap<DimName, usize> {
+        self.0
+            .iter()
+            .map(|(dim_name, _)| dim_name.clone())
+            .zip(coord)
+            .collect()
+    }
+
+    pub fn index_map_as_coord(&self, index_map: HashMap<DimName, usize>) -> IndexCoord {
+        self.0
+            .iter()
+            .map(|(dim_name, _)| index_map[dim_name])
+            .collect()
+    }
 }
 
 // map from index variable coordinates to values
@@ -223,28 +238,18 @@ impl<T: Clone> IndexCoordinateMap<T> {
     }
 
     pub fn coord_as_index_map(&self, coord: IndexCoord) -> HashMap<DimName, usize> {
-        self.coord_system
-            .0
-            .iter()
-            .map(|(dim_name, _)| dim_name.clone())
-            .zip(coord)
-            .collect()
+        self.coord_system.coord_as_index_map(coord)
     }
 
     pub fn index_map_as_coord(&self, index_map: HashMap<DimName, usize>) -> IndexCoord {
-        self.coord_system
-            .0
-            .iter()
-            .map(|(dim_name, _)| index_map[dim_name])
-            .collect()
+        self.coord_system.index_map_as_coord(index_map)
     }
 
     pub fn coord_iter_subset(
         &self,
-        dim: &DimName,
-        range: Range<usize>,
+        dim_range: HashMap<DimName, Range<usize>>,
     ) -> impl Iterator<Item = IndexCoord> + Clone {
-        self.coord_system.coord_iter_subset(dim, range)
+        self.coord_system.coord_iter_subset(dim_range)
     }
 
     pub fn object_iter(&self) -> impl Iterator<Item = (IndexCoord, Option<&T>)> + Clone {

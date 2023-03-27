@@ -655,12 +655,16 @@ impl Schedule {
                 while sched1_new.vectorized_dims.len() < sched2_new.vectorized_dims.len() {
                     if let VectorScheduleDim::ReducedRepeated(_) = sched2_new.vectorized_dims.front().unwrap() {
                         sched2_new.vectorized_dims.pop_front();
+                    } else {
+                        break
                     }
                 }
 
                 while sched2_new.vectorized_dims.len() > sched2_new.vectorized_dims.len() {
                     if let VectorScheduleDim::ReducedRepeated(_) = sched1_new.vectorized_dims.front().unwrap() {
                         sched1_new.vectorized_dims.pop_front();
+                    } else {
+                        break
                     }
                 }
 

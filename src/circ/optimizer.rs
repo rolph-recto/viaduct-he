@@ -146,7 +146,7 @@ impl Analysis<HEOptCircuit> for HEAnalysis {
             (None, Some(m2)) => Some(m2),
             (Some(m1), None) => Some(m1),
             (Some(m1), Some(m2)) => {
-                assert!(m1 == m2);
+                assert_eq!(m1, m2);
                 Some(m1)
             }
         };
@@ -183,7 +183,7 @@ impl Analysis<HEOptCircuit> for HEAnalysis {
                         (None, Some(m2)) => Some(m2),
                         (Some(m1), None) => Some(m1),
                         (Some(m1), Some(m2)) => {
-                            assert!(m1 == m2);
+                            assert_eq!(m1, m2);
                             Some(m1)
                         }
                     };

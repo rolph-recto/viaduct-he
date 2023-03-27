@@ -1,6 +1,6 @@
 use std::{
     cmp::{max, Ordering},
-    collections::HashMap,
+    collections::HashMap, ops::Add,
 };
 
 use crate::{
@@ -13,22 +13,22 @@ use crate::circ::pseudomaterializer::PseudoCircuitProgram;
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub struct CostFeatures {
-    input_ciphertexts: usize,
-    input_plaintexts: usize,
-    output_ciphertexts: usize,
-    ct_rotations: usize,
-    pt_rotations: usize,
-    ct_ct_add: usize,
-    ct_pt_add: usize,
-    pt_pt_add: usize,
-    ct_ct_mul: usize,
-    ct_pt_mul: usize,
-    pt_pt_mul: usize,
-    ct_ct_sub: usize,
-    ct_pt_sub: usize,
-    pt_pt_sub: usize,
-    ct_ct_muldepth: usize,
-    ct_pt_muldepth: usize,
+    pub input_ciphertexts: usize,
+    pub input_plaintexts: usize,
+    pub output_ciphertexts: usize,
+    pub ct_rotations: usize,
+    pub pt_rotations: usize,
+    pub ct_ct_add: usize,
+    pub ct_pt_add: usize,
+    pub pt_pt_add: usize,
+    pub ct_ct_mul: usize,
+    pub ct_pt_mul: usize,
+    pub pt_pt_mul: usize,
+    pub ct_ct_sub: usize,
+    pub ct_pt_sub: usize,
+    pub pt_pt_sub: usize,
+    pub ct_ct_muldepth: usize,
+    pub ct_pt_muldepth: usize,
 }
 
 impl CostFeatures {
@@ -142,6 +142,14 @@ impl CostFeatures {
     }
 }
 
+impl Add for CostFeatures {
+    type Output = CostFeatures;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        self.combine(&rhs)
+    }
+}
+
 /// estimate cost of an param circuit program
 #[derive(Default)]
 pub struct CostEstimator;
@@ -182,7 +190,7 @@ impl CostEstimator {
     }
 
     pub fn estimate_pseudo_cost(&self, program: &PseudoCircuitProgram) -> CostFeatures {
-        let mut cost: CostFeatures =
+        let expr_cost: CostFeatures =
             program.expr_list.iter()
             .fold(CostFeatures::default(), |acc, (multiplicity, id)| {
                 let mut cost = CostFeatures::default();
@@ -194,9 +202,12 @@ impl CostEstimator {
                     &mut cost
                 );
 
-                acc.combine(&cost)
+                acc + cost
             });
 
+        expr_cost + program.ref_cost
+
+        /*
         let (output_multiplicity, _) = program.expr_list.last().unwrap();
         // cost.input_ciphertexts += program.registry.get_ciphertext_input_vectors(None).len();
         // cost.input_plaintexts += program.registry.get_plaintext_input_vectors(None).len();
@@ -209,6 +220,7 @@ impl CostEstimator {
         cost.output_ciphertexts += output_multiplicity;
 
         cost
+        */
     }
 
     // this must visit subcircuits exactly once
