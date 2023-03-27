@@ -15,7 +15,7 @@ pub struct HELatencyModel {
     pub mul_cipherplain: usize,
     pub mul_native: usize,
     pub rot_cipher: usize,
-    pub rot_plain: usize,
+    pub rot_native: usize,
 }
 
 impl Default for HELatencyModel {
@@ -31,7 +31,7 @@ impl Default for HELatencyModel {
             mul_cipherplain: 5,
             mul_native: 1,
             rot_cipher: 40,
-            rot_plain: 1,
+            rot_native: 1,
         }
     }
 }
@@ -75,7 +75,8 @@ impl Ord for HECost {
     }
 }
 
-pub struct HECostContext {
+#[derive(Clone, Default)]
+pub struct HEOptimizerContext {
     pub ct_multiplicity_map: HashMap<VarName, usize>,
     pub pt_multiplicity_map: HashMap<VarName, usize>,
     pub dim_extent_map: HashMap<DimName, usize>,
@@ -83,8 +84,7 @@ pub struct HECostContext {
 
 pub(crate) struct HECostFunction<'a> {
     pub latency: HELatencyModel,
-    pub context: HECostContext,
-    pub egraph: &'a EGraph<HEOptCircuit, HEData>,
+    pub egraph: &'a EGraph<HEOptCircuit, HEAnalysis>,
 }
 
 impl<'a> CostFunction<HEOptCircuit> for HECostFunction<'a> {
@@ -176,19 +176,19 @@ impl<'a> CostFunction<HEOptCircuit> for HECostFunction<'a> {
                 let node_latency = 
                     match body_type {
                         HEOptNodeType::Cipher => self.latency.rot_cipher,
-                        HEOptNodeType::Plain => self.latency.rot_plain,
+                        HEOptNodeType::Plain => self.latency.rot_native,
                     };
 
                 (body_cost.muldepth, body_cost.latency + node_latency, body_cost.multiplicity)
             },
 
             HEOptCircuit::CiphertextVar(var) => {
-                let mult = self.context.ct_multiplicity_map.get(var.as_str()).unwrap();
+                let mult = self.egraph.analysis.context.ct_multiplicity_map.get(var.as_str()).unwrap();
                 (0, 0, Some(*mult))
             },
             
             HEOptCircuit::PlaintextVar(var) => {
-                let mult = self.context.pt_multiplicity_map.get(var.as_str()).unwrap();
+                let mult = self.egraph.analysis.context.pt_multiplicity_map.get(var.as_str()).unwrap();
                 (0, 0, Some(*mult))
             },
 
@@ -203,7 +203,7 @@ impl<'a> CostFunction<HEOptCircuit> for HECostFunction<'a> {
                     .iter().next().unwrap();
 
                 let extent =
-                    *self.context.dim_extent_map.get(ind_data).unwrap();
+                    *self.egraph.analysis.context.dim_extent_map.get(ind_data).unwrap();
 
                 let node_latency =
                     match enode {
@@ -261,12 +261,11 @@ pub struct HELpCostFunction {
     pub latency: HELatencyModel,
 }
 
-impl LpCostFunction<HEOptCircuit, HEData> for HELpCostFunction {
+impl LpCostFunction<HEOptCircuit, HEAnalysis> for HELpCostFunction {
     fn node_cost(&mut self, egraph: &HEGraph, eclass: Id, enode: &HEOptCircuit) -> f64 {
-        let muldepth = egraph[eclass].data.muldepth;
         let latency = match enode {
             HEOptCircuit::Literal(_) =>
-                1.0,
+                0.0,
 
             HEOptCircuit::Add([id1, id2]) => {
                 let type1 = &egraph[*id1].data.node_type;
@@ -329,7 +328,7 @@ impl LpCostFunction<HEOptCircuit, HEData> for HELpCostFunction {
                 let body_type = &egraph[*body_id].data.node_type;
                 match body_type {
                     HEOptNodeType::Cipher => self.latency.rot_cipher as f64,
-                    HEOptNodeType::Plain => self.latency.rot_plain as f64,
+                    HEOptNodeType::Plain => self.latency.rot_native as f64,
                 }
             },
 
@@ -343,9 +342,13 @@ impl LpCostFunction<HEOptCircuit, HEData> for HELpCostFunction {
                 1.0
             },
 
-            HEOptCircuit::IndexVar(_) | HEOptCircuit::FunctionVar(_, _) => 0.1
+            HEOptCircuit::IndexVar(_) | HEOptCircuit::FunctionVar(_, _) => 0.0
         };
 
-        ((muldepth + 1) as f64) * latency
+        let muldepth = egraph[eclass].data.muldepth;
+        let multiplicity =
+            egraph[eclass].data.multiplicity.unwrap_or(1) as f64;
+
+        ((muldepth + 1) as f64) * latency * multiplicity
     }
 }

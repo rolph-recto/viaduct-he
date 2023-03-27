@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    circ::{optimizer::{cost::HECostContext, HEOptCircuit}, vector_info::VectorInfo},
+    circ::{optimizer::{cost::HEOptimizerContext, HEOptCircuit}, vector_info::VectorInfo},
     lang::*,
     scheduling::ScheduleDim,
 };
@@ -921,11 +921,11 @@ impl ParamCircuitProgram {
         (dims.clone(), *id)
     }
 
-    pub fn to_opt_circuit(&self) -> (Vec<RecExpr<HEOptCircuit>>, HECostContext) {
+    pub fn to_opt_circuit(&self) -> (Vec<RecExpr<HEOptCircuit>>, HEOptimizerContext) {
         // only run optimization *before* partial evaluation
         assert!(self.native_expr_list.len() == 0);
         let mut cost_ctx =
-            HECostContext {
+            HEOptimizerContext {
                 ct_multiplicity_map: HashMap::new(),
                 pt_multiplicity_map: HashMap::new(),
                 dim_extent_map: HashMap::new(),

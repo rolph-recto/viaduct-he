@@ -2,16 +2,17 @@ use clap::ValueEnum;
 use egg::*;
 use log::*;
 use std::{
-    cmp::max,
+    cmp::{max, min},
     collections::{HashSet, HashMap},
     time::*,
 };
 
-use crate::circ::optimizer::{cost::{HECostFunction, HELatencyModel, HELpCostFunction}, dijkstra_extractor::DijkstraExtractor};
-
-use self::cost::HECostContext;
-
-use super::VarName;
+use crate::circ::{
+    VarName,
+    optimizer::{
+        cost::{HEOptimizerContext, HECostFunction, HELatencyModel, HELpCostFunction},
+    }
+};
 
 mod greedy_extractor;
 pub mod lp_extractor;
@@ -41,7 +42,7 @@ pub enum ExtractorType {
     LP,
 }
 
-pub type HEGraph = egg::EGraph<HEOptCircuit, HEData>;
+pub type HEGraph = egg::EGraph<HEOptCircuit, HEAnalysis>;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum HEOptNodeType {
@@ -84,25 +85,33 @@ impl Default for HEOptNodeType {
     }
 }
 
+#[derive(Clone, Default)]
+pub struct HEAnalysis {
+    context: HEOptimizerContext
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct HEData {
     constval: Option<isize>,
     index_vars: HashSet<String>,
     node_type: HEOptNodeType,
     muldepth: usize,
+    multiplicity: Option<usize>,
 }
 
-impl Analysis<HEOptCircuit> for HEData {
+impl Analysis<HEOptCircuit> for HEAnalysis {
     type Data = HEData;
 
     fn merge(&mut self, to: &mut Self::Data, from: Self::Data) -> DidMerge {
+        let to_str = format!("{:?}", to);
+        let from_str = format!("{:?}", from);
         let constval_merge = 
             merge_option(&mut to.constval, from.constval, |l, r| {
                 if *l == r {
                     DidMerge(false, false)
 
                 } else {
-                    panic!("attempting to merge two eclasses with different constvals: {} and {}", l, r)
+                    panic!("attempting to merge two eclasses with different constvals: {} and {}", to_str, from_str)
                 }
             });
 
@@ -120,10 +129,34 @@ impl Analysis<HEOptCircuit> for HEData {
         let type_merge =
             DidMerge(
                 to.node_type != old_to_node_type,
-                from.node_type != old_to_node_type
+                to.node_type != from.node_type
             );
 
-        constval_merge | vars_merge | type_merge
+        let old_muldepth = to.muldepth;
+        to.muldepth = min(to.muldepth, from.muldepth);
+        let muldepth_merge =
+            DidMerge(
+                to.muldepth != old_muldepth,
+                to.muldepth != from.muldepth,
+            );
+
+        let old_multiplicity = to.multiplicity;
+        to.multiplicity = match (old_multiplicity, from.multiplicity) {
+            (None, None) => None,
+            (None, Some(m2)) => Some(m2),
+            (Some(m1), None) => Some(m1),
+            (Some(m1), Some(m2)) => {
+                assert!(m1 == m2);
+                Some(m1)
+            }
+        };
+        let multiplicity_merge =
+            DidMerge(
+                to.multiplicity != old_multiplicity,
+                to.multiplicity != from.multiplicity
+            );
+
+        constval_merge | vars_merge | type_merge | muldepth_merge | multiplicity_merge
     }
 
     fn make(egraph: &HEGraph, enode: &HEOptCircuit) -> Self::Data {
@@ -136,11 +169,24 @@ impl Analysis<HEOptCircuit> for HEData {
                     index_vars: HashSet::new(),
                     node_type: HEOptNodeType::Plain,
                     muldepth: 0,
+                    multiplicity: None,
                 },
 
-            HEOptCircuit::Add([id1, id2]) => {
+            HEOptCircuit::Add([id1, id2]) |
+            HEOptCircuit::Sub([id1, id2]) => {
                 let data1 = data(id1);
                 let data2 = data(id2);
+
+                let multiplicity: Option<usize> =
+                    match (data1.multiplicity, data2.multiplicity) {
+                        (None, None) => None,
+                        (None, Some(m2)) => Some(m2),
+                        (Some(m1), None) => Some(m1),
+                        (Some(m1), Some(m2)) => {
+                            assert!(m1 == m2);
+                            Some(m1)
+                        }
+                    };
 
                 let constval: Option<isize> =
                     data1.constval.and_then(|d1| {
@@ -156,33 +202,24 @@ impl Analysis<HEOptCircuit> for HEData {
                     index_vars,
                     node_type: data1.node_type.ops(&data2.node_type),
                     muldepth: max(data1.muldepth, data2.muldepth),
-                }
-            },
-
-            HEOptCircuit::Sub([id1, id2]) => {
-                let data1 = data(id1);
-                let data2 = data(id2);
-
-                let constval: Option<isize> =
-                    data1.constval.and_then(|d1| {
-                        data2.constval.map(|d2| d1 - d2)
-                    });
-
-                let mut index_vars: HashSet<String> = HashSet::new();
-                index_vars.extend(data1.index_vars.clone());
-                index_vars.extend(data2.index_vars.clone());
-
-                HEData {
-                    constval,
-                    index_vars,
-                    node_type: data1.node_type.ops(&data2.node_type),
-                    muldepth: max(data1.muldepth, data2.muldepth),
+                    multiplicity
                 }
             },
 
             HEOptCircuit::Mul([id1, id2]) => {
                 let data1 = data(id1);
                 let data2 = data(id2);
+
+                let multiplicity: Option<usize> =
+                    match (data1.multiplicity, data2.multiplicity) {
+                        (None, None) => None,
+                        (None, Some(m2)) => Some(m2),
+                        (Some(m1), None) => Some(m1),
+                        (Some(m1), Some(m2)) => {
+                            assert!(m1 == m2);
+                            Some(m1)
+                        }
+                    };
 
                 let constval: Option<isize> =
                     data1.constval.and_then(|d1| {
@@ -209,6 +246,7 @@ impl Analysis<HEOptCircuit> for HEData {
                     index_vars,
                     node_type: data1.node_type.ops(&data2.node_type),
                     muldepth,
+                    multiplicity,
                 }
             },
 
@@ -221,6 +259,7 @@ impl Analysis<HEOptCircuit> for HEData {
                     index_vars: data1.index_vars.clone(),
                     node_type: data2.node_type,
                     muldepth: data2.muldepth,
+                    multiplicity: data2.multiplicity,
                 }
             },
 
@@ -241,11 +280,20 @@ impl Analysis<HEOptCircuit> for HEData {
                     }
                 }
 
+                let extent: usize = 
+                    data1.index_vars.iter().fold(1, |acc, var| {
+                        acc * egraph.analysis.context.dim_extent_map[var]
+                    });
+
+                let multiplicity: Option<usize> =
+                    data2.multiplicity.map(|x| x / extent);
+
                 HEData {
                     constval: None,
                     index_vars: data1.index_vars.clone(),
                     node_type: data2.node_type,
-                    muldepth
+                    muldepth,
+                    multiplicity,
                 }
             },
 
@@ -255,25 +303,37 @@ impl Analysis<HEOptCircuit> for HEData {
                     index_vars: HashSet::from([var.to_string()]),
                     node_type: HEOptNodeType::Plain,
                     muldepth: 0,
+                    multiplicity: None,
                 }
             },
 
-            HEOptCircuit::CiphertextVar(_) => {
+            HEOptCircuit::CiphertextVar(var) => {
                 HEData {
                     constval: None,
                     index_vars: HashSet::new(),
                     node_type: HEOptNodeType::Cipher,
                     muldepth: 0,
+                    multiplicity: Some(egraph.analysis.context.ct_multiplicity_map[var.as_str()]),
                 }
             },
             
-            HEOptCircuit::PlaintextVar(_) |
+            HEOptCircuit::PlaintextVar(var) => {
+                HEData {
+                    constval: None,
+                    index_vars: HashSet::new(),
+                    node_type: HEOptNodeType::Plain,
+                    muldepth: 0,
+                    multiplicity: Some(egraph.analysis.context.pt_multiplicity_map[var.as_str()]),
+                }
+            },
+
             HEOptCircuit::FunctionVar(_, _) => {
                 HEData {
                     constval: None,
                     index_vars: HashSet::new(),
                     node_type: HEOptNodeType::Plain,
                     muldepth: 0,
+                    multiplicity: None,
                 }
             },
         }
@@ -332,10 +392,10 @@ fn is_const_nonzero(var: &'static str) -> impl Fn(&mut HEGraph, Id, &Subst) -> b
 struct ConstFold;
 
 // do constant folding
-impl Applier<HEOptCircuit, HEData> for ConstFold {
+impl Applier<HEOptCircuit, HEAnalysis> for ConstFold {
     fn apply_one(
         &self,
-        egraph: &mut EGraph<HEOptCircuit, HEData>,
+        egraph: &mut EGraph<HEOptCircuit, HEAnalysis>,
         eclass: Id,
         _subst: &Subst,
         _searcher_ast: Option<&PatternAst<HEOptCircuit>>,
@@ -354,10 +414,10 @@ impl Applier<HEOptCircuit, HEData> for ConstFold {
 
 struct ConstSplit;
 
-impl Applier<HEOptCircuit, HEData> for ConstSplit {
+impl Applier<HEOptCircuit, HEAnalysis> for ConstSplit {
     fn apply_one(
         &self,
-        egraph: &mut EGraph<HEOptCircuit, HEData>,
+        egraph: &mut EGraph<HEOptCircuit, HEAnalysis>,
         eclass: Id,
         _subst: &Subst,
         _searcher_ast: Option<&PatternAst<HEOptCircuit>>,
@@ -414,7 +474,7 @@ struct RotateWrap {
     l: Var,
 }
 
-impl Applier<HEOptCircuit, HEData> for RotateWrap {
+impl Applier<HEOptCircuit, HEAnalysis> for RotateWrap {
     fn apply_one(
         &self,
         egraph: &mut HEGraph,
@@ -438,12 +498,12 @@ impl Applier<HEOptCircuit, HEData> for RotateWrap {
 }
 
 pub struct Optimizer {
-    rules: Vec<Rewrite<HEOptCircuit, HEData>>,
+    rules: Vec<Rewrite<HEOptCircuit, HEAnalysis>>,
 }
 
 impl Optimizer {
     pub fn new(size: usize) -> Self {
-        let mut rules: Vec<Rewrite<HEOptCircuit, HEData>> = vec![
+        let mut rules: Vec<Rewrite<HEOptCircuit, HEAnalysis>> = vec![
             // bidirectional addition rules
             rewrite!("add-identity"; "(+ ?a 0)" <=> "?a" if is_not_index_var("?a")),
             rewrite!("add-assoc"; "(+ ?a (+ ?b ?c))" <=> "(+ (+ ?a ?b) ?c)"),
@@ -509,14 +569,14 @@ impl Optimizer {
         Optimizer { rules }
     }
 
-    pub fn rules(&self) -> &[Rewrite<HEOptCircuit, HEData>] {
+    pub fn rules(&self) -> &[Rewrite<HEOptCircuit, HEAnalysis>] {
         &self.rules
     }
 
     pub fn optimize(
         &self,
         exprs: Vec<RecExpr<HEOptCircuit>>,
-        context: HECostContext,
+        context: HEOptimizerContext,
         timeout: usize,
         extractor_type: ExtractorType,
     ) -> (Vec<RecExpr<HEOptCircuit>>, Vec<egg::Id>) {
@@ -526,8 +586,8 @@ impl Optimizer {
 
         // simplify the expression using a Runner, which creates an e-graph with
         // the given expression and runs the given rules over it
-        let mut runner =
-            Runner::default()
+        let mut runner: Runner<HEOptCircuit, HEAnalysis> =
+            Runner::new(HEAnalysis { context })
             .with_node_limit(30000)
             .with_time_limit(Duration::from_secs(timeout as u64));
 
@@ -557,7 +617,6 @@ impl Optimizer {
                     egraph,
                     HECostFunction {
                         latency: HELatencyModel::default(),
-                        context,
                         egraph,
                     },
                 );
@@ -587,10 +646,9 @@ impl Optimizer {
                 let mut lp_extractor =
                     LpExtractor::new(
                         egraph,
-                        AstSize,
-                        // HELpCostFunction {
-                        //     latency: HELatencyModel::default()
-                        // }
+                        HELpCostFunction {
+                            latency: HELatencyModel::default()
+                        }
                     );
 
                 let (opt_expr, roots) = lp_extractor.solve_multiple(&roots);
@@ -610,20 +668,24 @@ impl Optimizer {
 #[cfg(test)]
 mod tests {
     use super::{*, dijkstra_extractor::DijkstraExtractor, cost::{HECostFunction, HELatencyModel}};
-    use crate::{circ::{*, plaintext_hoisting::PlaintextHoisting, optimizer::cost::{HELpCostFunction, HECostContext}}, program::lowering::CircuitLowering};
+    use crate::{circ::{*, plaintext_hoisting::PlaintextHoisting, optimizer::cost::{HELpCostFunction, HEOptimizerContext}}, program::lowering::CircuitLowering};
 
-    fn run_optimizer(expr: &RecExpr<HEOptCircuit>, duration_opt: Option<Duration>) -> Runner<HEOptCircuit, HEData> {
+    fn run_optimizer(
+        expr: &RecExpr<HEOptCircuit>,
+        context: HEOptimizerContext,
+        duration_opt: Option<Duration>
+    ) -> Runner<HEOptCircuit, HEAnalysis> {
         let optimizer = Optimizer::new(16);
-        let runner = Runner::default()
+        let runner: Runner<HEOptCircuit, HEAnalysis> =
+            Runner::new(HEAnalysis { context })
             .with_explanations_enabled()
             .with_expr(expr)
-            .with_hook(|runner: &mut Runner<HEOptCircuit, HEData>| {
+            .with_hook(|runner: &mut Runner<HEOptCircuit, HEAnalysis>| {
                 println!("iteration: {}", runner.iterations.len());
                 println!("nodes: {}", runner.egraph.total_number_of_nodes());
                 Ok(())
             });
             
-
         let runner2 = 
             if let Some(duration) = duration_opt {
                 runner.with_time_limit(duration)
@@ -635,11 +697,18 @@ mod tests {
         runner2.run(optimizer.rules())
     }
 
-    fn run_equiv(s1: &str, s2: &str) -> (bool, String) {
+    fn run_equiv(ct_var: &str, s1: &str, s2: &str) -> (bool, String) {
         let expr1: RecExpr<HEOptCircuit> = s1.parse().unwrap();
         let expr2: RecExpr<HEOptCircuit> = s2.parse().unwrap();
 
-        let mut runner = run_optimizer(&expr1, None);
+        let context = HEOptimizerContext {
+            ct_multiplicity_map: HashMap::from([(ct_var.to_string(), 1)]),
+            pt_multiplicity_map: HashMap::new(),
+            dim_extent_map: HashMap::new(),
+        };
+
+        let mut runner =
+            run_optimizer(&expr1, context, None);
 
         let equiv = runner.egraph.equivs(&expr1, &expr2).len() > 0;
         if equiv {
@@ -652,13 +721,20 @@ mod tests {
         }
     }
 
-    fn run_extractor(s: &str) {
+    fn run_extractor(ct_var: &str, s: &str) {
+        let context = HEOptimizerContext {
+            ct_multiplicity_map: HashMap::from([(ct_var.to_string(), 1)]),
+            pt_multiplicity_map: HashMap::new(),
+            dim_extent_map: HashMap::new(),
+        };
+
         let optimizer = Optimizer::new(16);
         let expr = s.parse().unwrap();
-        let runner = Runner::default()
+        let runner =
+            Runner::new(HEAnalysis { context })
             // .with_explanations_enabled()
             .with_expr(&expr)
-            .with_hook(|runner: &mut Runner<HEOptCircuit, HEData>| {
+            .with_hook(|runner: &mut Runner<HEOptCircuit, HEAnalysis>| {
                 println!("iteration: {}", runner.iterations.len());
                 println!("total nodes: {}", runner.egraph.total_number_of_nodes());
                 Ok(())
@@ -667,7 +743,7 @@ mod tests {
         let root = *runner.roots.first().unwrap();
 
         let mut context =
-            HECostContext {
+            HEOptimizerContext {
                 ct_multiplicity_map: HashMap::new(),
                 pt_multiplicity_map: HashMap::new(),
                 dim_extent_map: HashMap::new(),
@@ -699,7 +775,6 @@ mod tests {
         let cost_func =
             HECostFunction {
                 latency: HELatencyModel::default(),
-                context,
                 egraph: &runner.egraph,
             };
 
@@ -729,43 +804,44 @@ mod tests {
     #[test]
     #[ignore]
     fn test_add_identity() {
-        assert!(run_equiv("(+ x 0)", "x").0);
+        assert!(run_equiv("x", "(+ x 0)", "x").0);
     }
 
     #[test]
     #[ignore]
     fn test_mul_to_add() {
-        assert!(run_equiv("(* x 2)", "(+ x x)").0);
+        assert!(run_equiv("x", "(* x 2)", "(+ x x)").0);
     }
 
     #[test]
     #[ignore]
     fn test_add_to_mul() {
-        assert!(run_equiv("(+ (+ x x) x)", "(* x 3)").0);
+        assert!(run_equiv("x", "(+ (+ x x) x)", "(* x 3)").0);
     }
 
     #[test]
     #[ignore]
     fn test_factor() {
-        assert!(run_equiv("(+ (* x x) (* 2 x))", "(* x (+ x 2))").0);
+        assert!(run_equiv("x", "(+ (* x x) (* 2 x))", "(* x (+ x 2))").0);
     }
 
     #[test]
     #[ignore]
     fn test_constant_fold() {
-        assert!(run_equiv("(+ x (* 2 3))", "(+ x 6)").0);
+        assert!(run_equiv("x", "(+ x (* 2 3))", "(+ x 6)").0);
     }
 
     #[test]
     #[ignore]
     fn test_neg_equiv() {
-        assert!(!run_equiv("(+ (* x x) (* 2 x))", "(+ (+ x x) x)").0);
+        assert!(!run_equiv("x", "(+ (* x x) (* 2 x))", "(+ (+ x x) x)").0);
     }
 
     #[test]
     #[ignore]
     fn test_neg_equiv2() {
-        let (equiv, explain) = run_equiv("(+ (* x x) (* 2 x))", "(* x (+ 3 x))");
+        let (equiv, explain) =
+            run_equiv("x", "(+ (* x x) (* 2 x))", "(* x (+ 3 x))");
         println!("{}", explain);
         assert!(!equiv);
     }
@@ -773,13 +849,19 @@ mod tests {
     #[test]
     #[ignore]
     fn test_extract() {
-        run_extractor("(+ (* x x) (* 2 x))");
+        run_extractor("x", "(+ (* x x) (* 2 x))");
     }
 
     #[test]
     #[ignore]
     fn test_extract2() {
-        run_extractor("(+ (+ 20 30) (+ (* x x) (* 2 x)))");
+        run_extractor("x", "(+ (+ 20 30) (+ (* x x) (* 2 x)))");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_extract3() {
+        run_extractor("x", "(+ (* 3 x) (* 2 x))")
     }
 
     #[test]
@@ -787,6 +869,7 @@ mod tests {
         let mut registry = CircuitObjectRegistry::new();
 
         let ct_var = registry.fresh_ct_var();
+
         let vector = VectorInfo {
             array: String::from("arr"),
             preprocessing: None,
@@ -811,7 +894,7 @@ mod tests {
 
         let lit_2 = registry.register_circuit(ParamCircuitExpr::Literal(2));
         let add_2 = registry.register_circuit(ParamCircuitExpr::Op(Operator::Add, lit_2, lit_2));
-        let ct = registry.register_circuit(ParamCircuitExpr::CiphertextVar(ct_var));
+        let ct = registry.register_circuit(ParamCircuitExpr::CiphertextVar(ct_var.clone()));
         let reduce_vec =
             registry.register_circuit(
                 ParamCircuitExpr::ReduceDim(String::from("j"), 2, Operator::Add, ct)
@@ -829,8 +912,14 @@ mod tests {
         let (rec_exprs, _) = circuit_program.to_opt_circuit();
         let rec_expr = rec_exprs.first().unwrap();
 
+        let context = HEOptimizerContext {
+            ct_multiplicity_map: HashMap::from([(ct_var, 1)]),
+            pt_multiplicity_map: HashMap::new(),
+            dim_extent_map: HashMap::from([(String::from("j"), 2)]),
+        };
+
         let runner =
-            run_optimizer(&rec_expr, Some(Duration::from_millis(0)));
+            run_optimizer(&rec_expr, context, Some(Duration::from_millis(0)));
 
         let root = *runner.roots.first().unwrap();
 
