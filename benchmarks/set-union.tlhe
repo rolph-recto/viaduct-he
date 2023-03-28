@@ -7,13 +7,8 @@ let b_sum =
 sum(for j: 128 {
 	b_data[j] *
 	product(for i: 128 {
-		product(for k: 8 {
-			1 - 
-			(1 * 
-				(1 - 
-					(a_id[i][k] - b_id[j][k]) *  (a_id[i][k] - b_id[j][k])
-				)
-			)
+		1 - product(for k: 8 {
+			1 - (a_id[i][k] - b_id[j][k]) *  (a_id[i][k] - b_id[j][k])
 		})
 	})
 }) in

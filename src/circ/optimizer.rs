@@ -515,15 +515,16 @@ pub struct Optimizer {
 impl Optimizer {
     pub fn new(size: usize) -> Self {
         let mut rules: Vec<Rewrite<HEOptCircuit, HEAnalysis>> = vec![
+            // TODO: add/mult assoc and commute rules
             // bidirectional addition rules
-            // rewrite!("add-assoc"; "(+ ?a (+ ?b ?c))" <=> "(+ (+ ?a ?b) ?c)"),
-            // rewrite!("add-commute"; "(+ ?a ?b)" <=> "(+ ?b ?a)"),
+            rewrite!("add-assoc"; "(+ ?a (+ ?b ?c))" <=> "(+ (+ ?a ?b) ?c)"),
+            rewrite!("add-commute"; "(+ ?a ?b)" <=> "(+ ?b ?a)"),
             rewrite!("add-to-two"; "(+ ?a ?a)" <=> "(* 2 ?a)"),
             rewrite!("sub-inverse"; "(- ?a ?b)" <=> "(+ ?a (* -1 ?b))"),
 
             // bidirectional multiplication rules
-            // rewrite!("mul-assoc"; "(* ?a (* ?b ?c))" <=> "(* (* ?a ?b) ?c)"),
-            // rewrite!("mul-commute"; "(* ?a ?b)" <=> "(* ?b ?a)"),
+            rewrite!("mul-assoc"; "(* ?a (* ?b ?c))" <=> "(* (* ?a ?b) ?c)"),
+            rewrite!("mul-commute"; "(* ?a ?b)" <=> "(* ?b ?a)"),
             rewrite!("mul-distribute"; "(* (+ ?a ?b) ?c)" <=> "(+ (* ?a ?c) (* ?b ?c))"),
 
             // bidirectional rotation rules

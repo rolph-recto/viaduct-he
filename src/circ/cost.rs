@@ -348,6 +348,7 @@ impl CostEstimator {
 
                     (Operator::Mul, VectorType::Ciphertext) => {
                         cost.ct_ct_mul += extent - 1;
+                        cost.ct_ct_muldepth += extent - 1;
                     },
 
                     (Operator::Mul, VectorType::Plaintext) => {

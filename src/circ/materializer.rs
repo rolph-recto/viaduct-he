@@ -284,9 +284,6 @@ impl<'a> Materializer<'a> {
             }
 
             None => {
-                let expr_sched = schedule.to_expr_schedule(transform.as_shape());
-                let can_derive = expr_sched.can_derive(transform, ref_expr_sched);
-                info!("can_derive: {:?}", can_derive);
                 Err(format!("{}: cannot derive {} from {}", indexing_id, expr_circ_val, transform_circ_val))
             }
         }
@@ -607,15 +604,15 @@ impl DefaultArrayMaterializer {
             let indices = obj_map.coord_system.index_vars();
             let zeros: IndexCoord = indices.iter().map(|_| 0 ).collect();
 
+            let dim_probes: Vec<IndexCoord> =
+                indices.iter().enumerate().map(|(i, _)| {
+                    let mut probe = zeros.clone();
+                    probe[i] = 1;
+                    probe
+                }).collect();
+
             let probes =
-                vec![zeros.clone()].into_iter()
-                .chain(
-                    indices.iter().enumerate().map(|(i, _)| {
-                        let mut probe = zeros.clone();
-                        probe[i] = 1;
-                        probe
-                    })
-                );
+                vec![zeros.clone()].into_iter().chain(dim_probes.clone().into_iter());
 
             self.deriver.register_and_derive_vectors(
                 array_shape,
@@ -659,16 +656,29 @@ impl DefaultArrayMaterializer {
 
             let distinct_vectors: usize =
                 obj_map.coord_system.extents().into_iter()
-                .zip(probes)
+                .zip(dim_probes.clone())
                 .filter(|(_, probe)| {
                     let probe_vec = obj_map.get(probe).unwrap();
                     let base_vec = obj_map.get(&zeros).unwrap();
                     probe_vec != base_vec
                 }).fold(1, |acc, (extent, _)| acc * extent);
 
+            let num_masks: usize =
+                mask_map.coord_system.extents().into_iter()
+                .zip(dim_probes)
+                .filter(|(_, probe)| {
+                    if let PlaintextObject::Mask(_) = mask_map.get(probe).unwrap() {
+                        true
+                    } else {
+                        false
+                    }
+                }).fold(1, |acc, (extent, _)| acc * extent);
+
             let mut cost = CostFeatures::default();
             cost.input_ciphertexts += distinct_vectors;
             cost.ct_rotations += num_rotates;
+            cost.ct_pt_mul += num_masks;
+            cost.ct_pt_muldepth += if num_masks > 0 { 1 } else { 0 };
             cost
         
         } else {
@@ -735,6 +745,8 @@ impl<'a> InputArrayMaterializer<'a> for DefaultArrayMaterializer {
                     self.estimate_ciphertext_cost(array_shape, schedule, transform);
                 cost.input_plaintexts = cost.input_ciphertexts;
                 cost.input_ciphertexts = 0;
+                cost.pt_pt_mul = cost.ct_pt_mul;
+                cost.pt_rotations = cost.ct_rotations;
                 cost
             }
         }

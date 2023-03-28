@@ -1,0 +1,13 @@
+input keys: [8,128] from client
+input values: [128] from client
+input query: [8] from client
+let mask =
+    for i: 128 {
+        product(for j: 8 {
+            1 - ((query[j] - keys[j][i]) * (query[j] - keys[j][i]))
+        })
+    }
+in
+for i: 128 {
+    values[i] * mask[i]
+}

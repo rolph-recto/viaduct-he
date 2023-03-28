@@ -196,7 +196,6 @@ impl<'a> CostFunction<HEOptCircuit> for HECostFunction<'a> {
             HEOptCircuit::ProductVectors([ind_id, body_id]) => {
                 let body_cost = costs(*body_id);
                 let body_data = &self.egraph[*ind_id].data;
-                let body_mult = body_cost.multiplicity.unwrap();
 
                 let ind_data = 
                     self.egraph[*ind_id].data.index_vars
@@ -204,6 +203,9 @@ impl<'a> CostFunction<HEOptCircuit> for HECostFunction<'a> {
 
                 let extent =
                     *self.egraph.analysis.context.dim_extent_map.get(ind_data).unwrap();
+
+                let multiplicity =
+                    body_cost.multiplicity.map(|body_mult| body_mult / extent);
 
                 let node_latency =
                     match enode {
@@ -245,7 +247,7 @@ impl<'a> CostFunction<HEOptCircuit> for HECostFunction<'a> {
                         _ => unreachable!(),
                     };
 
-                (muldepth, body_cost.latency + node_latency, Some(body_mult / extent))
+                (muldepth, body_cost.latency + node_latency, multiplicity)
             },
             
             HEOptCircuit::IndexVar(_) | HEOptCircuit::FunctionVar(_, _) => {
