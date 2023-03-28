@@ -12,7 +12,7 @@ use crate::{
     util
 };
 
-use super::{CircuitObjectRegistry, materializer::{InputArrayMaterializer, DefaultArrayMaterializer}, cost::CostFeatures};
+use super::{CircuitObjectRegistry, materializer::{InputArrayMaterializer, DefaultArrayMaterializer}, cost::CostFeatures, vector_deriver::VectorDeriver, IndexCoordinateSystem, vector_info::VectorInfo, CiphertextObject, PlaintextObject};
 
 pub struct PseudoCircuitProgram {
     pub registry: CircuitObjectRegistry,
@@ -196,6 +196,11 @@ impl<'a> PseudoMaterializer<'a> {
                 // TODO have a better estimate for expr indexing site
                 if program.is_expr(&transform.array) {
                     let array_type = *self.expr_array_type_map.get(&transform.array).unwrap();
+                    let ref_expr_sched =
+                        match self.expr_schedule_map.get(&transform.array).unwrap() {
+                            ExprScheduleType::Any => panic!("array literals not supported"),
+                            ExprScheduleType::Specific(sched) => sched.clone(),
+                        };
 
                     let var_expr =
                         match array_type {
@@ -207,28 +212,58 @@ impl<'a> PseudoMaterializer<'a> {
                         };
 
                     let var_id = self.registry.register_circuit(var_expr);
-                    let mask_id =
-                        self.registry.register_circuit(
-                            ParamCircuitExpr::PlaintextVar(String::from("mask")),
-                        );
-
-                    let op_id = 
-                        self.registry.register_circuit(
-                            ParamCircuitExpr::Op(Operator::Mul, var_id, mask_id)
-                        );
-
-                    let rot_id = 
-                        self.registry.register_circuit(
-                            ParamCircuitExpr::Rotate(
-                                OffsetExpr::Literal(0),
-                                op_id
-                            )
-                        );
 
                     let expr_schedule = 
                         schedule.to_expr_schedule(transform.as_shape());
+                            
+                    // vectors of the expr array being indexed
+                    let expr_circ_val = ref_expr_sched.materialize(&transform.array);
 
-                    Ok((ExprScheduleType::Specific(expr_schedule), array_type, rot_id))
+                    let coord_system =
+                        IndexCoordinateSystem::new(schedule.exploded_dims.iter());
+
+                    // vectors of the indexing site
+                    let transform_circ_val = VectorInfo::get_input_vector_value(
+                        coord_system,
+                        &ref_expr_sched.shape,
+                        schedule,
+                        transform,
+                        schedule.preprocessing,
+                    );
+
+                    let derive_opt =
+                        match array_type {
+                            ArrayType::Ciphertext => {
+                                VectorDeriver::probe_from_source::<CiphertextObject>(
+                                    &expr_circ_val,
+                                    &transform_circ_val,
+                                    &ref_expr_sched,
+                                    array_type
+                                )
+                            },
+
+                            ArrayType::Plaintext => {
+                                VectorDeriver::probe_from_source::<PlaintextObject>(
+                                    &expr_circ_val,
+                                    &transform_circ_val,
+                                    &ref_expr_sched,
+                                    array_type
+                                )
+
+                            }
+                        };
+
+                    match derive_opt {
+                        Some(est_cost) => {
+                            *ref_cost = *ref_cost + est_cost;
+
+                            Ok((ExprScheduleType::Specific(expr_schedule), array_type, var_id))
+                        },
+
+                        None => {
+                            Err(format!("cannot derive estimate for {}", indexing_id))
+                        }
+                    }
 
                 } else {
                     // indexing an input array

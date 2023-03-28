@@ -1,10 +1,14 @@
+use std::array;
+
 use bimap::BiHashMap;
 use log::info;
 
 use crate::{
     circ::{vector_info::VectorInfo, *},
-    scheduling::{ArrayPreprocessing, IndexingSiteSchedule},
+    scheduling::{ArrayPreprocessing, IndexingSiteSchedule, ExprSchedule}, util,
 };
+
+use super::cost::CostFeatures;
 
 /// general methods for deriving vectors through rotation and masking
 pub struct VectorDeriver {
@@ -142,7 +146,187 @@ impl VectorDeriver {
         None
     }
 
-    // pub fn probe_from_source<T
+    pub fn probe_from_source<T: CircuitObject>(
+        src: &CircuitValue<VectorInfo>,
+        dst: &CircuitValue<VectorInfo>,
+        ref_expr_sched: &ExprSchedule,
+        array_type: ArrayType,
+    ) -> Option<CostFeatures>
+    {
+        match dst {
+            CircuitValue::CoordMap(dst_map) => {
+                let indices = dst_map.index_vars();
+                let extents = dst_map.extents();
+                let zeros: IndexCoord = indices.iter().map(|_| 0).collect();
+                let mut probes: Vec<IndexCoord> = Vec::new();
+                for i in 0..indices.len() {
+                    let mut probe = zeros.clone();
+                    probe[i] = 1;
+                    probes.push(probe);
+                }
+
+                let deriver = |dst_vector| {
+                    match src {
+                        CircuitValue::CoordMap(src_map) => {
+                            VectorDeriver::derive_from_list(src_map.object_iter(), dst_vector)
+                        },
+
+                        CircuitValue::Single(src_vector) => {
+                            src_vector.derive(dst_vector)
+                            .map(|(step, mask)|
+                                (src_vector.clone(), im::Vector::new(), step, mask)
+                            )
+                        }
+                    }
+                };
+
+                let base_vector_opt =
+                    deriver(dst_map.get(&zeros).unwrap());
+
+                let base_vector_coord: IndexCoord =
+                    match base_vector_opt {
+                        Some(res) => {
+                            res.1
+                        },
+
+                        None => {
+                            return None
+                        }
+                    };
+
+                let mut rotate_extents: Vec<Extent> = Vec::new();
+                let mut mult_extents: Vec<Extent> = Vec::new();
+                let mut src_vecs_to_derive_from: usize = 1;
+                for (i, coord) in probes.iter().enumerate() {
+                    let dst_vector = dst_map.get(coord).unwrap();
+                    let derive_opt = deriver(dst_vector);
+
+                    if let Some((_, reg_coord, steps, mask)) = derive_opt {
+                        if reg_coord != base_vector_coord {
+                            src_vecs_to_derive_from *= extents[i];
+                        }
+
+                        if steps != 0 {
+                            rotate_extents.push(extents[i]);
+                        }
+
+                        if let PlaintextObject::Mask(_) = mask {
+                            mult_extents.push(extents[i]);
+                        }
+
+                    } else {
+                        return None;
+                    }
+                }
+
+                let dims_to_fill = ref_expr_sched.dims_to_fill().0;
+                let reduction_list  = util::get_reduction_list(dims_to_fill);
+
+                let reduce_and_sum_ops = src_vecs_to_derive_from * reduction_list.len();
+
+                let mut cost = CostFeatures::default();
+
+                match array_type {
+                    ArrayType::Ciphertext => {
+                        cost.ct_rotations =
+                            if rotate_extents.len() > 0 {
+                                rotate_extents.iter().product()
+
+                            } else {
+                                0
+                            };
+
+                        cost.ct_pt_mul =
+                            if mult_extents.len() > 0 {
+                                mult_extents.iter().product()
+
+                            } else {
+                                0
+                            };
+                        cost.ct_ct_add += reduce_and_sum_ops;
+                        cost.ct_rotations += reduce_and_sum_ops;
+                    },
+
+                    ArrayType::Plaintext => {
+                        cost.pt_rotations =
+                            if rotate_extents.len() > 0 {
+                                rotate_extents.iter().product()
+
+                            } else {
+                                0
+                            };
+
+                        cost.pt_pt_mul =
+                            if mult_extents.len() > 0 {
+                                mult_extents.iter().product()
+
+                            } else {
+                                0
+                            };
+                        cost.pt_pt_add += reduce_and_sum_ops;
+                        cost.pt_rotations += reduce_and_sum_ops;
+                    }
+                }
+
+                Some(cost)
+            }
+
+            CircuitValue::Single(dst_vector) => {
+                let derive_opt =
+                    match src {
+                        CircuitValue::CoordMap(src_map) => {
+                            VectorDeriver::derive_from_list(src_map.object_iter(), dst_vector)
+                        }
+
+                        CircuitValue::Single(src_vector) => {
+                            src_vector.derive(dst_vector)
+                            .map(|(steps, mask)| {
+                                (src_vector.clone(), im::Vector::new(), steps, mask)
+                            })
+                        }
+                    };
+                
+                if let Some((_, _, steps, mask)) = derive_opt {
+                    let dims_to_fill = ref_expr_sched.dims_to_fill().0;
+                    let reduction_list  = util::get_reduction_list(dims_to_fill);
+                    let mut cost = CostFeatures::default();
+
+                    match array_type {
+                        ArrayType::Ciphertext => {
+                            if steps != 0 {
+                                cost.ct_rotations += 1;
+                            }
+
+                            if let PlaintextObject::Mask(_) = mask {
+                                cost.ct_pt_mul += 1;
+                            }
+
+                            cost.ct_ct_add += reduction_list.len();
+                            cost.ct_rotations += reduction_list.len();
+                        },
+                        
+                        ArrayType::Plaintext => {
+                            if steps != 0 {
+                                cost.pt_rotations += 1;
+                            }
+
+                            if let PlaintextObject::Mask(_) = mask {
+                                cost.pt_pt_mul += 1;
+                            }
+
+                            cost.pt_pt_add += reduction_list.len();
+                            cost.pt_rotations += reduction_list.len();
+                        }
+                    };
+
+                    return Some(cost)
+
+                } else {
+                    return None;
+                }
+            },
+        }
+    }
 
     // derive a circuit value from a source circuit value
     pub fn derive_from_source<T: CircuitObject>(

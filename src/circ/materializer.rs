@@ -142,34 +142,7 @@ impl<'a> Materializer<'a> {
         old_val: CircuitValue<T>,
         ref_expr_sched: &ExprSchedule,
     ) -> (CircuitValue<T>, Option<CircuitDecl>) {
-        let mut block_size = 1;
-        let mut dims_to_fill: Vec<(usize, usize)> = Vec::new();
-        let mut mask_vector: im::Vector<(usize, usize, usize)> = im::Vector::new();
-        for dim in ref_expr_sched.vectorized_dims.iter().rev() {
-            match dim {
-                VectorScheduleDim::Filled(sdim) => {
-                    let size = sdim.size();
-                    block_size *= size;
-                    mask_vector.push_front((size, 0, size-1));
-                }
-
-                VectorScheduleDim::ReducedRepeated(extent) => {
-                    block_size *= *extent;
-                    mask_vector.push_front((*extent, 0, extent-1));
-                }
-
-                VectorScheduleDim::Reduced(extent, pad_left, pad_right) => {
-                    // only fill if the extent is more than 1
-                    if *extent > 1 {
-                        dims_to_fill.push((*extent, block_size));
-                        block_size *= extent + pad_left + pad_right;
-                        mask_vector.push_front((*extent, 0, 0));
-                    } else {
-                        mask_vector.push_front((*extent, 0, extent-1));
-                    }
-                }
-            }
-        }
+        let (dims_to_fill, mask_vector) = ref_expr_sched.dims_to_fill();
 
         if dims_to_fill.len() == 0 {
             (old_val, None)
@@ -209,13 +182,7 @@ impl<'a> Materializer<'a> {
                 self.registry.register_circuit(ParamCircuitExpr::Op(Operator::Mul, obj_id, mask_id));
 
             // fill reduced dimensions!
-            let mut reduction_list: Vec<usize> = Vec::new();
-            for (extent, block_size) in dims_to_fill {
-                reduction_list.extend(
-                    util::descending_pow2_list(extent >> 1)
-                    .into_iter().rev().map(|x| x * block_size)
-                );
-            }
+            let reduction_list  = util::get_reduction_list(dims_to_fill);
 
             let expr_id = 
                 reduction_list.into_iter()

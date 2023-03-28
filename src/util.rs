@@ -87,6 +87,19 @@ pub fn get_factor_pairs(n: usize) -> Vec<(usize, usize)> {
     pairs
 }
 
+// return rotation steps for a list of dims (extent and blocksize pairs) to reduce
+pub fn get_reduction_list(dims_to_fill: Vec<(usize, usize)>) -> Vec<isize> {
+    let mut reduction_list: Vec<isize> = Vec::new();
+    for (extent, block_size) in dims_to_fill {
+        reduction_list.extend(
+            descending_pow2_list(extent >> 1)
+            .into_iter().rev().map(|x| (x * block_size) as isize)
+        );
+    }
+
+    reduction_list
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

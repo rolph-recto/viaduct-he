@@ -271,9 +271,9 @@ impl<'m, 't> Scheduler<'m, 't> {
             }
         }
 
-        for pschedule in to_remove {
-            self.pareto_frontier.remove(&pschedule);
-        }
+       for pschedule in to_remove {
+           self.pareto_frontier.remove(&pschedule);
+       }
 
         if add_new {
             self.pareto_frontier.insert((id, schedule), cost);

@@ -424,7 +424,7 @@ impl ExprSchedule {
                         let dims_match =
                             match transform.dims[fdim1.index] {
                                 DimContent::FilledDim { dim, extent, stride } =>
-                                    dim == fdim2.index,
+                                    dim == fdim2.index && stride == fdim2.stride,
 
                                 DimContent::EmptyDim { extent } =>
                                     false,
@@ -507,6 +507,40 @@ impl ExprSchedule {
                 None,
             ))
         }
+    }
+
+    // returns a list of (extent,blocksize) to clean and fill (reduced dims) and a mask
+    pub fn dims_to_fill(&self) -> (Vec<(usize,usize)>, im::Vector<(usize,usize,usize)>) {
+        let mut block_size = 1;
+        let mut dims_to_fill: Vec<(usize, usize)> = Vec::new();
+        let mut mask_vector: im::Vector<(usize,usize,usize)> = im::Vector::new();
+        for dim in self.vectorized_dims.iter().rev() {
+            match dim {
+                VectorScheduleDim::Filled(sdim) => {
+                    let size = sdim.size();
+                    block_size *= size;
+                    mask_vector.push_front((size, 0, size-1));
+                }
+
+                VectorScheduleDim::ReducedRepeated(extent) => {
+                    block_size *= *extent;
+                    mask_vector.push_front((*extent, 0, extent-1));
+                }
+
+                VectorScheduleDim::Reduced(extent, pad_left, pad_right) => {
+                    // only fill if the extent is more than 1
+                    if *extent > 1 {
+                        dims_to_fill.push((*extent, block_size));
+                        block_size *= extent + pad_left + pad_right;
+                        mask_vector.push_front((*extent, 0, 0));
+                    } else {
+                        mask_vector.push_front((*extent, 0, extent-1));
+                    }
+                }
+            }
+        }
+
+        (dims_to_fill, mask_vector)
     }
 }
 

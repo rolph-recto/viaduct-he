@@ -1,0 +1,502 @@
+warning: unused manifest key: package.about
+warning: unused manifest key: package.author
+   Compiling he_vectorizer v0.1.0 (/Users/rolphrecto/projects/he_vectorizer)
+warning: unused import: `Ordering`
+ --> src/circ/cost.rs:2:16
+  |
+2 |     cmp::{max, Ordering},
+  |                ^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `itertools::chain`
+ --> src/circ/materializer.rs:6:5
+  |
+6 | use itertools::chain;
+  |     ^^^^^^^^^^^^^^^^
+
+warning: unused import: `log::info`
+ --> src/circ/pseudomaterializer.rs:3:5
+  |
+3 | use log::info;
+  |     ^^^^^^^^^
+
+warning: unused import: `HashMap`
+ --> src/circ/optimizer.rs:6:28
+  |
+6 |     collections::{HashSet, HashMap},
+  |                            ^^^^^^^
+
+warning: unused import: `egg::*`
+ --> src/circ/optimizer/greedy_extractor.rs:2:5
+  |
+2 | use egg::*;
+  |     ^^^^^^
+
+warning: unused imports: `cmp::Ordering`, `collections::HashMap`
+ --> src/circ/optimizer/greedy_extractor.rs:3:11
+  |
+3 | use std::{cmp::Ordering, collections::HashMap};
+  |           ^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::circ::optimizer::*`
+ --> src/circ/optimizer/lp_extractor.rs:1:5
+  |
+1 | use crate::circ::optimizer::*;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `Col`, `Model`, `Sense`
+ --> src/circ/optimizer/lp_extractor.rs:2:16
+  |
+2 | use coin_cbc::{Col, Model, Sense};
+  |                ^^^  ^^^^^  ^^^^^
+
+warning: unused imports: `*`, `solvers::coin_cbc::CoinCbcProblem`
+ --> src/circ/optimizer/lp_extractor.rs:3:15
+  |
+3 | use good_lp::{solvers::coin_cbc::CoinCbcProblem, *};
+  |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  ^
+
+warning: unused imports: `HashMap`, `HashSet`
+ --> src/circ/optimizer/lp_extractor.rs:4:24
+  |
+4 | use std::collections::{HashMap, HashSet};
+  |                        ^^^^^^^  ^^^^^^^
+
+warning: unused import: `super::cost::HELatencyModel`
+ --> src/circ/optimizer/lp_extractor.rs:6:5
+  |
+6 | use super::cost::HELatencyModel;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `log::info`
+ --> src/circ/vector_deriver.rs:2:5
+  |
+2 | use log::info;
+  |     ^^^^^^^^^
+
+warning: unused import: `log::info`
+ --> src/circ/vector_info.rs:8:5
+  |
+8 | use log::info;
+  |     ^^^^^^^^^
+
+warning: unused import: `array`
+ --> src/lang/elaborated.rs:3:19
+  |
+3 |     fmt::Display, array,
+  |                   ^^^^^
+
+warning: unused imports: `*`, `Hasher`, `array`, `hash_set`
+ --> src/lang/index_elim.rs:2:19
+  |
+2 |     collections::{hash_set, HashSet},
+  |                   ^^^^^^^^
+3 |     hash::{Hasher, *}, array,
+  |            ^^^^^^  ^   ^^^^^
+
+warning: unused import: `log::debug`
+ --> src/lang/index_elim.rs:9:5
+  |
+9 | use log::debug;
+  |     ^^^^^^^^^^
+
+warning: unused imports: `HashMap`, `HashSet`
+ --> src/program.rs:6:24
+  |
+6 | use std::collections::{HashMap, HashSet};
+  |                        ^^^^^^^  ^^^^^^^
+
+warning: unused import: `process::id`
+ --> src/program/lowering.rs:1:44
+  |
+1 | use std::{collections::{HashMap, HashSet}, process::id};
+  |                                            ^^^^^^^^^^^
+
+warning: unused import: `fs::rename`
+ --> src/program/backend/pyseal.rs:4:44
+  |
+4 | use std::{collections::{HashMap, HashSet}, fs::rename};
+  |                                            ^^^^^^^^^^
+
+warning: unused imports: `array`, `mem::MaybeUninit`
+ --> src/scheduling.rs:3:31
+  |
+3 |     fmt::Display, ops::Index, mem::MaybeUninit, array,
+  |                               ^^^^^^^^^^^^^^^^  ^^^^^
+
+warning: unused import: `log::info`
+ --> src/scheduling.rs:7:5
+  |
+7 | use log::info;
+  |     ^^^^^^^^^
+
+warning: unused import: `time::Instant`
+ --> src/scheduling/scheduler.rs:1:44
+  |
+1 | use std::{collections::{HashSet, HashMap}, time::Instant};
+  |                                            ^^^^^^^^^^^^^
+
+warning: unused import: `PseudoMaterializer`
+ --> src/scheduling/scheduler.rs:8:26
+  |
+8 |     pseudomaterializer::{PseudoMaterializer, PseudoMaterializerFactory}},
+  |                          ^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `ops::Index`
+ --> src/circ/materializer.rs:3:17
+  |
+3 |     hash::Hash, ops::Index
+  |                 ^^^^^^^^^^
+
+warning: unused import: `crate::circ::optimizer`
+ --> src/circ/optimizer/greedy_extractor.rs:1:5
+  |
+1 | use crate::circ::optimizer::*;
+  |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `materializer::MaterializerFactory`
+ --> src/scheduling/scheduler.rs:7:12
+  |
+7 |     circ::{materializer::MaterializerFactory, cost::{CostEstimator, CostFeatures},
+  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused variable: `array_type`
+    --> src/circ/materializer.rs:1045:9
+     |
+1045 |         array_type: ArrayType,
+     |         ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_array_type`
+     |
+     = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `array_shape`
+    --> src/circ/materializer.rs:1046:9
+     |
+1046 |         array_shape: &Shape,
+     |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_array_shape`
+
+warning: unused variable: `schedule`
+    --> src/circ/materializer.rs:1047:9
+     |
+1047 |         schedule: &IndexingSiteSchedule,
+     |         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_schedule`
+
+warning: unused variable: `transform`
+    --> src/circ/materializer.rs:1048:9
+     |
+1048 |         transform: &ArrayTransform,
+     |         ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_transform`
+
+warning: unused variable: `eclass`
+  --> src/circ/optimizer/dijkstra_extractor.rs:73:33
+   |
+73 |     fn get_node_cost(&mut self, eclass: Id, enode: &L) -> CF::Cost {
+   |                                 ^^^^^^ help: if this is intentional, prefix it with an underscore: `_eclass`
+
+warning: unused variable: `size`
+   --> src/circ/optimizer.rs:516:16
+    |
+516 |     pub fn new(size: usize) -> Self {
+    |                ^^^^ help: if this is intentional, prefix it with an underscore: `_size`
+
+warning: unused variable: `lit`
+   --> src/circ/plaintext_hoisting.rs:230:39
+    |
+230 |             ParamCircuitExpr::Literal(lit) => {
+    |                                       ^^^ help: if this is intentional, prefix it with an underscore: `_lit`
+
+warning: unused variable: `extent`
+   --> src/circ/vector_info.rs:409:49
+    |
+409 |             if let VectorDimContent::EmptyDim { extent, pad_left, pad_right, oob_right }
+    |                                                 ^^^^^^ help: try ignoring the field: `extent: _`
+
+warning: unused variable: `pad_left`
+   --> src/circ/vector_info.rs:409:57
+    |
+409 |             if let VectorDimContent::EmptyDim { extent, pad_left, pad_right, oob_right }
+    |                                                         ^^^^^^^^ help: try ignoring the field: `pad_left: _`
+
+warning: unused variable: `pad_right`
+   --> src/circ/vector_info.rs:409:67
+    |
+409 |             if let VectorDimContent::EmptyDim { extent, pad_left, pad_right, oob_right }
+    |                                                                   ^^^^^^^^^ help: try ignoring the field: `pad_right: _`
+
+warning: unused variable: `oob_right`
+   --> src/circ/vector_info.rs:409:78
+    |
+409 |             if let VectorDimContent::EmptyDim { extent, pad_left, pad_right, oob_right }
+    |                                                                              ^^^^^^^^^ help: try ignoring the field: `oob_right: _`
+
+warning: unused variable: `extent`
+   --> src/circ/vector_info.rs:419:49
+    |
+419 |             if let VectorDimContent::EmptyDim { extent, pad_left, pad_right, oob_right } =
+    |                                                 ^^^^^^ help: try ignoring the field: `extent: _`
+
+warning: unused variable: `pad_left`
+   --> src/circ/vector_info.rs:419:57
+    |
+419 |             if let VectorDimContent::EmptyDim { extent, pad_left, pad_right, oob_right } =
+    |                                                         ^^^^^^^^ help: try ignoring the field: `pad_left: _`
+
+warning: unused variable: `pad_right`
+   --> src/circ/vector_info.rs:419:67
+    |
+419 |             if let VectorDimContent::EmptyDim { extent, pad_left, pad_right, oob_right } =
+    |                                                                   ^^^^^^^^^ help: try ignoring the field: `pad_right: _`
+
+warning: unused variable: `oob_right`
+   --> src/circ/vector_info.rs:419:78
+    |
+419 |             if let VectorDimContent::EmptyDim { extent, pad_left, pad_right, oob_right } =
+    |                                                                              ^^^^^^^^^ help: try ignoring the field: `oob_right: _`
+
+warning: unused variable: `pad_left1`
+   --> src/circ/vector_info.rs:447:35
+    |
+447 |                         pad_left: pad_left1, pad_right: pad_right1,
+    |                                   ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_pad_left1`
+
+warning: unused variable: `pad_right1`
+   --> src/circ/vector_info.rs:447:57
+    |
+447 |                         pad_left: pad_left1, pad_right: pad_right1,
+    |                                                         ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_pad_right1`
+
+warning: unused variable: `oob_left2`
+   --> src/circ/vector_info.rs:451:35
+    |
+451 |                         oob_left: oob_left2, oob_right: oob_right2,
+    |                                   ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_oob_left2`
+
+warning: unused variable: `oob_right2`
+   --> src/circ/vector_info.rs:451:57
+    |
+451 |                         oob_left: oob_left2, oob_right: oob_right2,
+    |                                                         ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_oob_right2`
+
+warning: unused variable: `pad_left2`
+   --> src/circ/vector_info.rs:452:35
+    |
+452 |                         pad_left: pad_left2, pad_right: pad_right2,
+    |                                   ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_pad_left2`
+
+warning: unused variable: `pad_right2`
+   --> src/circ/vector_info.rs:452:57
+    |
+452 |                         pad_left: pad_left2, pad_right: pad_right2,
+    |                                                         ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_pad_right2`
+
+warning: unused variable: `stride1`
+   --> src/circ/vector_info.rs:580:62
+    |
+580 |                         dim: idim1, extent: extent1, stride: stride1,
+    |                                                              ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_stride1`
+
+warning: unused variable: `oob_right1`
+   --> src/circ/vector_info.rs:581:57
+    |
+581 |                         oob_left: oob_left1, oob_right: oob_right1,
+    |                                                         ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_oob_right1`
+
+warning: unused variable: `stride2`
+   --> src/circ/vector_info.rs:585:62
+    |
+585 |                         dim: idim2, extent: extent2, stride: stride2,
+    |                                                              ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_stride2`
+
+warning: unused variable: `extent2`
+   --> src/circ/vector_info.rs:668:40
+    |
+668 |                     EmptyDim { extent: extent2, pad_left: pad_left2, pad_right: pad_right2, oob_right: oob_right2 }) => {
+    |                                        ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_extent2`
+
+warning: unused variable: `extent2`
+   --> src/circ/vector_info.rs:685:40
+    |
+685 |                     EmptyDim { extent: extent2, pad_left: pad_left2, pad_right: pad_right2, oob_right: oob_right2  }) => {
+    |                                        ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_extent2`
+
+warning: unused variable: `i`
+   --> src/circ/vector_info.rs:574:25
+    |
+574 |             .for_each(|(i, (dim1, dim2))| {
+    |                         ^ help: if this is intentional, prefix it with an underscore: `_i`
+
+warning: unused variable: `indexed_extent`
+   --> src/lang/index_elim.rs:597:45
+    |
+597 | ...                   extent: indexed_extent,
+    |                               ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_indexed_extent`
+
+warning: unused variable: `index`
+  --> src/lang/typechecker.rs:44:17
+   |
+44 |             For(index, extent, body) => {
+   |                 ^^^^^ help: if this is intentional, prefix it with an underscore: `_index`
+
+warning: unused variable: `extent`
+  --> src/lang/typechecker.rs:44:24
+   |
+44 |             For(index, extent, body) => {
+   |                        ^^^^^^ help: if this is intentional, prefix it with an underscore: `_extent`
+
+warning: unused variable: `id`
+   --> src/program/lowering.rs:937:27
+    |
+937 |             let (_, dims, id) =
+    |                           ^^ help: if this is intentional, prefix it with an underscore: `_id`
+
+warning: unused variable: `pad_left`
+   --> src/scheduling.rs:307:48
+    |
+307 |             VectorScheduleDim::Reduced(extent, pad_left, pad_right) =>
+    |                                                ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_pad_left`
+
+warning: unused variable: `pad_right`
+   --> src/scheduling.rs:307:58
+    |
+307 |             VectorScheduleDim::Reduced(extent, pad_left, pad_right) =>
+    |                                                          ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_pad_right`
+
+warning: unused variable: `extent`
+   --> src/scheduling.rs:426:62
+    |
+426 | ...                   DimContent::FilledDim { dim, extent, stride } =>
+    |                                                    ^^^^^^ help: try ignoring the field: `extent: _`
+
+warning: unused variable: `extent`
+   --> src/scheduling.rs:429:56
+    |
+429 | ...                   DimContent::EmptyDim { extent } =>
+    |                                              ^^^^^^ help: try ignoring the field: `extent: _`
+
+warning: unused variable: `sched2`
+   --> src/scheduling.rs:658:77
+    |
+658 |             (ExprScheduleType::Specific(sched1), ExprScheduleType::Specific(sched2)) => {
+    |                                                                             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_sched2`
+
+warning: variable does not need to be mutable
+   --> src/lang/elaborated.rs:199:33
+    |
+199 |                 let (new_expr2, mut expr2_renames) = self.elaborate_expr(*expr2);
+    |                                 ----^^^^^^^^^^^^^
+    |                                 |
+    |                                 help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: function `is_const_nonzero` is never used
+   --> src/circ/optimizer.rs:393:4
+    |
+393 | fn is_const_nonzero(var: &'static str) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
+    |    ^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: fields `cost_function`, `costs`, and `egraph` are never read
+  --> src/circ/optimizer/dijkstra_extractor.rs:31:5
+   |
+30 | pub struct DijkstraExtractor<'a, CF: CostFunction<L>, L: Language, N: Analysis<L>> {
+   |            ----------------- fields in this struct
+31 |     cost_function: CF,
+   |     ^^^^^^^^^^^^^
+32 |     costs: HashMap<Id, (CF::Cost, L)>,
+   |     ^^^^^
+33 |     egraph: &'a EGraph<L, N>,
+   |     ^^^^^^
+   |
+   = note: `DijkstraExtractor` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: associated function `new` is never used
+  --> src/circ/optimizer/dijkstra_extractor.rs:49:12
+   |
+49 |     pub fn new(egraph: &'a EGraph<L, N>, cost_function: CF) -> Self {
+   |            ^^^
+
+warning: associated function `find_best` is never used
+  --> src/circ/optimizer/dijkstra_extractor.rs:62:12
+   |
+62 |     pub fn find_best(&self, eclass: Id) -> (CF::Cost, RecExpr<L>) {
+   |            ^^^^^^^^^
+
+warning: associated function `find_best_node` is never used
+  --> src/circ/optimizer/dijkstra_extractor.rs:69:12
+   |
+69 |     pub fn find_best_node(&self, eclass: Id) -> &L {
+   |            ^^^^^^^^^^^^^^
+
+warning: associated function `get_node_cost` is never used
+  --> src/circ/optimizer/dijkstra_extractor.rs:73:8
+   |
+73 |     fn get_node_cost(&mut self, eclass: Id, enode: &L) -> CF::Cost {
+   |        ^^^^^^^^^^^^^
+
+warning: associated function `find_costs` is never used
+  --> src/circ/optimizer/dijkstra_extractor.rs:80:8
+   |
+80 |     fn find_costs(&mut self) {
+   |        ^^^^^^^^^^
+
+warning: type alias `ShapeConstraint` is never used
+  --> src/lang/extent_analysis.rs:17:6
+   |
+17 | type ShapeConstraint = Vec<ConstraintVar>;
+   |      ^^^^^^^^^^^^^^^
+
+warning: field `op` is never read
+   --> src/lang/index_elim.rs:220:14
+    |
+220 |     Reduce { op: Operator },
+    |     ------   ^^
+    |     |
+    |     field in this variant
+
+warning: associated function `get_index_extent` is never used
+   --> src/lang/index_elim.rs:232:8
+    |
+232 |     fn get_index_extent(&self, index_var: &IndexVar) -> Option<usize> {
+    |        ^^^^^^^^^^^^^^^^
+
+warning: variant `GetVector` is never constructed
+  --> src/program/backend/pyseal.rs:62:5
+   |
+19 | enum SEALOpType {
+   |      ---------- variant in this enum
+...
+62 |     GetVector,
+   |     ^^^^^^^^^
+
+warning: `he_vectorizer` (lib) generated 74 warnings
+warning: unused imports: `Duration`, `Instant`
+ --> src/main.rs:3:39
+  |
+3 | use std::{fs::File, io::Write, time::{Duration, Instant}};
+  |                                       ^^^^^^^^  ^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused imports: `DefaultArrayMaterializer`, `Materializer`, `ParamCircuitProgram`, `Schedule`
+  --> src/main.rs:13:24
+   |
+13 |         materializer::{DefaultArrayMaterializer, Materializer, InputArrayMaterializer, DefaultMaterializerFactory, MaterializerFactory},
+   |                        ^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^
+14 |         plaintext_hoisting::PlaintextHoisting, cost::CostFeatures, ParamCircuitProgram, pseudomaterializer::DefaultPseudoMaterializerFactory
+   |                                                                    ^^^^^^^^^^^^^^^^^^^
+...
+22 |         Schedule,
+   |         ^^^^^^^^
+
+warning: unused import: `InputArrayMaterializer`
+  --> src/main.rs:13:64
+   |
+13 |         materializer::{DefaultArrayMaterializer, Materializer, InputArrayMaterializer, DefaultMaterializerFactory, MaterializerFactory},
+   |                                                                ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `he_vectorizer` (bin "he_vectorizer") generated 3 warnings
+    Finished dev [unoptimized + debuginfo] target(s) in 1.34s
+     Running `target/debug/he_vectorizer benchmarks/set-union.tlhe -d 2 -e lp --size 16384`
+[/Users/rolphrecto/.cargo/registry/src/github.com-1ecc6299db9ec823/egg-0.9.0/src/lp_extract.rs:137] max_order = 31690.0

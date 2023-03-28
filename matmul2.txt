@@ -1,0 +1,120 @@
+[2023-03-27T23:17:48Z INFO  he_vectorizer] parsing...
+[2023-03-27T23:17:48Z INFO  he_vectorizer] elaboration...
+[2023-03-27T23:17:48Z INFO  he_vectorizer] generating inline sets and array groups...
+[2023-03-27T23:17:48Z INFO  he_vectorizer] scheduling...
+[2023-03-27T23:17:48Z INFO  he_vectorizer::scheduling::scheduler] initializing pareto frontier...
+[2023-03-27T23:17:48Z INFO  he_vectorizer::scheduling::scheduler] inline schedulers: 1
+[2023-03-27T23:17:48Z INFO  he_vectorizer::scheduling::scheduler] init pareto frontier size: 1
+[2023-03-27T23:17:48Z INFO  he_vectorizer::scheduling::scheduler] running scheduler with iter limit: None
+[2023-03-27T23:17:48Z INFO  he_vectorizer::scheduling::scheduler] iteration 0
+    new schedules visited: 3; new valid schedules found: 1
+[2023-03-27T23:17:48Z INFO  he_vectorizer::scheduling::scheduler] iteration 1
+    new schedules visited: 9; new valid schedules found: 3
+[2023-03-27T23:17:48Z INFO  he_vectorizer::scheduling::scheduler] iteration 2
+    new schedules visited: 20; new valid schedules found: 2
+[2023-03-27T23:17:48Z INFO  he_vectorizer::scheduling::scheduler] iteration 3
+    new schedules visited: 24; new valid schedules found: 6
+[2023-03-27T23:17:48Z INFO  he_vectorizer::scheduling::scheduler] iteration 4
+    new schedules visited: 26; new valid schedules found: 2
+[2023-03-27T23:17:48Z INFO  he_vectorizer::scheduling::scheduler] iteration 5
+    new schedules visited: 6; new valid schedules found: 6
+[2023-03-27T23:17:48Z INFO  he_vectorizer::scheduling::scheduler] iteration 6
+    new schedules visited: 0; new valid schedules found: 0
+[2023-03-27T23:17:48Z INFO  he_vectorizer::scheduling::scheduler] pareto schedule: B_1 => {}[i7.0:4::1, i6.2:4::1, i5.1:4::1]
+    A1_1 => {}[i7.0:4::1, i6.2:4::1, i5.1:4::1]
+    A2_1 => {}[i2.1:4::1, i0.2:4::1, i11.0:4::1]
+    res_1 => {}[i2.1:4::1, i0.2:4::1, i11.0:4::1]
+    
+[2023-03-27T23:17:48Z INFO  he_vectorizer::scheduling::scheduler] cost: CostFeatures { input_ciphertexts: 3, input_plaintexts: 0, output_ciphertexts: 0, ct_rotations: 5, pt_rotations: 0, ct_ct_add: 4, ct_pt_add: 0, pt_pt_add: 0, ct_ct_mul: 2, ct_pt_mul: 1, pt_pt_mul: 0, ct_ct_sub: 0, ct_pt_sub: 0, pt_pt_sub: 0, ct_ct_muldepth: 0, ct_pt_muldepth: 0 }
+[2023-03-27T23:17:48Z INFO  he_vectorizer] found schedule:
+    B_1 => {}[i7.0:4::1, i6.2:4::1, i5.1:4::1]
+    A1_1 => {}[i7.0:4::1, i6.2:4::1, i5.1:4::1]
+    A2_1 => {}[i2.1:4::1, i0.2:4::1, i11.0:4::1]
+    res_1 => {}[i2.1:4::1, i0.2:4::1, i11.0:4::1]
+    
+[2023-03-27T23:17:48Z INFO  he_vectorizer] circuit generation...
+[2023-03-27T23:17:48Z INFO  he_vectorizer] generated circuit:
+    ct2 => 
+    B[0, 0]<{0:4::1}, {1:4::1}, {4}>
+    ct3 => 
+    A2[0, 0]<{0:4::1}, {4}, {1:4::1}>
+    ct4 => 
+    res
+    ct1 => 
+    A1[0, 0]<{1:4::1}, {4}, {0:4::1}>
+    let res = 4 => CT(ct2)
+    2 => CT(ct1)
+    5 => (2 * 4)
+    6 => rot(-32, 5)
+    7 => (5 + 6)
+    8 => rot(-16, 7)
+    9 => (7 + 8)
+    
+    let __out = 11 => CT(ct3)
+    13 => CT(ct4)
+    14 => (11 * 13)
+    15 => rot(-2, 14)
+    16 => (14 + 15)
+    17 => rot(-1, 16)
+    18 => (16 + 17)
+    
+    
+[2023-03-27T23:17:48Z INFO  he_vectorizer] plaintext hoisting...
+[2023-03-27T23:17:48Z INFO  he_vectorizer] circuit lowering...
+[2023-03-27T23:17:48Z INFO  he_vectorizer] program:
+    val v_A2_1: C = vector(A2[0, 0]<{0:4::1}, {4}, {1:4::1}>)
+    val v_A1_1: C = vector(A1[0, 0]<{1:4::1}, {4}, {0:4::1}>)
+    val v_B_1: C = vector(B[0, 0]<{0:4::1}, {1:4::1}, {4}>)
+    var res: C
+    CC: i2 = v_A1_1 * v_B_1
+    CC: i3 = rot -32 i2
+    CC: i4 = i2 + i3
+    CC: i5 = rot -16 i4
+    CC: i6 = i4 + i5
+    res = i6
+    var __out: C
+    CC: i9 = v_A2_1 * res
+    CC: i10 = rot -2 i9
+    CC: i11 = i9 + i10
+    CC: i12 = rot -1 i11
+    CC: i13 = i11 + i12
+    __out = i13
+[2023-03-27T23:17:48Z INFO  he_vectorizer] compiling with PySEAL backend...
+[2023-03-27T23:17:48Z INFO  he_vectorizer] printed generated code to stdout
+def client_pre(wrapper):
+    wrapper.client_input("B")
+    wrapper.client_input("A1")
+    wrapper.client_input("A2")
+    v_A2_1 = wrapper.build_vector("A2", None, [0, 0], [FilledDim(0, 4, 1, 0, 0, 0, 0), EmptyDim(4, 0, 0, 0), FilledDim(1, 4, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_A2_1", v_A2_1)
+    v_A1_1 = wrapper.build_vector("A1", None, [0, 0], [FilledDim(1, 4, 1, 0, 0, 0, 0), EmptyDim(4, 0, 0, 0), FilledDim(0, 4, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_A1_1", v_A1_1)
+    v_B_1 = wrapper.build_vector("B", None, [0, 0], [FilledDim(0, 4, 1, 0, 0, 0, 0), FilledDim(1, 4, 1, 0, 0, 0, 0), EmptyDim(4, 0, 0, 0)])
+    wrapper.client_send("v_B_1", v_B_1)
+
+def client_post(wrapper):
+    __out = wrapper.client_recv("__out")
+    wrapper.client_output(__out)
+
+def server(wrapper):
+    v_A2_1 = wrapper.server_recv("v_A2_1")
+    v_A1_1 = wrapper.server_recv("v_A1_1")
+    v_B_1 = wrapper.server_recv("v_B_1")
+    res = wrapper.ciphertext_array([])
+    instr2 = wrapper.multiply(v_A1_1.get(), v_B_1.get())
+    wrapper.relinearize_inplace(instr2)
+    instr3 = wrapper.rotate_rows(-32, instr2)
+    wrapper.add_inplace(instr2, instr3)
+    instr5 = wrapper.rotate_rows(-16, instr2)
+    wrapper.add_inplace(instr2, instr5)
+    wrapper.set(res, [], instr2)
+    __out = wrapper.ciphertext_array([])
+    instr9 = wrapper.multiply(v_A2_1.get(), res.get())
+    wrapper.relinearize_inplace(instr9)
+    instr10 = wrapper.rotate_rows(-2, instr9)
+    wrapper.add_inplace(instr9, instr10)
+    instr12 = wrapper.rotate_rows(-1, instr9)
+    wrapper.add_inplace(instr9, instr12)
+    wrapper.set(__out, [], instr9)
+    wrapper.server_send("__out", __out)
+

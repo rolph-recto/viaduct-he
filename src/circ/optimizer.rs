@@ -146,8 +146,8 @@ impl Analysis<HEOptCircuit> for HEAnalysis {
             (None, Some(m2)) => Some(m2),
             (Some(m1), None) => Some(m1),
             (Some(m1), Some(m2)) => {
-                assert_eq!(m1, m2);
-                Some(m1)
+                // assert_eq!(m1, m2, "to: {:?}, from: {:?}", to, from);
+                Some(min(m1, m2))
             }
         };
         let multiplicity_merge =
@@ -183,8 +183,7 @@ impl Analysis<HEOptCircuit> for HEAnalysis {
                         (None, Some(m2)) => Some(m2),
                         (Some(m1), None) => Some(m1),
                         (Some(m1), Some(m2)) => {
-                            assert_eq!(m1, m2);
-                            Some(m1)
+                            Some(min(m1, m2))
                         }
                     };
 
@@ -224,15 +223,19 @@ impl Analysis<HEOptCircuit> for HEAnalysis {
                         (None, Some(m2)) => Some(m2),
                         (Some(m1), None) => Some(m1),
                         (Some(m1), Some(m2)) => {
-                            assert!(m1 == m2);
-                            Some(m1)
+                            Some(min(m1, m2))
                         }
                     };
 
                 let constval: Option<isize> =
-                    data1.constval.and_then(|d1| {
-                        data2.constval.map(|d2| d1 * d2)
-                    });
+                    match (data1.constval, data2.constval) {
+                        (None, None) => None,
+                        (None, Some(0)) => Some(0),
+                        (Some(0), None) => Some(0),
+                        (None, Some(_)) => None,
+                        (Some(_), None) => None,
+                        (Some(c1), Some(c2)) => Some(c1 * c2),
+                    };
 
                 let mut index_vars: HashSet<String> = HashSet::new();
                 index_vars.extend(data1.index_vars.clone());
@@ -513,16 +516,14 @@ impl Optimizer {
     pub fn new(size: usize) -> Self {
         let mut rules: Vec<Rewrite<HEOptCircuit, HEAnalysis>> = vec![
             // bidirectional addition rules
-            rewrite!("add-identity"; "(+ ?a 0)" <=> "?a" if is_not_index_var("?a")),
-            rewrite!("add-assoc"; "(+ ?a (+ ?b ?c))" <=> "(+ (+ ?a ?b) ?c)"),
-            rewrite!("add-commute"; "(+ ?a ?b)" <=> "(+ ?b ?a)"),
+            // rewrite!("add-assoc"; "(+ ?a (+ ?b ?c))" <=> "(+ (+ ?a ?b) ?c)"),
+            // rewrite!("add-commute"; "(+ ?a ?b)" <=> "(+ ?b ?a)"),
             rewrite!("add-to-two"; "(+ ?a ?a)" <=> "(* 2 ?a)"),
             rewrite!("sub-inverse"; "(- ?a ?b)" <=> "(+ ?a (* -1 ?b))"),
 
             // bidirectional multiplication rules
-            rewrite!("mul-identity"; "(* ?a 1)" <=> "?a" if is_not_index_var("?a")),
-            rewrite!("mul-assoc"; "(* ?a (* ?b ?c))" <=> "(* (* ?a ?b) ?c)"),
-            rewrite!("mul-commute"; "(* ?a ?b)" <=> "(* ?b ?a)"),
+            // rewrite!("mul-assoc"; "(* ?a (* ?b ?c))" <=> "(* (* ?a ?b) ?c)"),
+            // rewrite!("mul-commute"; "(* ?a ?b)" <=> "(* ?b ?a)"),
             rewrite!("mul-distribute"; "(* (+ ?a ?b) ?c)" <=> "(+ (* ?a ?c) (* ?b ?c))"),
 
             // bidirectional rotation rules
@@ -539,6 +540,9 @@ impl Optimizer {
 
         rules.extend(vec![
             // unidirectional rules
+            // add-identity is causing infeasible LP problems
+            rewrite!("add-identity"; "(+ ?a 0)" => "?a" if is_not_index_var("?a")),
+            rewrite!("mul-identity"; "(* ?a 1)" => "?a" if is_not_index_var("?a")),
             rewrite!("mul-annihilator"; "(* ?a 0)" => "0"),
             rewrite!("sub-to-zero"; "(- ?a ?a)" => "0"),
 
@@ -546,7 +550,8 @@ impl Optimizer {
             rewrite!("constant-fold"; "?x" => ConstFold if is_const("?x")),
 
             // split a constant value into a sum 
-            rewrite!("const-split"; "?x" => { ConstSplit {} } if is_const_nonzero("?x")),
+            // this is causing infeasible LP problems
+            // rewrite!("const-split"; "?x" => { ConstSplit {} } if is_const_nonzero("?x")),
 
             // rotation of 0 doesn't do anything
             rewrite!("rot-none"; "(rot 0 ?x)" => "?x"),
