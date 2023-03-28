@@ -33,7 +33,7 @@ use he_vectorizer::{
 };
 
 #[derive(Parser)]
-#[clap(author, version, about = "optimizer for for vectorized homomorphic encryption circuits", long_about = None)]
+#[clap(author, version, about = "compiler for vectorized homomorphic encryption", long_about = None)]
 struct HEArguments {
     /// file to parse as input
     #[clap(value_parser)]
@@ -55,16 +55,16 @@ struct HEArguments {
     )]
     outfile: Option<String>,
 
-    /// duration in seconds to run optimizer until timeout (if 0, duration is unbounded)
+    /// duration in seconds to run equality saturation (if 0, duration is unbounded)
     #[clap(short = 'd', long = "duration", value_parser, default_value_t = 20)]
     duration: usize,
 
-    /// duration in seconds to run equality saturation until timeout
-    #[clap(short = 'e', long = "extractor", value_enum, default_value_t = ExtractorType::Greedy)]
+    /// e-graph extractor to use
+    #[clap(short = 'e', long = "extractor", value_enum, default_value_t = ExtractorType::LP)]
     extractor: ExtractorType,
 
     /// vector size
-    #[clap(short = 's', long = "size", value_parser, default_value_t = 2048)]
+    #[clap(short = 's', long = "size", value_parser, default_value_t = 4096)]
     size: usize,
 
     /// don't inline instructions

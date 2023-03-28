@@ -5,14 +5,18 @@ input b_data: [128] from client
 let a_sum = sum(a_data) in
 let b_sum =
 	sum(for j: 128 {
-		b_data[j] *
-		product(for i: 128 {
-			1 - 
-			product(for k: 8 {
-				1 -
-				((a_id[i][k] - b_id[j][k]) * (a_id[i][k] - b_id[j][k]))
+		let mask =
+			product(for i: 128 {
+				let eq =
+					product(for k: 8 {
+						let xor = (a_id[i][k] - b_id[j][k]) in
+						let neq = xor * xor
+						1 - neq
+					})
+				in
+				1 - eq
 			})
-		})
+		in
 		b_data[j] * mask
 	})
 in

@@ -1,0 +1,13 @@
+input keys: [256,8] from client
+input values: [256] from client
+input query: [8] from client
+let mask =
+    for i: 256 {
+        product(for j: 8 {
+            let xor = (query[j] - keys[i][j]) in 
+            let neq = (xor * xor) in
+            1 - neq
+        })
+    }
+in
+sum(values * mask)
