@@ -120,8 +120,10 @@ fn main() {
         return;
     }
 
-    let (inlined, schedule, _) = best_opt.unwrap();
+    let (inlined, schedule, cost) = best_opt.unwrap();
     info!("found schedule:\n{}", schedule);
+    info!("cost:\n{:?}", cost);
+    info!("inlined program:\n{}", inlined);
 
     info!("circuit generation...");
     let materializer = DefaultMaterializerFactory.create();

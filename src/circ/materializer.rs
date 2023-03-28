@@ -359,7 +359,7 @@ impl<'a> Materializer<'a> {
                             .into_iter()
                             .fold(mat_body, |acc, (var, extent)| {
                                 let reduce_id = self.registry.register_circuit(
-                                    ParamCircuitExpr::ReduceDim(var, extent, op.clone(), acc),
+                                    ParamCircuitExpr::ReduceDim(var, extent, *op, acc),
                                 );
 
                                 reduce_id
@@ -378,7 +378,7 @@ impl<'a> Materializer<'a> {
 
                             let op_id =
                                 self.registry.register_circuit(
-                                    ParamCircuitExpr::Op(Operator::Add, acc, rot_id)
+                                    ParamCircuitExpr::Op(*op, acc, rot_id)
                                 );
 
                             op_id

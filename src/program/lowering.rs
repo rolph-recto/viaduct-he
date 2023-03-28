@@ -252,7 +252,19 @@ impl CircuitLowering {
         }
 
         for constval in registry.get_constants(None, None) {
-            const_map.insert(constval, format!("const_{}", constval));
+            let is_neg = constval < 0;
+            let uconstval = if is_neg { -constval } else { constval } as usize;
+            if is_neg {
+                const_map.insert(constval, format!("const_neg{}", uconstval));
+            } else {
+                const_map.insert(constval, format!("const_{}", uconstval));
+            }
+        }
+
+        // always add -1 to const_map to handle pt-ct subtraction
+        // (this gets converted to (-1 * ct) + pt)
+        if !const_map.contains_key(&-1) {
+            const_map.insert(-1, String::from("const_neg1"));
         }
 
         HEProgramContext {
@@ -529,9 +541,9 @@ impl CircuitLowering {
             }
 
             ParamCircuitExpr::Literal(val) => {
-                let lit_ref = context.const_map.get(val).unwrap();
+                let lit_refname = context.const_map.get(val).unwrap();
+                let lit_ref = HERef::Array(lit_refname.clone(), vec![]);
                 let instr_id = self.fresh_instr_id();
-                let lit_ref = HERef::Array(lit_ref.clone(), vec![]);
                 ref_map.insert(instr_id, (lit_ref, HEType::Plaintext));
                 self.circuit_instr_map.insert(expr_id, instr_id);
                 instr_id
@@ -563,39 +575,73 @@ impl CircuitLowering {
                 let (ref1, type1) = ref_map.get(&id1).unwrap().clone();
                 let (ref2, type2) = ref_map.get(&id2).unwrap().clone();
 
-                // make sure that operand 1 is always ciphertext
-                let (optype, ref1_final, ref2_final) =
-                    match (type1, type2) {
-                        (HEType::Ciphertext, HEType::Ciphertext) =>
-                            (HEInstructionType::CipherCipher, ref1, ref2),
+                // special case plain-cipher sub, since you can't switch the operands
+                // (subtraction is not commutative)
+                if let (HEType::Plaintext, HEType::Ciphertext, Operator::Sub) = (type1, type2, op) {
+                    let negone_refname = context.const_map.get(&-1).unwrap();
+                    let negone_ref = HERef::Array(negone_refname.clone(), vec![]);
 
-                        (HEType::Plaintext, HEType::Ciphertext) =>
-                            (HEInstructionType::CipherPlain, ref2, ref1),
+                    let mul_id = self.fresh_instr_id();
+                    let mul_instr =
+                        HEInstruction::Mul(
+                            HEInstructionType::CipherPlain,
+                            mul_id,
+                            ref2,
+                            negone_ref
+                        );
 
-                        (HEType::Ciphertext, HEType::Plaintext) =>
-                            (HEInstructionType::CipherPlain, ref1, ref2),
+                    stmts.push(HEStatement::Instruction(mul_instr));
+                    ref_map.insert(mul_id, (HERef::Instruction(mul_id), HEType::Ciphertext));
 
-                        (HEType::Native, _) | (_, HEType::Native) |
-                        (HEType::Plaintext, HEType::Plaintext) =>
-                            unreachable!()
+                    let add_id = self.fresh_instr_id();
+                    let add_instr =
+                        HEInstruction::Add(
+                            HEInstructionType::CipherPlain,
+                            add_id,
+                            HERef::Instruction(mul_id),
+                            ref1
+                        );
+
+                    stmts.push(HEStatement::Instruction(add_instr));
+                    ref_map.insert(add_id, (HERef::Instruction(add_id), HEType::Ciphertext));
+                    self.circuit_instr_map.insert(expr_id, add_id);
+                    add_id
+
+                } else {
+                    // make sure that operand 1 is always ciphertext
+                    let (optype, ref1_final, ref2_final) =
+                        match (type1, type2) {
+                            (HEType::Ciphertext, HEType::Ciphertext) =>
+                                (HEInstructionType::CipherCipher, ref1, ref2),
+
+                            (HEType::Plaintext, HEType::Ciphertext) =>
+                                (HEInstructionType::CipherPlain, ref2, ref1),
+
+                            (HEType::Ciphertext, HEType::Plaintext) =>
+                                (HEInstructionType::CipherPlain, ref1, ref2),
+
+                            (HEType::Native, _) | (_, HEType::Native) |
+                            (HEType::Plaintext, HEType::Plaintext) =>
+                                unreachable!()
+                        };
+
+                    let instr_id = self.fresh_instr_id();
+                    let instr = match op {
+                        Operator::Add =>
+                            HEInstruction::Add(optype, instr_id, ref1_final, ref2_final),
+
+                        Operator::Sub =>
+                            HEInstruction::Sub(optype, instr_id, ref1_final, ref2_final),
+
+                        Operator::Mul =>
+                            HEInstruction::Mul(optype, instr_id, ref1_final, ref2_final),
                     };
 
-                let instr_id = self.fresh_instr_id();
-                let instr = match op {
-                    Operator::Add =>
-                        HEInstruction::Add(optype, instr_id, ref1_final, ref2_final),
-
-                    Operator::Sub =>
-                        HEInstruction::Sub(optype, instr_id, ref1_final, ref2_final),
-
-                    Operator::Mul =>
-                        HEInstruction::Mul(optype, instr_id, ref1_final, ref2_final),
-                };
-
-                stmts.push(HEStatement::Instruction(instr));
-                ref_map.insert(instr_id, (HERef::Instruction(instr_id), HEType::Ciphertext));
-                self.circuit_instr_map.insert(expr_id, instr_id);
-                instr_id
+                    stmts.push(HEStatement::Instruction(instr));
+                    ref_map.insert(instr_id, (HERef::Instruction(instr_id), HEType::Ciphertext));
+                    self.circuit_instr_map.insert(expr_id, instr_id);
+                    instr_id
+                }
             }
 
             ParamCircuitExpr::Rotate(steps, body) => {
@@ -923,6 +969,9 @@ impl CircuitLowering {
             .iter().map(|vec| context.const_map.get(vec).unwrap().clone())
             .collect::<Vec<ArrayName>>()
         );
+
+        // always encode -1
+        encoded_names.push(context.const_map.get(&-1).unwrap().clone());
 
         for name in encoded_names {
             statements.push(

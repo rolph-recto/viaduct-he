@@ -815,6 +815,7 @@ impl Schedule {
                             panic!("array literals not supported yet"),
 
                         ExprScheduleType::Specific(out_sched) => {
+                            // info!("array: {}; expr_schedule: {}", array_name, out_sched);
                             output_schedules.insert(array_name.clone(), out_sched);
                         }
                     };

@@ -209,24 +209,29 @@ class SEALWrapper:
         assert(self.party == "server")
         self.server_arrays[(name, "")] = self.server_inputs[name]
 
-    def client_output(self, arr):
-        assert(self.party == "client")
-
-        if arr.single is not None:
-            noise = self.invariant_noise_budget(arr.single)
-            decrypted = self.seal["decryptor"].decrypt(arr.single.array)
-            decoded = self.seal["batch_encoder"].decode(decrypted)
+    def output_ciphertext_vector(self, vec):
+        noise = self.invariant_noise_budget(vec)
+        decrypted = self.seal["decryptor"].decrypt(vec.array)
+        decoded = self.seal["batch_encoder"].decode(decrypted)
+        # with np.printoptions(threshold=1000):
+        with np.printoptions(threshold=np.inf):
             print("output: ", decoded[0:self.size])
             print("noise budget: ", noise)
 
-        else:
-            for coord, val in self.map.items():
-                noise = self.invariant_noise_budget(val)
-                decrypted = self.seal["decryptor"].decrypt(val.array)
-                decoded = self.seal["batch_encoder"].decode(decrypted)
-                print("coord ", coord)
-                print("value: ", decoded[0:self._size])
-                print("noise budget: ", noise)
+    def client_output(self, arr):
+        assert(self.party == "client")
+
+        if isinstance(arr, CiphertextArray):
+            if arr.single is not None:
+                self.output_ciphertext_vector(arr.single)
+
+            else:
+                for coord, val in self.map.items():
+                    print("coord ", coord)
+                    self.output_ciphertext_vector(val)
+
+        elif isinstance(arr, CiphertextVector):
+            self.output_ciphertext_vector(arr)
 
     def client_send(self, name, arr):
         assert(self.party == "client")
@@ -369,7 +374,7 @@ class SEALWrapper:
         return PlaintextVector(vec.size, encoded)
 
     def encode(self, arr: NativeArray, coord: list[int]):
-        arr.set(coord, self.encode_vec(coord))
+        arr.set(coord, self.encode_vec(arr.get(coord)))
 
     def encrypt(self, x: PlaintextVector):
         encrypted = self.seal["encryptor"].encrypt(x.array)
@@ -396,18 +401,18 @@ class SEALWrapper:
         x.array = x.array + y.array
 
     def subtract(self, x: CiphertextVector, y: CiphertextVector):
-        diff = self.seal["evaluator"].subtract(x.array, y.array)
+        diff = self.seal["evaluator"].sub(x.array, y.array)
         return CiphertextVector(x.size, diff)
 
     def subtract_plain(self, x: CiphertextVector, y: PlaintextVector):
-        diff = self.seal["evaluator"].subtract_plain(x.array, y.array)
+        diff = self.seal["evaluator"].sub_plain(x.array, y.array)
         return CiphertextVector(x.size, diff)
 
     def subtract_inplace(self, x: CiphertextVector, y: CiphertextVector):
-        self.seal["evaluator"].subtract_inplace(x.array, y.array)
+        self.seal["evaluator"].sub_inplace(x.array, y.array)
 
     def subtract_plain_inplace(self, x: CiphertextVector, y: PlaintextVector):
-        self.seal["evaluator"].subtract_plain_inplace(x.array, y.array)
+        self.seal["evaluator"].sub_plain_inplace(x.array, y.array)
 
     def subtract_native(self, x: NativeVector, y: NativeVector):
         return NativeVector(x.size, x.array - y.array)
