@@ -1,6 +1,6 @@
 use std::{collections::{HashSet, HashMap}, time::Instant};
 
-use log::info;
+use log::{info, debug};
 
 use crate::{
     lang::{index_elim::{InlinedProgram}, DimIndex},
@@ -84,27 +84,28 @@ impl<'t> InlineScheduler<'t> {
                         // if the schedule can be materialized into a circuit,
                         // give a cost to the schedule and save it if it's
                         // in the Pareto frontier
-                        let is_neighbor_valid = neighbor.is_schedule_valid(&self.program);
-                        let neighbor_within_vec_size_limit =
+                        let valid = neighbor.is_schedule_valid(&self.program);
+                        let within_size_limit =
                             neighbor.schedule_map.iter().all(|(_, isched)| {
                                 isched.vector_size() <= self.vector_size
                             });
+                        let should_estimate = self.should_estimate_cost(&neighbor);
 
-                        if self.should_estimate_cost(&neighbor)
-                            && is_neighbor_valid.is_ok()
-                            && neighbor_within_vec_size_limit
+                        debug!("neighbor: {}; valid? {:?} within_size? {} should estimate? {}", neighbor, valid, within_size_limit, should_estimate);
+                        if should_estimate && valid.is_ok() && within_size_limit
                         {
                             let mat = materializer_factory.create();
                             if let Ok(circuit) = mat.run(&self.program, &neighbor) {
                                 // let cost = cost_estimator.estimate_cost(&circuit);
                                 let cost = cost_estimator.estimate_pseudo_cost(&circuit);
+                                debug!("neighbor cost {:?}", cost);
 
                                 valid_neighbors.push((neighbor.clone(), cost));
                                 self.valid_schedules_visited += 1;
                             }
                         }
 
-                        if let Err(ScheduleDerivationFailure::MaybeTransformableToValid) | Ok(()) = is_neighbor_valid {
+                        if let Err(ScheduleDerivationFailure::MaybeTransformableToValid) | Ok(()) = valid {
                             self.frontier.insert(neighbor.clone());
                             self.visited.insert(neighbor);
                         }

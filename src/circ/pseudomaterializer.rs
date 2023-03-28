@@ -289,9 +289,7 @@ impl<'a> PseudoMaterializer<'a> {
                                     ArrayType::Plaintext => ParamCircuitExpr::PlaintextVar(String::new()),
                                 });
 
-                            info!("input indexing site {} cost: {:?}", indexing_id, cost);
                             *ref_cost = *ref_cost + cost;
-                            info!("ref_cost: {:?}", ref_cost);
                             return Ok((expr_schedule, *array_type, expr_id));
                         }
                     }

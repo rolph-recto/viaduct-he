@@ -379,7 +379,18 @@ impl Display for ExprSchedule {
 #[derive(Copy,Clone,Debug)]
 pub enum ScheduleDerivationFailure {
     // the derivation is a dead end; do not try to transform it further
-    DeadEnd,
+    DimLengthMismatch,
+
+    DimMismatch,
+
+    OpFailure,
+
+    ReduceFailure,
+
+    LiteralFailure,
+
+    IndexingSiteNotFound,
+
 
     // further transformations can maybe make schedule valid
     MaybeTransformableToValid
@@ -409,12 +420,12 @@ impl ExprSchedule {
             return Some(ScheduleDerivationFailure::MaybeTransformableToValid)
 
         } else if transform_vec_dims.len() > array_vec_dims.len() {
-            return Some(ScheduleDerivationFailure::DeadEnd)
+            return Some(ScheduleDerivationFailure::DimLengthMismatch)
         }
 
         let dims_valid =
-            self.vectorized_dims.iter()
-            .zip(array_sched.vectorized_dims.iter())
+            transform_vec_dims.iter()
+            .zip(array_vec_dims.iter())
             .all(|(dim1, dim2)| -> bool {
                 match (dim1, dim2) {
                     (VectorScheduleDim::Filled(fdim1), VectorScheduleDim::Filled(fdim2)) => {
@@ -424,7 +435,7 @@ impl ExprSchedule {
                         let dims_match =
                             match transform.dims[fdim1.index] {
                                 DimContent::FilledDim { dim, extent, stride } =>
-                                    dim == fdim2.index && stride == fdim2.stride,
+                                    dim == fdim2.index,
 
                                 DimContent::EmptyDim { extent } =>
                                     false,
@@ -469,7 +480,7 @@ impl ExprSchedule {
             None
 
         } else {
-            Some(ScheduleDerivationFailure::DeadEnd)
+            Some(ScheduleDerivationFailure::DimMismatch)
         }
     }
 
@@ -622,7 +633,7 @@ impl Schedule {
                         body
                     )?;
                 Schedule::schedule_reduce(*reduced_index, &body_sched)
-                .map_err(|_| ScheduleDerivationFailure::DeadEnd)
+                .map_err(|_| ScheduleDerivationFailure::ReduceFailure)
             }
 
             InlinedExpr::Op(_, expr1, expr2) => {
@@ -640,12 +651,12 @@ impl Schedule {
                     )?;
 
                 Schedule::schedule_op(&sched1, &sched2)
-                .map_err(|_| ScheduleDerivationFailure::DeadEnd)
+                .map_err(|_| ScheduleDerivationFailure::OpFailure)
             }
 
             InlinedExpr::Literal(_) =>
                 Schedule::schedule_literal()
-                .map_err(|_| ScheduleDerivationFailure::DeadEnd),
+                .map_err(|_| ScheduleDerivationFailure::LiteralFailure),
 
             InlinedExpr::ExprRef(indexing_id, transform) => {
                 if let Some(indexing_sched) = self.schedule_map.get(indexing_id) {
@@ -664,7 +675,7 @@ impl Schedule {
                     }
 
                 } else {
-                    Err(ScheduleDerivationFailure::DeadEnd)
+                    Err(ScheduleDerivationFailure::IndexingSiteNotFound)
                 }
             }
         }
