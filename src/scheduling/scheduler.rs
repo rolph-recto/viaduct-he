@@ -116,6 +116,12 @@ impl<'t> InlineScheduler<'t> {
 
         (self.frontier.len(), valid_neighbors)
     }
+
+    pub fn next_epoch(&mut self, epoch: usize) {
+        for transformer in self.transformers.iter_mut() {
+            transformer.next_epoch(epoch);
+        }
+    }
 }
 
 pub struct SchedulingResult {
@@ -134,7 +140,11 @@ pub struct Scheduler<'m, 't> {
 
     // schedules in the Pareto frontier
     // (i.e. no visited schedule is strictly cheaper than these)
-    pareto_frontier: HashMap<(usize, Schedule), CostFeatures>
+    pareto_frontier: HashMap<(usize, Schedule), CostFeatures>,
+
+    epoch: usize,
+
+    max_epochs: usize,
 }
 
 impl<'m, 't> Scheduler<'m, 't> {
@@ -143,6 +153,7 @@ impl<'m, 't> Scheduler<'m, 't> {
         transformer_factory: Box<dyn ScheduleTransformerFactory<'t> + 't>,
         materializer_factory: Box<dyn MaterializerFactory + 'm>,
         vector_size: usize,
+        max_epochs: usize,
     ) -> Self {
         let cost_estimator = CostEstimator::default();
         let mut init_schedules: Vec<(usize, Schedule, CostFeatures)> = Vec::new();
@@ -185,6 +196,8 @@ impl<'m, 't> Scheduler<'m, 't> {
                 cost_estimator,
                 inline_schedulers,
                 pareto_frontier: HashMap::new(),
+                epoch: 1,
+                max_epochs,
             };
 
         info!("initializing pareto frontier...");
@@ -332,29 +345,38 @@ impl<'m, 't> Scheduler<'m, 't> {
             }
         };
     
-        while changed && within_limit(iter) {
-            let iter_res = self.iterate();
-            changed = iter_res.0 > 0;
-            info!("iteration {}\nnew schedules visited: {}; new valid schedules found: {}",
-                iter, iter_res.0, iter_res.1);
-            iter += 1;
+        while self.epoch <= self.max_epochs {
+            info!("starting scheduler epoch {}", self.epoch);
+            for (_, (_, inline_scheduler)) in self.inline_schedulers.iter_mut() {
+                inline_scheduler.next_epoch(self.epoch)
+            }
+
+            while changed && within_limit(iter) {
+                let iter_res = self.iterate();
+                changed = iter_res.0 > 0;
+                info!("iteration {}\nnew schedules visited: {}; new valid schedules found: {}",
+                    iter, iter_res.0, iter_res.1);
+                iter += 1;
+            }
+            info!("finished scheduler epoch {}", self.epoch);
+
+            self.epoch += 1;
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::fs::File;
-
     use crate::{
-        circ::{materializer::DefaultMaterializerFactory, pseudomaterializer::DefaultPseudoMaterializerFactory},
+        circ::{
+            materializer::DefaultMaterializerFactory,
+        },
         lang::{
             index_elim::IndexElimination,
             elaborated::Elaborator,
             source::SourceProgram,
             parser::ProgramParser
-        },
-        scheduling::transformer::{DefaultScheduleTransformerFactory, FastScheduleTransformerFactory}
+        }, scheduling::transformer::DefaultScheduleTransformerFactory,
     };
     use super::*;
 
@@ -396,9 +418,10 @@ mod tests {
         let mut scheduler =
             Scheduler::new(
                 inlined_programs,
-                Box::new(FastScheduleTransformerFactory), 
+                Box::new(DefaultScheduleTransformerFactory), 
                 Box::new(DefaultMaterializerFactory), 
-                4096
+                4096,
+                1,
             );
         
         scheduler.run(None);

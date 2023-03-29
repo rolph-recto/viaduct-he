@@ -8,6 +8,7 @@ use super::*;
 pub trait ScheduleTransformer {
     fn name(&self) -> &str;
     fn transform(&self, schedule: &Schedule) -> HashSet<Schedule>;
+    fn next_epoch(&mut self, _epoch: usize) {}
 }
 
 pub trait ScheduleTransformerFactory<'a> {
@@ -22,21 +23,7 @@ impl<'a> ScheduleTransformerFactory<'a> for DefaultScheduleTransformerFactory {
         let indexing_levels = program.get_indexing_levels();
         vec![
             Box::new(VectorizeDimTransformer::new(dim_classes.clone(), indexing_levels.clone())),
-            Box::new(SplitDimTransformer::new(Some(2), Some(1), dim_classes, indexing_levels.clone()))
-        ]
-    }
-}
-
-/// transformer factory that only has the vectorization transformer, for speed
-/// (split dim transformer blows up the search space)
-pub struct FastScheduleTransformerFactory;
-
-impl<'a> ScheduleTransformerFactory<'a> for FastScheduleTransformerFactory {
-    fn create(&self, program: &InlinedProgram) -> Vec<Box<dyn ScheduleTransformer + 'a>> {
-        let dim_classes = program.get_dim_classes();
-        let indexing_levels = program.get_indexing_levels();
-        vec![
-            Box::new(VectorizeDimTransformer::new(dim_classes.clone(), indexing_levels.clone())),
+            Box::new(SplitDimTransformer::new(Some(2), dim_classes, indexing_levels.clone()))
         ]
     }
 }
@@ -148,11 +135,10 @@ pub struct SplitDimTransformer {
 impl SplitDimTransformer {
     pub fn new(
         split_limit: Option<usize>,
-        num_dims_to_split: Option<usize>,
         dim_classes: HashMap<(IndexingId, DimIndex), usize>,
         indexing_levels: HashMap<IndexingId, usize>,
     ) -> Self {
-        Self { split_limit, num_dims_to_split, dim_classes, indexing_levels, }
+        Self { split_limit, num_dims_to_split: None, dim_classes, indexing_levels, }
     }
 }
 
@@ -271,6 +257,11 @@ impl ScheduleTransformer for SplitDimTransformer {
         }
 
         neighbors
+    }
+
+    // increase the number of dims to split by 1 per epoch
+    fn next_epoch(&mut self, epoch: usize) {
+        self.num_dims_to_split = Some(epoch - 1);
     }
 }
 

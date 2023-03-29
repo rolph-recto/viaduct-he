@@ -21,7 +21,7 @@ use he_vectorizer::{
     scheduling::{
         Schedule,
         scheduler::Scheduler,
-        transformer::FastScheduleTransformerFactory,
+        transformer::DefaultScheduleTransformerFactory,
     },
     program::{
         lowering::CircuitLowering,
@@ -60,7 +60,7 @@ struct HEArguments {
     duration: usize,
 
     /// e-graph extractor to use
-    #[clap(short = 'e', long = "extractor", value_enum, default_value_t = ExtractorType::LP)]
+    #[clap(short = 'x', long = "extractor", value_enum, default_value_t = ExtractorType::LP)]
     extractor: ExtractorType,
 
     /// vector size
@@ -70,6 +70,10 @@ struct HEArguments {
     /// don't inline instructions
     #[clap(short = 'n', long = "noinplace")]
     noinplace: bool,
+
+    /// number of epochs to run scheduler
+    #[clap(short = 'e', long = "epochs", value_parser, default_value_t = 1)]
+    epochs: usize,
 }
 
 // fn dumpinfo() {}
@@ -107,9 +111,10 @@ fn main() {
     let mut scheduler =
         Scheduler::new(
             inlined_programs,
-            Box::new(FastScheduleTransformerFactory), 
+            Box::new(DefaultScheduleTransformerFactory), 
             Box::new(DefaultMaterializerFactory), 
-            args.size
+            args.size,
+            args.epochs
         );
 
     scheduler.run(None);
