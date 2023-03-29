@@ -13,7 +13,6 @@ let b_sum =
 				((a_id[i][k] - b_id[j][k]) * (a_id[i][k] - b_id[j][k]))
 			})
 		})
-		b_data[j] * mask
 	})
 in
 a_sum + b_sum

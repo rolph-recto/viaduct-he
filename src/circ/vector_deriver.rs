@@ -1,6 +1,5 @@
-use std::{array, cell::{RefCell, RefMut}, borrow::BorrowMut, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
-use bimap::BiHashMap;
 use disjoint_sets::UnionFindNode;
 use log::info;
 
@@ -16,20 +15,17 @@ pub struct VectorDeriver {
     // toplevel stores the union find nodes to compare other nodes to
     // use RcRefCell here because toplevel shares ownership with
     // the vector map of the indexing site
-    toplevel: Vec<Rc<RefCell<UnionFindNode<VectorInfo>>>>,
+    toplevel_vector_sets: Vec<Rc<RefCell<UnionFindNode<VectorInfo>>>>,
 
+    // map from vectors to their union find nodes
     vector_map: HashMap<VectorInfo, Rc<RefCell<UnionFindNode<VectorInfo>>>>,
-
-    // vectors recorded from indexing sites
-    indexing_sites: HashMap<IndexingId, HashMap<IndexCoord, (VectorInfo, Rc<RefCell<UnionFindNode<VectorInfo>>>)>>,
 }
 
 impl VectorDeriver {
     pub fn new() -> Self {
         VectorDeriver {
-            toplevel: Vec::new(),
+            toplevel_vector_sets: Vec::new(),
             vector_map: HashMap::new(),
-            indexing_sites: HashMap::new(),
         }
     }
 
@@ -38,7 +34,7 @@ impl VectorDeriver {
             Rc::new(RefCell::new(UnionFindNode::new(vector.clone())));
 
         let mut processed = false;
-        for tlset in self.toplevel.iter_mut() {
+        for tlset in self.toplevel_vector_sets.iter_mut() {
             let tlset_vector = tlset.borrow().clone_data();
 
             // if vector can be derived from set vector, add it under this set
@@ -64,7 +60,7 @@ impl VectorDeriver {
 
         // if not processed yet, add the vector as a new set
         if !processed {
-            self.toplevel.push(Rc::clone(&vector_set));
+            self.toplevel_vector_sets.push(Rc::clone(&vector_set));
         }
 
         self.vector_map.insert(vector, vector_set);
@@ -88,6 +84,10 @@ impl VectorDeriver {
 
             self.register_vector(vector.clone());
 
+        // if there are no vectorized dims, then you can't derive vectors
+        } else if schedule.vectorized_dims.len() == 0 {
+            return
+        
         } else {
             for coord in coord_system.coord_iter() {
                 let vector = VectorInfo::get_input_vector_at_coord(
@@ -131,20 +131,37 @@ impl VectorDeriver {
         mask_map: &mut IndexCoordinateMap<PlaintextObject>,
         step_map: &mut IndexCoordinateMap<isize>,
     ) {
-        for coord in coords {
-            let vector = VectorInfo::get_input_vector_at_coord(
-                obj_map.coord_as_index_map(coord.clone()),
-                array_shape,
-                schedule,
-                transform,
-                preprocessing,
-            );
+        if schedule.vectorized_dims.len() > 0 {
+            for coord in coords {
+                let vector = VectorInfo::get_input_vector_at_coord(
+                    obj_map.coord_as_index_map(coord.clone()),
+                    array_shape,
+                    schedule,
+                    transform,
+                    preprocessing,
+                );
 
-            let (parent, steps, mask) =
-                self.derive_vector::<T>(&vector);
-            obj_map.set(coord.clone(), T::input_vector(parent));
-            step_map.set(coord.clone(), steps);
-            mask_map.set(coord, mask);
+                let (parent, steps, mask) =
+                    self.derive_vector::<T>(&vector);
+                obj_map.set(coord.clone(), T::input_vector(parent));
+                step_map.set(coord.clone(), steps);
+                mask_map.set(coord, mask);
+            }
+
+        } else {
+            for coord in coords {
+                let vector = VectorInfo::get_input_vector_at_coord(
+                    obj_map.coord_as_index_map(coord.clone()),
+                    array_shape,
+                    schedule,
+                    transform,
+                    preprocessing,
+                );
+
+                obj_map.set(coord.clone(), T::input_vector(vector));
+                step_map.set(coord.clone(), 0);
+                mask_map.set(coord, PlaintextObject::Const(1));
+            }
         }
     }
 
@@ -202,7 +219,7 @@ impl VectorDeriver {
 
             // if not processed yet, add the vector as a new set
             if !processed {
-                self.toplevel.push(Rc::clone(&vector_set));
+                self.toplevel_vector_sets.push(Rc::clone(&vector_set));
             }
 
             vector_map.insert(coord.clone(), (vector.clone(), vector_set));
