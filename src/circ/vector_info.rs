@@ -1,5 +1,5 @@
 use std::{
-    cmp::min,
+    cmp::{min, max},
     collections::{HashMap, HashSet},
     fmt::Display,
 };
@@ -398,7 +398,7 @@ impl VectorInfo {
         }
     }
 
-    pub fn is_dims_derivable(
+    pub fn dims_derivable(
         self_dims: &im::Vector<VectorDimContent>,
         self_offset_map: &OffsetMap<isize>,
         other_dims: &im::Vector<VectorDimContent>,
@@ -409,7 +409,7 @@ impl VectorInfo {
         let mut seen_dims: HashSet<DimIndex> = HashSet::new();
 
         // check derivability conditions
-        let vectorized_dims_derivable =
+        let vectorized_dims_valid =
             self_dims.iter()
             .zip(other_dims.iter())
             .all(|(dim1, dim2)| {
@@ -427,9 +427,12 @@ impl VectorInfo {
                         // dimensions point to the same indexed dimension (duh)
                         let same_dim = idim1 == idim2;
 
+                        let same_padding =
+                            pad_left1 == pad_left2 && pad_right1 == pad_right2;
+
                         // multiple dims cannot stride the same indexed dim
                         // TODO is this necessary
-                        let dim_unseen = !seen_dims.contains(&idim1);
+                        // let dim_unseen = !seen_dims.contains(&idim1);
 
                         // dimensions have the same stride
                         let same_stride = stride1 == stride2;
@@ -442,68 +445,69 @@ impl VectorInfo {
                             offset1 % (stride1 as isize) == offset2 % (stride2 as isize);
 
                         // the dimensions have the same size
-                        let same_size = dim1.size() == dim2.size();
+                        let same_size =
+                            oob_left1 + extent1 + oob_right1 == oob_left2 + extent2 + oob_right2;
 
                         // all of the elements of other's dim is in self's dim
+                        let self_max_index =
+                            offset1 + ((stride1 * (extent1 - 1)) as isize);
+
+                        let other_max_index =
+                            offset2 + ((stride2 * (extent2 - 1)) as isize);
+
                         let in_extent =
-                            offset2 >= offset1 &&
-                            offset1 + ((stride1 * extent1) as isize) >= offset2 + ((stride2 * extent2) as isize);
+                            offset2 >= offset1 && self_max_index >= other_max_index;
 
                         // self cannot have out of bounds values
                         // TODO this is not needed!
-                        let self_no_oob = oob_left1 == 0 && oob_right1 == 0;
+                        // let self_no_oob = oob_left1 == 0 && oob_right1 == 0;
 
                         seen_dims.insert(idim1);
-                        same_dim && dim_unseen && same_stride && offset_equiv &&
-                        same_size && in_extent && self_no_oob
+                        same_dim && same_padding && same_stride && offset_equiv
+                        && same_size && in_extent
+                        // && dim_unseen && self_no_oob
                     },
 
                     // empty dims will not be rotated for derivation, but
                     // but they might need to be masked
-                    (EmptyDim { extent: extent1, pad_left: pad_left1, pad_right: pad_right1, oob_right: oob_right1 },
-                    EmptyDim { extent: extent2, pad_left: pad_left2, pad_right: pad_right2, oob_right: oob_right2  }) => {
-                        pad_left1 + extent1 + pad_right1 + oob_right1 == pad_left2 + extent2 + pad_right2 + oob_right2 &&
+                    (EmptyDim {
+                        extent: extent1,
+                        pad_left: pad_left1, pad_right: pad_right1,
+                        oob_right: oob_right1 },
+                    EmptyDim {
+                        extent: extent2,
+                        pad_left: pad_left2, pad_right: pad_right2,
+                        oob_right: oob_right2  }) =>
+                    {
+                        let same_padding = 
+                            pad_left1 == pad_left2 && pad_right1 == pad_right2;
 
-                        // the padding for derived vector must be more
-                        // thant the padding for the parent, since we can
-                        // only mask parent contents (not add more)
-                        pad_left1 <= pad_left2 && pad_right1 + oob_right1 <= pad_right2 + oob_right2 &&
+                        let same_size = 
+                            extent1 + oob_right1 == extent2 + oob_right2;
 
                         // can always truncate empty dims with more padding,
                         // but don't support extending dims (yet)
-                        extent1 >= extent2
+                        let within_extent = extent1 >= extent2;
+
+                        same_padding && same_size && within_extent
                     },
 
                     // we can derive an empty dim
-                    // TODO add reduced dim to a list of dims to fill back in
                     (ReducedDim { extent: extent1, pad_left: pad_left1, pad_right: pad_right1 },
                     EmptyDim { extent: extent2, pad_left: pad_left2, pad_right: pad_right2, oob_right: oob_right2 }) =>  {
-                        // this has the same restrictions as deriving from
-                        // an empty dim, except we need to fill the
-                        // reduced parent dim first
-                        pad_left1 + extent1 + pad_right1 == pad_left2 + extent2 + pad_right2 + oob_right2 &&
-                        pad_left1 <= pad_left2 && pad_right1 <= pad_right2 + oob_right2 &&
-                        extent1 >= extent2
+                        let same_padding = pad_left1 == pad_left2 && pad_right1 == pad_right2;
+                        let same_size = extent1 == extent2 + oob_right2;
+                        same_padding && same_size
                     },
 
-                    (FilledDim { dim: _, extent: _, stride: _, oob_left: _, oob_right: _, pad_left: _, pad_right: _ },
-                    EmptyDim { extent: _, pad_left: _, pad_right: _, oob_right: _ }) |
-
-                    (EmptyDim { extent: _, pad_left: _, pad_right: _, oob_right: _ },
-                    FilledDim { dim: _, extent: _, stride: _, oob_left: _, oob_right: _, pad_left: _, pad_right: _ }) |
-
-                    (_, ReducedDim { extent: _, pad_left: _, pad_right: _ }) |
-
-                    (ReducedDim { extent:_, pad_left:_, pad_right:_ },
-                    FilledDim { dim:_, extent:_, stride:_, oob_left:_, oob_right:_, pad_left:_, pad_right:_ }) =>
-                        false,
+                    _ => false,
                 }
             });
 
-        let mut nonvectorized_dims =
+        let nonvectorized_dims_valid =
             (0..min(self_offset_map.num_dims(), other_offset_map.num_dims()))
             .filter(|dim| {
-                !self_dims.iter().any(|dim2_content| match dim2_content {
+                self_dims.iter().all(|dim2_content| match dim2_content {
                     FilledDim {
                         dim: dim2,
                         extent: _,
@@ -512,27 +516,16 @@ impl VectorInfo {
                         oob_right: _,
                         pad_left: _,
                         pad_right: _,
-                    } => dim == dim2,
+                    } => dim != dim2,
 
-                    EmptyDim {
-                        extent: _,
-                        pad_left: _,
-                        pad_right: _,
-                        oob_right: _,
-                    }
-                    | ReducedDim {
-                        extent: _,
-                        pad_left: _,
-                        pad_right: _,
-                    } => false,
+                    _ => false
                 })
-            });
-
-        let nonvectorized_dims_equal_offsets =
-            nonvectorized_dims
+            })
             .all(|dim| self_offset_map.get(dim) == other_offset_map.get(dim));
 
-        vectorized_dims_derivable && nonvectorized_dims_equal_offsets
+        let same_num_dims = self_dims.len() == other_dims.len();
+
+        same_num_dims && vectorized_dims_valid && nonvectorized_dims_valid
     }
 
     pub fn crop_reduced_repeated(
@@ -543,8 +536,9 @@ impl VectorInfo {
         let mut other_dims = other.dims.clone();
 
         while self_dims.len() < other_dims.len() {
-            if let VectorDimContent::EmptyDim { extent, pad_left, pad_right, oob_right }
-            = other_dims.front().unwrap() {
+            if let VectorDimContent::EmptyDim {
+                extent: _, pad_left: _, pad_right: _, oob_right: _
+            } = other_dims.front().unwrap() {
                 other_dims.pop_front();
 
             } else {
@@ -553,8 +547,9 @@ impl VectorInfo {
         }
 
         while self_dims.len() > other_dims.len() {
-            if let VectorDimContent::EmptyDim { extent, pad_left, pad_right, oob_right } =
-            self_dims.front().unwrap() {
+            if let VectorDimContent::EmptyDim {
+                extent: _, pad_left: _, pad_right: _, oob_right: _
+            } = self_dims.front().unwrap() {
                 self_dims.pop_front();
 
             } else {
@@ -568,27 +563,26 @@ impl VectorInfo {
     // derive other from self
     pub fn derive(&self, other: &VectorInfo) -> Option<(isize, PlaintextObject)> {
         use VectorDimContent::*;
-        
-        let (self_dims, other_dims) =
-            self.crop_reduced_repeated(other);
-
-        if self_dims.len() != other_dims.len() {
-            return None
-        }
 
         if self == other {
             return Some((0, PlaintextObject::Const(1)))
         }
+        
+        let (self_dims, other_dims) =
+            self.crop_reduced_repeated(other);
 
         let dims_derivable =
-            Self::is_dims_derivable(
+            Self::dims_derivable(
                 &self_dims,
                 &self.offset_map,
                 &other_dims,
                 &other.offset_map,
             );
 
-        if self.array != other.array || !dims_derivable {
+        if self.array != other.array
+            || self.preprocessing != other.preprocessing
+            || !dims_derivable
+        {
             return None;
         }
 
@@ -621,6 +615,7 @@ impl VectorInfo {
                     let offset1 = self.offset_map[idim1];
                     let offset2 = other.offset_map[idim2];
 
+                    // compute the rotation steps to align slots
                     let dim_steps =
                         (pad_left2 as isize) + (oob_left2 as isize) - (offset2 as isize) +
                         (offset1 as isize) - (oob_left1 as isize) - (pad_left1 as isize);
@@ -632,6 +627,7 @@ impl VectorInfo {
                     // assume that the dimensions are laid out in the parent like:
                     // wrapl_content1 | wrapl pad_right | pad_left1 | oob_left1 | content1 | oob_right1 | pad_right1 | wrapr pad_left1 | wrapr_content1
 
+                    // determine required padding
                     let wrapl_content1_hi =
                         dim_steps - (pad_right1 as isize) - 1;
 
@@ -757,6 +753,185 @@ impl VectorInfo {
         };
 
         Some((rotate_steps, mask))
+    }
+
+    pub fn dims_joinable(
+        self_dims: &im::Vector<VectorDimContent>,
+        self_offset_map: &OffsetMap<isize>,
+        other_dims: &im::Vector<VectorDimContent>,
+        other_offset_map: &OffsetMap<isize>,
+    ) -> bool {
+        use VectorDimContent::*;
+
+        let same_num_dims = 
+            self_offset_map.num_dims() == other_offset_map.num_dims();
+
+        let vectorized_dims_valid = 
+        self_dims.iter()
+        .zip(other_dims.iter())
+        .all(|(self_dim, other_dim)| {
+            match (self_dim, other_dim) {
+                (FilledDim {
+                    dim: dim1, extent: extent1, stride: stride1,
+                    oob_left: oob_left1, oob_right: oob_right1,
+                    pad_left: pad_left1, pad_right: pad_right1 },
+                FilledDim {
+                    dim: dim2, extent: extent2, stride: stride2,
+                    oob_left: oob_left2, oob_right: oob_right2,
+                    pad_left: pad_left2, pad_right: pad_right2 }) =>
+                {
+                    let dims_match = dim1 == dim2;
+                    let pads_match = pad_left1 == pad_left2 && pad_right1 == pad_right2;
+                    let strides_match = stride1 == stride2;
+                    let sizes_match = 
+                        oob_left1 + extent1 + oob_right1 == oob_left2 + extent2 + oob_right2;
+
+                    let self_offset = *self_offset_map.get(*dim1);
+                    let other_offset = *other_offset_map.get(*dim1);
+                    let istride = *stride1 as isize;
+                    let offsets_match = self_offset % istride == other_offset % istride;
+
+                    dims_match && pads_match && strides_match && sizes_match && offsets_match
+                },
+
+                (EmptyDim {
+                    extent: extent1,
+                    pad_left: pad_left1, pad_right: pad_right1,
+                    oob_right: oob_right1 },
+                EmptyDim {
+                    extent: extent2,
+                    pad_left: pad_left2, pad_right: pad_right2,
+                    oob_right: oob_right2 }) =>
+                {
+                    let pads_match = pad_left1 == pad_left2 && pad_right1 == pad_right2;
+                    let sizes_match = extent1 + oob_right1 == extent2 + oob_right2;
+                    pads_match && sizes_match
+                }
+
+                _ => false,
+            }
+        });
+
+        let nonvectorized_dims_valid =
+            (0..self_offset_map.num_dims())
+            .filter(|dim| {
+                self_dims.iter().all(|self_dim| {
+                    match self_dim {
+                        FilledDim {
+                            dim: idim, extent: _, stride: _,
+                            oob_left: _, oob_right: _,
+                            pad_left: _, pad_right: _
+                        } => {
+                            *dim != *idim
+                        },
+
+                        _ => false
+                    }
+                })
+            })
+            .all(|dim| {
+                *self_offset_map.get(dim) == *other_offset_map.get(dim)
+            });
+
+        same_num_dims && vectorized_dims_valid && nonvectorized_dims_valid
+    }
+
+    // join two vectors together, such that both are derivable
+    // from the join (if it exists)
+    pub fn join(&self, other: &VectorInfo) -> Option<VectorInfo> {
+        use VectorDimContent::*;
+
+        let (self_dims, other_dims) =
+            Self::crop_reduced_repeated(&self, other);
+
+        let dims_joinable =
+            Self::dims_joinable(
+                &self_dims,
+                &self.offset_map,
+                &other_dims,
+                &other.offset_map
+            ) ;
+
+        if self.array != other.array
+            || self.preprocessing != other.preprocessing
+            || !dims_joinable
+        {
+            return None;
+        }
+
+        let mut joined_offset_map: OffsetMap<isize> = OffsetMap::new(self.offset_map.num_dims());
+        for i in 0..joined_offset_map.num_dims() {
+            let min_offset = 
+                min(*self.offset_map.get(i), *other.offset_map.get(i));
+
+            // clip to 0
+            joined_offset_map.set(i, max(min_offset, 0));
+        }
+
+        let joined_dims: im::Vector<VectorDimContent> = 
+        self_dims.iter().zip(other_dims.iter()).map(|(self_dim, other_dim)| {
+            match (self_dim, other_dim) {
+                (FilledDim {
+                    dim, extent: extent1, stride,
+                    oob_left: oob_left1, oob_right: oob_right1,
+                    pad_left, pad_right },
+                FilledDim {
+                    dim: _, extent: extent2, stride: _,
+                    oob_left: _, oob_right: _,
+                    pad_left: _, pad_right: _ }) =>
+                {
+                    let self_max_index =
+                        *self.offset_map.get(*dim) + (((extent1 - 1) * stride) as isize);
+
+                    let other_max_index = 
+                        *other.offset_map.get(*dim) + (((extent2 - 1) * stride) as isize);
+
+                    let max_index = max(self_max_index, other_max_index);
+                    let joined_offset = *joined_offset_map.get(*dim);
+                    let joined_extent: usize =
+                        ((max_index - joined_offset) / ((*stride) as isize)) as usize + 1;
+                    let orig_size = oob_left1 + extent1 + oob_right1;
+
+                    // the new dimension cannot be bigger than the original dimension
+                    assert!(joined_extent <= orig_size);
+
+                    FilledDim {
+                        dim: *dim,
+                        extent: joined_extent,
+                        stride: *stride,
+                        oob_left: 0,
+                        oob_right: orig_size - joined_extent,
+                        pad_left: *pad_left,
+                        pad_right: *pad_right,
+                    }
+                },
+
+                (EmptyDim { extent: extent1, pad_left, pad_right, oob_right: oob_right1 },
+                EmptyDim { extent: extent2, pad_left: _, pad_right: _, oob_right: _ }) =>
+                {
+                    let joined_extent: usize = *max(extent1, extent2);
+                    let orig_size = extent1 + oob_right1;
+
+                    assert!(joined_extent <= orig_size);
+
+                    EmptyDim {
+                        extent: joined_extent,
+                        pad_left: *pad_left,
+                        pad_right: *pad_right,
+                        oob_right: orig_size - joined_extent,
+                    }
+                }
+
+                _ => unreachable!(),
+            }
+        }).collect();
+
+        Some(VectorInfo {
+            array: self.array.clone(),
+            preprocessing: self.preprocessing.clone(),
+            offset_map: joined_offset_map,
+            dims: joined_dims,
+        })
     }
 }
 
@@ -1027,5 +1202,198 @@ mod tests {
         // rot(1, vec1) == rot2
         assert_eq!(res.0, 0);
         assert_eq!(res.1, PlaintextObject::Const(1));
+    }
+
+    fn derivable_from_join(v1: &VectorInfo, v2: &VectorInfo, join: &VectorInfo) -> bool {
+        join.derive(v1).is_some() && join.derive(v2).is_some()
+    }
+
+    #[test]
+    fn test_vector_join1() {
+        // equivalent offsets, should join
+        let vec1 = VectorInfo {
+            array: String::from("a"),
+            preprocessing: None,
+            offset_map: OffsetMap::new(1),
+            dims: im::vector![
+                VectorDimContent::FilledDim {
+                    dim: 0,
+                    stride: 2,
+                    extent: 3,
+                    pad_left: 0,
+                    pad_right: 0,
+                    oob_left: 1,
+                    oob_right: 0,
+                },
+            ],
+        };
+
+        let mut offset2: OffsetMap<isize> = OffsetMap::new(1);
+        offset2.set(0, 2);
+        let vec2 = VectorInfo {
+            array: String::from("a"),
+            preprocessing: None,
+            offset_map: offset2,
+            dims: im::vector![
+                VectorDimContent::FilledDim {
+                    dim: 0,
+                    stride: 2,
+                    extent: 3,
+                    pad_left: 0,
+                    pad_right: 0,
+                    oob_left: 0,
+                    oob_right: 1,
+                },
+            ],
+        };
+
+        let res = vec1.join(&vec2);
+        assert!(res.is_some());
+
+        let join = res.unwrap();
+        assert!(derivable_from_join(&vec1, &vec2, &join));
+        assert_eq!(*join.offset_map.get(0), 0);
+        println!("{}", join);
+    }
+
+    #[test]
+    fn test_vector_join2() {
+        // different arrays, no join
+        let vec1 = VectorInfo {
+            array: String::from("a"),
+            preprocessing: None,
+            offset_map: OffsetMap::new(1),
+            dims: im::vector![
+                VectorDimContent::FilledDim {
+                    dim: 0,
+                    stride: 2,
+                    extent: 3,
+                    pad_left: 0,
+                    pad_right: 0,
+                    oob_left: 1,
+                    oob_right: 0,
+                },
+            ],
+        };
+
+        let mut offset2: OffsetMap<isize> = OffsetMap::new(1);
+        offset2.set(0, 2);
+        let vec2 = VectorInfo {
+            array: String::from("b"),
+            preprocessing: None,
+            offset_map: offset2,
+            dims: im::vector![
+                VectorDimContent::FilledDim {
+                    dim: 0,
+                    stride: 2,
+                    extent: 3,
+                    pad_left: 0,
+                    pad_right: 0,
+                    oob_left: 0,
+                    oob_right: 1,
+                },
+            ],
+        };
+
+        let res = vec1.join(&vec2);
+        assert!(res.is_none());
+    }
+
+    #[test]
+    fn test_vector_join3() {
+        // same nonvectorized dim offsets, should join
+        let mut offset1: OffsetMap<isize> = OffsetMap::new(2);
+        offset1.set(0, 0);
+        offset1.set(1, 0);
+        let vec1 = VectorInfo {
+            array: String::from("a"),
+            preprocessing: None,
+            offset_map: offset1,
+            dims: im::vector![
+                VectorDimContent::FilledDim {
+                    dim: 0,
+                    stride: 2,
+                    extent: 3,
+                    pad_left: 0,
+                    pad_right: 0,
+                    oob_left: 1,
+                    oob_right: 0,
+                },
+            ],
+        };
+
+        let mut offset2: OffsetMap<isize> = OffsetMap::new(2);
+        offset2.set(0, 2);
+        offset2.set(1, 0);
+        let vec2 = VectorInfo {
+            array: String::from("a"),
+            preprocessing: None,
+            offset_map: offset2,
+            dims: im::vector![
+                VectorDimContent::FilledDim {
+                    dim: 0,
+                    stride: 2,
+                    extent: 3,
+                    pad_left: 0,
+                    pad_right: 0,
+                    oob_left: 0,
+                    oob_right: 1,
+                },
+            ],
+        };
+
+        let res = vec1.join(&vec2);
+        assert!(res.is_some());
+
+        let join = res.unwrap();
+        println!("join: {}", join);
+        assert!(derivable_from_join(&vec1, &vec2, &join));
+    }
+
+    #[test]
+    fn test_vector_join4() {
+        // different nonvectorized dim offsets, should not join
+        let mut offset1: OffsetMap<isize> = OffsetMap::new(2);
+        offset1.set(0, 0);
+        offset1.set(1, 1);
+        let vec1 = VectorInfo {
+            array: String::from("a"),
+            preprocessing: None,
+            offset_map: offset1,
+            dims: im::vector![
+                VectorDimContent::FilledDim {
+                    dim: 0,
+                    stride: 2,
+                    extent: 3,
+                    pad_left: 0,
+                    pad_right: 0,
+                    oob_left: 1,
+                    oob_right: 0,
+                },
+            ],
+        };
+
+        let mut offset2: OffsetMap<isize> = OffsetMap::new(2);
+        offset2.set(0, 2);
+        offset2.set(1, 0);
+        let vec2 = VectorInfo {
+            array: String::from("a"),
+            preprocessing: None,
+            offset_map: offset2,
+            dims: im::vector![
+                VectorDimContent::FilledDim {
+                    dim: 0,
+                    stride: 2,
+                    extent: 3,
+                    pad_left: 0,
+                    pad_right: 0,
+                    oob_left: 0,
+                    oob_right: 1,
+                },
+            ],
+        };
+
+        let res = vec1.join(&vec2);
+        assert!(res.is_none());
     }
 }

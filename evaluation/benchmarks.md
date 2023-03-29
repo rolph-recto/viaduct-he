@@ -4,10 +4,10 @@
 RQ1: Can the compiler generate efficient programs with complex layouts?
 
 ## Benchmarks
-1. Private information retrieval (retrieval)
+1. private information retrieval (retrieval)
 vec-size = 8192
 
-2. Private set union (set-union)
+2. private set union (set-union)
 vec-size = 16384
 
 3. double matmul (matmul2)
