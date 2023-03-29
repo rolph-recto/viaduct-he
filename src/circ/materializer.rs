@@ -25,6 +25,14 @@ pub trait InputArrayMaterializer<'a> {
         transform: &ArrayTransform,
     ) -> bool;
 
+    fn register(
+        &mut self,
+        array_type: ArrayType,
+        array_shape: &Shape,
+        schedule: &IndexingSiteSchedule,
+        transform: &ArrayTransform,
+    );
+
     fn materialize(
         &mut self,
         array_type: ArrayType,
@@ -101,6 +109,8 @@ impl<'a> Materializer<'a> {
         expr_list
             .into_iter()
             .try_for_each(|(array, expr)| -> Result<(), String> {
+                self.register_input_indexing_sites(program, &expr, schedule);
+
                 let mut expr_preludes: Vec<CircuitDecl> = Vec::new();
                 let (expr_schedule, array_type, circuit_id) =
                     self.materialize_expr(program, &expr, schedule, &mut expr_preludes)?;
@@ -132,6 +142,55 @@ impl<'a> Materializer<'a> {
             native_expr_list: vec![],
             circuit_expr_list: circuit_list,
         })
+    }
+
+    fn register_input_indexing_sites(
+        &mut self,
+        program: &InlinedProgram,
+        expr: &InlinedExpr,
+        schedule: &Schedule,
+    ) {
+        match expr {
+            InlinedExpr::ReduceNode(_, _, body) => {
+                self.register_input_indexing_sites(program, body, schedule);
+            },
+
+            InlinedExpr::Op(_, expr1, expr2) => {
+                self.register_input_indexing_sites(program, expr1, schedule);
+                self.register_input_indexing_sites(program, expr2, schedule);
+            },
+
+            InlinedExpr::Literal(_) => {},
+
+            InlinedExpr::ExprRef(indexing_id, transform) => {
+                if !program.is_expr(&transform.array) {
+                    let schedule =
+                        &schedule.schedule_map[indexing_id];
+
+                    let (array_shape, array_type) =
+                        &program.input_map[&transform.array];
+
+                    let mut processed = false;
+                    for amat in self.array_materializers.iter_mut() {
+                        if amat.can_materialize(*array_type, array_shape, schedule, transform) {
+                            amat.register(
+                                *array_type,
+                                array_shape,
+                                schedule,
+                                transform,
+                            );
+
+                            processed = true;
+                            break
+                        }
+                    }
+
+                    if !processed {
+                        panic!("No array materializer can process expr ref {}", indexing_id);
+                    }
+                }
+            }
+        }
     }
 
     // clean and fill reduced dimensions so that they can be used again
@@ -236,7 +295,7 @@ impl<'a> Materializer<'a> {
         &mut self,
         indexing_id: &IndexingId,
         array_type: ArrayType,
-        transform: &ArrayTransform,
+        _transform: &ArrayTransform,
         schedule: &IndexingSiteSchedule,
         ref_expr_sched: &ExprSchedule,
         expr_circ_val: CircuitValue<VectorInfo>,
@@ -508,6 +567,14 @@ impl<'a> InputArrayMaterializer<'a> for DummyArrayMaterializer {
         schedule.preprocessing.is_none()
     }
 
+    fn register(
+        &mut self,
+        _array_type: ArrayType,
+        _array_shape: &Shape,
+        _schedule: &IndexingSiteSchedule,
+        _transform: &ArrayTransform,
+    ) {}
+
     fn materialize(
         &mut self,
         _array_type: ArrayType,
@@ -613,7 +680,7 @@ impl DefaultArrayMaterializer {
             let probes =
                 vec![zeros.clone()].into_iter().chain(dim_probes.clone().into_iter());
 
-            self.deriver.register_and_derive_vectors(
+            self.deriver.locally_register_and_derive_vectors(
                 array_shape,
                 schedule,
                 transform,
@@ -703,6 +770,21 @@ impl<'a> InputArrayMaterializer<'a> for DefaultArrayMaterializer {
     ) -> bool {
         schedule.preprocessing.is_none()
     }
+    
+    fn register(
+        &mut self,
+        _array_type: ArrayType,
+        array_shape: &Shape,
+        schedule: &IndexingSiteSchedule,
+        transform: &ArrayTransform,
+    ) {
+        self.deriver.register_vectors(
+            array_shape,
+            schedule,
+            transform,
+            &IndexCoordinateSystem::new(schedule.exploded_dims.iter()),
+        );
+    }
 
     fn materialize(
         &mut self,
@@ -715,14 +797,22 @@ impl<'a> InputArrayMaterializer<'a> for DefaultArrayMaterializer {
         match array_type {
             ArrayType::Ciphertext => self
                 .deriver
-                .derive_vectors_and_gen_circuit_expr::<CiphertextObject>(
-                    shape, schedule, transform, None, registry,
+                .derive_vectors_and_gen_circuit::<CiphertextObject>(
+                    shape,
+                    schedule,
+                    transform,
+                    None,
+                    registry,
                 ),
 
             ArrayType::Plaintext => self
                 .deriver
-                .derive_vectors_and_gen_circuit_expr::<PlaintextObject>(
-                    shape, schedule, transform, None, registry,
+                .derive_vectors_and_gen_circuit::<PlaintextObject>(
+                    shape,
+                    schedule,
+                    transform,
+                    None,
+                    registry,
                 ),
         }
     }
@@ -810,7 +900,7 @@ impl DiagonalArrayMaterializer {
                 HashMap::from([(inner_i_dim_name.clone(), 0..1)])
             );
 
-        self.deriver.register_and_derive_vectors::<T>(
+        self.deriver.locally_register_and_derive_vectors::<T>(
             shape,
             &new_schedule,
             transform,
@@ -934,6 +1024,21 @@ impl<'a> InputArrayMaterializer<'a> for DiagonalArrayMaterializer {
         }
     }
 
+    fn register(
+        &mut self,
+        _array_type: ArrayType,
+        array_shape: &Shape,
+        schedule: &IndexingSiteSchedule,
+        transform: &ArrayTransform,
+    ) {
+        self.deriver.register_vectors(
+            array_shape,
+            schedule,
+            transform,
+            &IndexCoordinateSystem::new(schedule.exploded_dims.iter()),
+        );
+    }
+
     fn materialize(
         &mut self,
         array_type: ArrayType,
@@ -949,14 +1054,22 @@ impl<'a> InputArrayMaterializer<'a> for DiagonalArrayMaterializer {
                 (DimContent::EmptyDim { extent: _ }, _) => match array_type {
                     ArrayType::Ciphertext => self
                         .deriver
-                        .derive_vectors_and_gen_circuit_expr::<CiphertextObject>(
-                            shape, schedule, transform, None, registry,
+                        .derive_vectors_and_gen_circuit::<CiphertextObject>(
+                            shape,
+                            schedule,
+                            transform,
+                            None,
+                            registry,
                         ),
 
                     ArrayType::Plaintext => self
                         .deriver
-                        .derive_vectors_and_gen_circuit_expr::<PlaintextObject>(
-                            shape, schedule, transform, None, registry,
+                        .derive_vectors_and_gen_circuit::<PlaintextObject>(
+                            shape,
+                            schedule,
+                            transform,
+                            None,
+                            registry,
                         ),
                 },
 
@@ -977,7 +1090,7 @@ impl<'a> InputArrayMaterializer<'a> for DiagonalArrayMaterializer {
                 ) => match array_type {
                     ArrayType::Ciphertext => self
                         .deriver
-                        .derive_vectors_and_gen_circuit_expr::<CiphertextObject>(
+                        .derive_vectors_and_gen_circuit::<CiphertextObject>(
                             shape,
                             schedule,
                             transform,
@@ -987,7 +1100,7 @@ impl<'a> InputArrayMaterializer<'a> for DiagonalArrayMaterializer {
 
                     ArrayType::Plaintext => self
                         .deriver
-                        .derive_vectors_and_gen_circuit_expr::<PlaintextObject>(
+                        .derive_vectors_and_gen_circuit::<PlaintextObject>(
                             shape,
                             schedule,
                             transform,
@@ -1084,6 +1197,14 @@ mod tests {
         transform: ArrayTransform,
     ) -> (CircuitObjectRegistry, CircuitId) {
         let mut registry = CircuitObjectRegistry::new();
+
+        amat.register(
+            ArrayType::Ciphertext,
+            &shape,
+            &schedule,
+            &transform,
+        );
+
         let circ = amat.materialize(
             ArrayType::Ciphertext,
             &shape,

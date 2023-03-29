@@ -1,6 +1,6 @@
-input img: [(0,3),(0,3)]
-for x: (0,3) {
-    for y: (0,3) {
+input img: [4,4] from client
+for x: 4 {
+    for y: 4 {
         img[x-1][y-1] +
         img[x-1][y] +
         img[x-1][y+1] +

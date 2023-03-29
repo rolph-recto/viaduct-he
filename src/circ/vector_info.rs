@@ -773,9 +773,6 @@ impl VectorInfo {
     ) -> bool {
         use VectorDimContent::*;
 
-        let same_num_dims = 
-            self_offset_map.num_dims() == other_offset_map.num_dims();
-
         let vectorized_dims_valid = 
         self_dims.iter()
         .zip(other_dims.iter())
@@ -790,7 +787,11 @@ impl VectorInfo {
                     oob_left: oob_left2, oob_right: oob_right2,
                     pad_left: pad_left2, pad_right: pad_right2 }) =>
                 {
-                    let dims_match = dim1 == dim2;
+                    // fail early to avoid OOB panics on indexing the offset map
+                    if dim1 != dim2 {
+                        return false;
+                    }
+
                     let pads_match = pad_left1 == pad_left2 && pad_right1 == pad_right2;
                     let strides_match = stride1 == stride2;
                     let sizes_match = 
@@ -801,7 +802,7 @@ impl VectorInfo {
                     let istride = *stride1 as isize;
                     let offsets_match = self_offset % istride == other_offset % istride;
 
-                    dims_match && pads_match && strides_match && sizes_match && offsets_match
+                    pads_match && strides_match && sizes_match && offsets_match
                 },
 
                 (EmptyDim {
@@ -822,8 +823,11 @@ impl VectorInfo {
             }
         });
 
+        let min_offset_dims =
+            min(self_offset_map.num_dims(), other_offset_map.num_dims());
+
         let nonvectorized_dims_valid =
-            (0..self_offset_map.num_dims())
+            (0..min_offset_dims)
             .filter(|dim| {
                 self_dims.iter().all(|self_dim| {
                     match self_dim {
@@ -843,7 +847,7 @@ impl VectorInfo {
                 *self_offset_map.get(dim) == *other_offset_map.get(dim)
             });
 
-        same_num_dims && vectorized_dims_valid && nonvectorized_dims_valid
+        vectorized_dims_valid && nonvectorized_dims_valid
     }
 
     // join two vectors together, such that both are derivable
@@ -903,7 +907,9 @@ impl VectorInfo {
                     let orig_size = oob_left1 + extent1 + oob_right1;
 
                     // the new dimension cannot be bigger than the original dimension
-                    assert!(joined_extent <= orig_size);
+                    assert!(joined_extent <= orig_size,
+                        "joined_extent: {} orig_size: {} self: {} other: {}",
+                        joined_extent, orig_size, self, other);
 
                     FilledDim {
                         dim: *dim,

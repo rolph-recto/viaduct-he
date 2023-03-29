@@ -13,69 +13,138 @@ use super::cost::CostFeatures;
 
 /// general methods for deriving vectors through rotation and masking
 pub struct VectorDeriver {
-    cur_vector_id: VectorId,
-    vector_map: BiHashMap<VectorId, VectorInfo>,
-    parent_map: HashMap<VectorId, VectorId>,
+    // toplevel stores the union find nodes to compare other nodes to
+    // use RcRefCell here because toplevel shares ownership with
+    // the vector map of the indexing site
+    toplevel: Vec<Rc<RefCell<UnionFindNode<VectorInfo>>>>,
+
+    vector_map: HashMap<VectorInfo, Rc<RefCell<UnionFindNode<VectorInfo>>>>,
+
+    // vectors recorded from indexing sites
+    indexing_sites: HashMap<IndexingId, HashMap<IndexCoord, (VectorInfo, Rc<RefCell<UnionFindNode<VectorInfo>>>)>>,
 }
 
 impl VectorDeriver {
     pub fn new() -> Self {
         VectorDeriver {
-            cur_vector_id: 1,
-            vector_map: BiHashMap::new(),
-            parent_map: HashMap::new(),
+            toplevel: Vec::new(),
+            vector_map: HashMap::new(),
+            indexing_sites: HashMap::new(),
         }
     }
 
-    pub fn register_vector(&mut self, vector: VectorInfo) -> VectorId {
-        if let Some(id) = self.vector_map.get_by_right(&vector) {
-            *id
-        } else {
-            let id = self.cur_vector_id;
-            self.cur_vector_id += 1;
-            self.vector_map.insert(id, vector);
-            id
-        }
-    }
+    pub fn register_vector(&mut self, vector: VectorInfo) {
+        let vector_set =
+            Rc::new(RefCell::new(UnionFindNode::new(vector.clone())));
 
-    pub fn find_immediate_parent(&self, id: VectorId) -> VectorId {
-        let vector = self.vector_map.get_by_left(&id).unwrap();
-        for (id2, vector2) in self.vector_map.iter() {
-            if id != *id2 {
-                if vector2.derive(vector).is_some() {
-                    return *id2;
-                }
+        let mut processed = false;
+        for tlset in self.toplevel.iter_mut() {
+            let tlset_vector = tlset.borrow().clone_data();
+
+            // if vector can be derived from set vector, add it under this set
+            if tlset_vector.derive(&vector).is_some() {
+                tlset.as_ref().borrow_mut().union_with(
+                    &mut *vector_set.as_ref().borrow_mut(),
+                    |v, _| v
+                );
+                processed = true;
+                break
+
+            // if the vectors can be joined, then add the vector to the set
+            // but replace the set's representative with the join
+            } else if let Some(join) = tlset_vector.join(&vector) {
+                tlset.as_ref().borrow_mut().union_with(
+                    &mut *vector_set.as_ref().borrow_mut(),
+                    |_, _| join
+                );
+                processed = true;
+                break
             }
         }
 
-        id
+        // if not processed yet, add the vector as a new set
+        if !processed {
+            self.toplevel.push(Rc::clone(&vector_set));
+        }
+
+        self.vector_map.insert(vector, vector_set);
     }
 
-    // find immediate parent for each vector
-    pub fn compute_immediate_parents(&mut self, vector_ids: Vec<usize>) {
-        for vector_id in vector_ids {
-            let parent_id = self.find_immediate_parent(vector_id);
-            self.parent_map.insert(vector_id, parent_id);
+    pub fn register_vectors(
+        &mut self,
+        array_shape: &Shape,
+        schedule: &IndexingSiteSchedule,
+        transform: &ArrayTransform,
+        coord_system: &IndexCoordinateSystem,
+    ) {
+        if coord_system.is_empty() {
+            let vector = VectorInfo::get_input_vector_at_coord(
+                HashMap::new(),
+                array_shape,
+                schedule,
+                transform,
+                schedule.preprocessing,
+            );
+
+            self.register_vector(vector.clone());
+
+        } else {
+            for coord in coord_system.coord_iter() {
+                let vector = VectorInfo::get_input_vector_at_coord(
+                    coord_system.coord_as_index_map(coord.clone()),
+                    array_shape,
+                    schedule,
+                    transform,
+                    schedule.preprocessing,
+                );
+
+                self.register_vector(vector.clone());
+            }
         }
     }
 
-    pub fn find_transitive_parent(&self, id: VectorId) -> VectorId {
-        let mut cur_id = id;
-        let mut parent_id = self.parent_map[&cur_id];
+    pub fn derive_vector<T: CircuitObject>(
+        &self, vector: &VectorInfo
+    ) -> (VectorInfo, isize, PlaintextObject) {
+        if let Some(vector_set) = self.vector_map.get(vector) {
+            let parent = vector_set.borrow().clone_data();
+            let (steps, mask) = parent.derive(vector).unwrap();
+            (parent, steps, mask)
 
-        while parent_id != cur_id {
-            cur_id = parent_id;
-            parent_id = self.parent_map[&cur_id];
+        } else {
+            unreachable!()
         }
-
-        parent_id
     }
 
-    pub fn get_vector(&self, id: VectorId) -> &VectorInfo {
-        self.vector_map.get_by_left(&id).unwrap()
+    pub fn derive_vectors<T: CircuitObject>(
+        &self,
+        array_shape: &Shape,
+        schedule: &IndexingSiteSchedule,
+        transform: &ArrayTransform,
+        preprocessing: Option<ArrayPreprocessing>,
+        coords: impl Iterator<Item = IndexCoord> + Clone,
+        obj_map: &mut IndexCoordinateMap<T>,
+        mask_map: &mut IndexCoordinateMap<PlaintextObject>,
+        step_map: &mut IndexCoordinateMap<isize>,
+    ) {
+        for coord in coords {
+            let vector = VectorInfo::get_input_vector_at_coord(
+                obj_map.coord_as_index_map(coord.clone()),
+                array_shape,
+                schedule,
+                transform,
+                preprocessing,
+            );
+
+            let (parent, steps, mask) =
+                self.derive_vector::<T>(&vector);
+            obj_map.set(coord.clone(), T::input_vector(parent));
+            step_map.set(coord.clone(), steps);
+            mask_map.set(coord, mask);
+        }
     }
 
-    pub fn register_and_derive_vectors<T: CircuitObject>(
+    pub fn locally_register_and_derive_vectors<T: CircuitObject>(
         &mut self,
         array_shape: &Shape,
         schedule: &IndexingSiteSchedule,
@@ -86,13 +155,13 @@ impl VectorDeriver {
         mask_map: &mut IndexCoordinateMap<PlaintextObject>,
         step_map: &mut IndexCoordinateMap<isize>,
     ) {
+        let mut toplevel: Vec<Rc<RefCell<UnionFindNode<VectorInfo>>>> =
+            Vec::new();
+
         // need to store union-find nodes in RcRefCells since toplevel contains
         // a mutable reference to *some* them until all nodes have finished merging
         let mut vector_map: HashMap<IndexCoord, (VectorInfo, Rc<RefCell<UnionFindNode<VectorInfo>>>)> =
             HashMap::new();
-
-        // toplevel stores the union find nodes to compare other nodes to
-        let mut toplevel: Vec<Rc<RefCell<UnionFindNode<VectorInfo>>>> = Vec::new();
 
         for coord in coords.clone() {
             let vector = VectorInfo::get_input_vector_at_coord(
@@ -129,14 +198,11 @@ impl VectorDeriver {
 
             // if not processed yet, add the vector as a new set
             if !processed {
-                toplevel.push(Rc::clone(&vector_set));
+                self.toplevel.push(Rc::clone(&vector_set));
             }
 
             vector_map.insert(coord.clone(), (vector.clone(), vector_set));
         }
-
-        // explicitly drop toplevel here to drop all mutable borrows of union find nodes
-        drop(toplevel);
 
         for coord in coords {
             let (vector, vector_set) = vector_map.get(&coord).unwrap();
@@ -542,7 +608,7 @@ impl VectorDeriver {
     }
 
     // function that uses derivation data to generate a circuit
-    // the basic pattern it uses is 
+    // the basic pattern it uses is rotate(steps, (obj * mask))
     pub fn gen_circuit_expr<'a, T: CircuitObject>(
         obj_val: CircuitValue<T>,
         step_val: CircuitValue<isize>,
@@ -622,7 +688,7 @@ impl VectorDeriver {
     }
 
     // default method for generating circuit expression for an array materializer
-    pub fn derive_vectors_and_gen_circuit_expr<'a, T: CircuitObject>(
+    pub fn derive_vectors_and_gen_circuit<'a, T: CircuitObject>(
         &mut self,
         array_shape: &Shape,
         schedule: &IndexingSiteSchedule,
@@ -646,7 +712,7 @@ impl VectorDeriver {
 
             let coords = obj_map.coord_iter();
 
-            self.register_and_derive_vectors(
+            self.derive_vectors(
                 array_shape,
                 schedule,
                 transform,
@@ -663,6 +729,7 @@ impl VectorDeriver {
                 CircuitValue::CoordMap(mask_map),
                 registry,
             )
+
         } else {
             // there is only a single vector
             let vector =
@@ -674,28 +741,15 @@ impl VectorDeriver {
                     preprocessing,
                 );
 
-            let vector_id = self.register_vector(vector.clone());
-            self.compute_immediate_parents(vec![vector_id]);
+            let (parent, steps, mask) =
+                self.derive_vector::<T>(&vector);
 
-            let parent_id = self.find_transitive_parent(vector_id);
-            if vector_id != parent_id {
-                let parent = self.get_vector(parent_id);
-                let (steps, mask) = parent.derive(&vector).unwrap();
-                VectorDeriver::gen_circuit_expr(
-                    CircuitValue::Single(T::input_vector(parent.clone())),
-                    CircuitValue::Single(steps),
-                    CircuitValue::Single(mask),
-                    registry,
-                )
-
-            } else {
-                VectorDeriver::gen_circuit_expr(
-                    CircuitValue::Single(T::input_vector(vector)),
-                    CircuitValue::Single(0),
-                    CircuitValue::Single(PlaintextObject::Const(1)),
-                    registry,
-                )
-            }
+            VectorDeriver::gen_circuit_expr(
+                CircuitValue::Single(T::input_vector(parent.clone())),
+                CircuitValue::Single(steps),
+                CircuitValue::Single(mask),
+                registry,
+            )
         }
     }
 }
