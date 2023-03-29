@@ -108,8 +108,12 @@ impl VectorDeriver {
     ) -> (VectorInfo, isize, PlaintextObject) {
         if let Some(vector_set) = self.vector_map.get(vector) {
             let parent = vector_set.borrow().clone_data();
-            let (steps, mask) = parent.derive(vector).unwrap();
-            (parent, steps, mask)
+            if let Some((steps, mask)) = parent.derive(vector) {
+                (parent, steps, mask)
+
+            } else {
+                panic!("cannot derive {} from parent {}", vector, parent)
+            }
 
         } else {
             unreachable!()

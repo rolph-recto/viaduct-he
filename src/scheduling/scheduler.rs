@@ -67,7 +67,7 @@ impl<'t> InlineScheduler<'t> {
 
     pub fn iterate<'m>(
         &mut self,
-        materializer_factory: &dyn PseudoMaterializerFactory,
+        materializer_factory: &dyn MaterializerFactory,
         cost_estimator: &CostEstimator,
     ) -> (usize, Vec<(Schedule, CostFeatures)>) {
         let mut cur: HashSet<Schedule> = HashSet::new();
@@ -96,8 +96,8 @@ impl<'t> InlineScheduler<'t> {
                         {
                             let mat = materializer_factory.create();
                             if let Ok(circuit) = mat.run(&self.program, &neighbor) {
-                                // let cost = cost_estimator.estimate_cost(&circuit);
-                                let cost = cost_estimator.estimate_pseudo_cost(&circuit);
+                                let cost = cost_estimator.estimate_cost(&circuit);
+                                // let cost = cost_estimator.estimate_pseudo_cost(&circuit);
                                 debug!("neighbor cost {:?}", cost);
 
                                 valid_neighbors.push((neighbor.clone(), cost));
@@ -128,7 +128,7 @@ pub struct SchedulingResult {
 /// scheduler for a particular inlined program
 /// (identified by array group map and inline set)
 pub struct Scheduler<'m, 't> {
-    materializer_factory: Box<dyn PseudoMaterializerFactory + 'm>,
+    materializer_factory: Box<dyn MaterializerFactory + 'm>,
     cost_estimator: CostEstimator,
     inline_schedulers: HashMap<usize, (bool, InlineScheduler<'t>)>,
 
@@ -141,7 +141,7 @@ impl<'m, 't> Scheduler<'m, 't> {
     pub fn new(
         inlined_programs: Vec<InlinedProgram>,
         transformer_factory: Box<dyn ScheduleTransformerFactory<'t> + 't>,
-        materializer_factory: Box<dyn PseudoMaterializerFactory + 'm>,
+        materializer_factory: Box<dyn MaterializerFactory + 'm>,
         vector_size: usize,
     ) -> Self {
         let cost_estimator = CostEstimator::default();
@@ -159,8 +159,8 @@ impl<'m, 't> Scheduler<'m, 't> {
             let mat_res = mat.run(&inlined_program, &init_schedule);
 
             if let Ok(circuit) = mat_res {
-                // let cost = cost_estimator.estimate_cost(&circuit);
-                let cost = cost_estimator.estimate_pseudo_cost(&circuit);
+                let cost = cost_estimator.estimate_cost(&circuit);
+                // let cost = cost_estimator.estimate_pseudo_cost(&circuit);
                 init_schedules.push((inline_id, init_schedule.clone(), cost));
             }
 
@@ -397,7 +397,7 @@ mod tests {
             Scheduler::new(
                 inlined_programs,
                 Box::new(FastScheduleTransformerFactory), 
-                Box::new(DefaultPseudoMaterializerFactory), 
+                Box::new(DefaultMaterializerFactory), 
                 4096
             );
         

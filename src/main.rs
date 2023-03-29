@@ -108,7 +108,7 @@ fn main() {
         Scheduler::new(
             inlined_programs,
             Box::new(FastScheduleTransformerFactory), 
-            Box::new(DefaultPseudoMaterializerFactory), 
+            Box::new(DefaultMaterializerFactory), 
             args.size
         );
 

@@ -3,6 +3,10 @@
 ## Research Question 1
 RQ1: Can the compiler generate efficient programs with complex layouts?
 
+Compare with a "semi-naive" baseline that tries to vectorize;
+this is "semi-naive" because the "naive" baseline is to *not*
+vectorize at all and use one slot per ciphertext
+
 ## Benchmarks
 1. private information retrieval (retrieval)
 vec-size = 8192

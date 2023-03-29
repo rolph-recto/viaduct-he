@@ -802,7 +802,23 @@ impl VectorInfo {
                     let istride = *stride1 as isize;
                     let offsets_match = self_offset % istride == other_offset % istride;
 
+                    let joined_offset = min(self_offset, other_offset);
+
+                    let self_max_index =
+                        *self_offset_map.get(*dim1) + (((extent1 - 1) * stride1) as isize);
+
+                    let other_max_index = 
+                        *other_offset_map.get(*dim1) + (((extent2 - 1) * stride1) as isize);
+                    let max_index = max(self_max_index, other_max_index);
+
+                    let joined_extent: usize =
+                        ((max_index - joined_offset) / ((*stride1) as isize)) as usize + 1;
+
+                    let join_within_orig_extent =
+                        joined_extent <= oob_left1 + extent1 + oob_right1;
+
                     pads_match && strides_match && sizes_match && offsets_match
+                    && join_within_orig_extent
                 },
 
                 (EmptyDim {
@@ -879,7 +895,7 @@ impl VectorInfo {
                 min(*self.offset_map.get(i), *other.offset_map.get(i));
 
             // clip to 0
-            joined_offset_map.set(i, max(min_offset, 0));
+            joined_offset_map.set(i, min_offset);
         }
 
         let joined_dims: im::Vector<VectorDimContent> = 
