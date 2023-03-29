@@ -624,10 +624,10 @@ impl VectorInfo {
                     rotate_steps += dim_steps * (block_size as isize);
                     block_size *= dim_size;
 
+                    // determine required padding
                     // assume that the dimensions are laid out in the parent like:
                     // wrapl_content1 | wrapl pad_right | pad_left1 | oob_left1 | content1 | oob_right1 | pad_right1 | wrapr pad_left1 | wrapr_content1
 
-                    // determine required padding
                     let wrapl_content1_hi =
                         dim_steps - (pad_right1 as isize) - 1;
 
@@ -692,8 +692,16 @@ impl VectorInfo {
                     mask_dim_info.push((dim_size, dim_mask));
                 },
 
-                (EmptyDim { extent: extent1, pad_left: pad_left1, pad_right: pad_right1, oob_right: oob_right1 },
-                EmptyDim { extent: extent2, pad_left: pad_left2, pad_right: pad_right2, oob_right: oob_right2 }) => {
+                (EmptyDim {
+                    extent: extent1,
+                    pad_left: pad_left1, pad_right: pad_right1,
+                    oob_right: oob_right1 },
+                EmptyDim {
+                    extent: extent2,
+                    pad_left: pad_left2,
+                    pad_right: pad_right2,
+                    oob_right: oob_right2 }
+                ) => {
                     let dim_size = pad_left1 + extent1 + pad_right1 + oob_right1;
                     block_size *= dim_size;
 
@@ -709,8 +717,14 @@ impl VectorInfo {
                 },
 
                 // an empty dim can be derived from a reduced dim by a clean-and-fill
-                (ReducedDim { extent: extent1, pad_left: pad_left1, pad_right: pad_right1 },
-                EmptyDim { extent: extent2, pad_left: pad_left2, pad_right: pad_right2, oob_right: oob_right2  }) => {
+                (ReducedDim {
+                    extent: extent1,
+                    pad_left: pad_left1, pad_right: pad_right1 },
+                EmptyDim {
+                    extent: extent2,
+                    pad_left: pad_left2, pad_right: pad_right2,
+                    oob_right: oob_right2  }
+                ) => {
                     let dim_size = pad_left1 + extent1 + pad_right1;
                     let dim_mask =
                         // don't mask anything
@@ -725,21 +739,17 @@ impl VectorInfo {
                     block_size *= dim_size;
                 },
 
-                (ReducedDim { extent:_, pad_left:_, pad_right:_ },
-                FilledDim { dim:_, extent:_, stride:_, oob_left:_, oob_right:_, pad_left:_, pad_right:_ }) |
-                (FilledDim { dim: _, extent: _, stride: _, oob_left: _, oob_right: _, pad_left: _, pad_right: _ },
-                EmptyDim { extent: _, pad_left: _, pad_right: _, oob_right: _ }) |
-                (EmptyDim { extent: _, pad_left: _, pad_right: _, oob_right: _ },
-                FilledDim { dim: _, extent: _, stride: _, oob_left: _, oob_right: _, pad_left: _, pad_right: _ }) |
-                (_, ReducedDim { extent: _, pad_left: _, pad_right: _ }) =>
-                    unreachable!(),
+                _ => unreachable!()
             }
         });
 
-        let is_mask_const = mask_dim_info.iter().all(|(_, dim_mask)| dim_mask.is_none());
+        let is_mask_const =
+            mask_dim_info.iter()
+            .all(|(_, dim_mask)| dim_mask.is_none());
 
         let mask = if is_mask_const {
             PlaintextObject::Const(1)
+
         } else {
             let mask = mask_dim_info
                 .into_iter()
@@ -1204,8 +1214,12 @@ mod tests {
         assert_eq!(res.1, PlaintextObject::Const(1));
     }
 
-    fn derivable_from_join(v1: &VectorInfo, v2: &VectorInfo, join: &VectorInfo) -> bool {
-        join.derive(v1).is_some() && join.derive(v2).is_some()
+    fn test_join_properties(v1: &VectorInfo, v2: &VectorInfo, join: &VectorInfo) {
+        // join must be an upper bounds of v1 and v2
+        assert!(join.derive(v1).is_some() && join.derive(v2).is_some());
+
+        // join is symmetric
+        assert_eq!(v2.join(v1).unwrap(), *join);
     }
 
     #[test]
@@ -1251,7 +1265,7 @@ mod tests {
         assert!(res.is_some());
 
         let join = res.unwrap();
-        assert!(derivable_from_join(&vec1, &vec2, &join));
+        test_join_properties(&vec1, &vec2, &join);
         assert_eq!(*join.offset_map.get(0), 0);
         println!("{}", join);
     }
@@ -1347,7 +1361,7 @@ mod tests {
 
         let join = res.unwrap();
         println!("join: {}", join);
-        assert!(derivable_from_join(&vec1, &vec2, &join));
+        test_join_properties(&vec1, &vec2, &join);
     }
 
     #[test]

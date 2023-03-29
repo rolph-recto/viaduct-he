@@ -1,6 +1,7 @@
-use std::array;
+use std::{array, cell::{RefCell, RefMut}, borrow::BorrowMut, rc::Rc};
 
 use bimap::BiHashMap;
+use disjoint_sets::UnionFindNode;
 use log::info;
 
 use crate::{
@@ -85,48 +86,70 @@ impl VectorDeriver {
         mask_map: &mut IndexCoordinateMap<PlaintextObject>,
         step_map: &mut IndexCoordinateMap<isize>,
     ) {
-        let mut vector_id_map: HashMap<IndexCoord, VectorId> = HashMap::new();
-        for coord in coords.clone() {
-            let index_map = obj_map.coord_as_index_map(coord.clone());
+        // need to store union-find nodes in RcRefCells since toplevel contains
+        // a mutable reference to *some* them until all nodes have finished merging
+        let mut vector_map: HashMap<IndexCoord, (VectorInfo, Rc<RefCell<UnionFindNode<VectorInfo>>>)> =
+            HashMap::new();
 
+        // toplevel stores the union find nodes to compare other nodes to
+        let mut toplevel: Vec<Rc<RefCell<UnionFindNode<VectorInfo>>>> = Vec::new();
+
+        for coord in coords.clone() {
             let vector = VectorInfo::get_input_vector_at_coord(
-                index_map,
+                obj_map.coord_as_index_map(coord.clone()),
                 array_shape,
                 schedule,
                 transform,
                 preprocessing,
             );
 
-            let vector_id = self.register_vector(vector);
-            vector_id_map.insert(coord, vector_id);
+            let vector_set =
+                Rc::new(RefCell::new(UnionFindNode::new(vector.clone())));
+
+            let mut processed = false;
+            for tlset in toplevel.iter_mut() {
+                let tlset_vector = tlset.borrow().clone_data();
+
+                // if vector can be derived from set vector, add it under this set
+                if tlset_vector.derive(&vector).is_some() {
+                    tlset.as_ref().borrow_mut().union_with(
+                        &mut *vector_set.as_ref().borrow_mut(),
+                        |v, _| v
+                    );
+                    processed = true;
+
+                } else if let Some(join) = tlset_vector.join(&vector) {
+                    tlset.as_ref().borrow_mut().union_with(
+                        &mut *vector_set.as_ref().borrow_mut(),
+                        |_, _| join
+                    );
+                    processed = true;
+                }
+            }
+
+            // if not processed yet, add the vector as a new set
+            if !processed {
+                toplevel.push(Rc::clone(&vector_set));
+            }
+
+            vector_map.insert(coord.clone(), (vector.clone(), vector_set));
         }
 
-        let vector_ids =
-            vector_id_map.iter()
-            .map(|(_, id)| *id)
-            .collect();
-        self.compute_immediate_parents(vector_ids);
+        // explicitly drop toplevel here to drop all mutable borrows of union find nodes
+        drop(toplevel);
 
-        // find transitive parents
         for coord in coords {
-            let vector_id = *vector_id_map.get(&coord).unwrap();
-            let parent_id = self.find_transitive_parent(vector_id);
+            let (vector, vector_set) = vector_map.get(&coord).unwrap();
+            let parent = vector_set.borrow().clone_data();
+            let derive_opt = parent.derive(vector);
 
-            if vector_id != parent_id {
-                // the vector is derived from some parent
-                let vector = self.get_vector(vector_id);
-                let parent = self.get_vector(parent_id);
-                let (steps, mask) = parent.derive(vector).unwrap();
-
+            if let Some((steps, mask)) = derive_opt {
+                obj_map.set(coord.clone(), T::input_vector(parent));
                 step_map.set(coord.clone(), steps);
-                mask_map.set(coord.clone(), mask);
-                obj_map.set(coord, T::input_vector(parent.clone()));
+                mask_map.set(coord, mask);
+
             } else {
-                // the vector is not derived
-                let vector = self.get_vector(vector_id);
-                step_map.set(coord.clone(), 0);
-                mask_map.set(coord.clone(), PlaintextObject::Const(1));
-                obj_map.set(coord, T::input_vector(vector.clone()));
+                unreachable!()
             }
         }
     }
