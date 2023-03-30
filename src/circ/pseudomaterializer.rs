@@ -12,7 +12,12 @@ use crate::{
     util
 };
 
-use super::{CircuitObjectRegistry, materializer::{InputArrayMaterializer, DefaultArrayMaterializer}, cost::CostFeatures, vector_deriver::VectorDeriver, IndexCoordinateSystem, vector_info::VectorInfo, CiphertextObject, PlaintextObject};
+use super::{
+    CircuitObjectRegistry,
+    array_materializer::*,
+    cost::CostFeatures, vector_deriver::VectorDeriver, IndexCoordinateSystem,
+    vector_info::VectorInfo, CiphertextObject, PlaintextObject
+};
 
 pub struct PseudoCircuitProgram {
     pub registry: CircuitObjectRegistry,

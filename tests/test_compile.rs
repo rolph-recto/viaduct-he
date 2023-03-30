@@ -1,4 +1,20 @@
-use he_vectorizer::{lang::{parser::ProgramParser, elaborated::Elaborator, index_elim::IndexElimination}, scheduling::Schedule, circ::{materializer::{DefaultArrayMaterializer, InputArrayMaterializer, Materializer}, plaintext_hoisting::PlaintextHoisting}, program::{lowering::CircuitLowering, backend::{pyseal::SEALBackend, HEBackend}}};
+use he_vectorizer::{
+    lang::{
+        parser::ProgramParser,
+        elaborated::Elaborator,
+        index_elim::IndexElimination
+    },
+    scheduling::Schedule,
+    circ::{
+        array_materializer::{DefaultArrayMaterializer, InputArrayMaterializer},
+        materializer::Materializer,
+        plaintext_hoisting::PlaintextHoisting
+    },
+    program::{
+        lowering::CircuitLowering,
+        backend::{pyseal::SEALBackend, HEBackend}
+    }
+};
 
 fn test_compile(src: &str) {
     let source = ProgramParser::new().parse(&src).unwrap();

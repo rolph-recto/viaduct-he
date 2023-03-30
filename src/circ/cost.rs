@@ -367,7 +367,7 @@ impl CostEstimator {
 mod tests {
     use super::*;
     use crate::{
-        circ::materializer::{DummyArrayMaterializer, Materializer},
+        circ::{array_materializer::*, materializer::{Materializer}},
         lang::{
             elaborated::Elaborator, index_elim::IndexElimination, parser::ProgramParser,
             source::SourceProgram,

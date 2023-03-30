@@ -10,8 +10,8 @@ use log::*;
 use he_vectorizer::{
     circ::{
         optimizer::{ExtractorType, Optimizer},
-        materializer::{DefaultArrayMaterializer, Materializer, InputArrayMaterializer, DefaultMaterializerFactory, MaterializerFactory},
-        plaintext_hoisting::PlaintextHoisting, cost::CostFeatures, ParamCircuitProgram, pseudomaterializer::DefaultPseudoMaterializerFactory
+        materializer::{DefaultMaterializerFactory, MaterializerFactory},
+        plaintext_hoisting::PlaintextHoisting, cost::CostFeatures,
     },
     lang::{
         index_elim::{IndexElimination, InlinedProgram},
@@ -19,7 +19,6 @@ use he_vectorizer::{
         elaborated::Elaborator
     },
     scheduling::{
-        Schedule,
         scheduler::Scheduler,
         transformer::DefaultScheduleTransformerFactory,
     },

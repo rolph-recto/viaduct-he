@@ -12,6 +12,7 @@ use crate::{
     scheduling::ScheduleDim,
 };
 
+pub mod array_materializer;
 pub mod cost;
 pub mod materializer;
 pub mod pseudomaterializer;
