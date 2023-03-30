@@ -5,7 +5,7 @@ use std::{
 };
 
 use gcollections::ops::Bounded;
-use log::info;
+use log::{info, debug};
 
 use crate::{circ::PlaintextObject, lang::*, scheduling::*};
 
@@ -406,6 +406,10 @@ impl VectorInfo {
     ) -> bool {
         use VectorDimContent::*;
 
+        if self_offset_map.num_dims() != other_offset_map.num_dims() {
+            return false;
+        }
+
         let mut seen_dims: HashSet<DimIndex> = HashSet::new();
 
         // check derivability conditions
@@ -505,7 +509,7 @@ impl VectorInfo {
             });
 
         let nonvectorized_dims_valid =
-            (0..min(self_offset_map.num_dims(), other_offset_map.num_dims()))
+            (0..self_offset_map.num_dims())
             .filter(|dim| {
                 self_dims.iter().all(|dim2_content| match dim2_content {
                     FilledDim {
@@ -518,10 +522,11 @@ impl VectorInfo {
                         pad_right: _,
                     } => dim != dim2,
 
-                    _ => false
+                    _ => true
                 })
-            })
-            .all(|dim| self_offset_map.get(dim) == other_offset_map.get(dim));
+            }).all(|dim|
+                self_offset_map.get(dim) == other_offset_map.get(dim)
+            );
 
         let same_num_dims = self_dims.len() == other_dims.len();
 
@@ -773,6 +778,10 @@ impl VectorInfo {
     ) -> bool {
         use VectorDimContent::*;
 
+        if self_offset_map.num_dims() != other_offset_map.num_dims() {
+            return false;
+        }
+
         let vectorized_dims_valid = 
         self_dims.iter()
         .zip(other_dims.iter())
@@ -839,11 +848,8 @@ impl VectorInfo {
             }
         });
 
-        let min_offset_dims =
-            min(self_offset_map.num_dims(), other_offset_map.num_dims());
-
         let nonvectorized_dims_valid =
-            (0..min_offset_dims)
+            (0..self_offset_map.num_dims())
             .filter(|dim| {
                 self_dims.iter().all(|self_dim| {
                     match self_dim {
@@ -855,7 +861,7 @@ impl VectorInfo {
                             *dim != *idim
                         },
 
-                        _ => false
+                        _ => true
                     }
                 })
             })
@@ -889,13 +895,39 @@ impl VectorInfo {
             return None;
         }
 
+        let min_offset_dims =
+            min(self.offset_map.num_dims(), other.offset_map.num_dims());
+
+        let vectorized_dims: Vec<usize> =
+            (0..min_offset_dims)
+            .filter(|dim| {
+                self_dims.iter().any(|self_dim| {
+                    match self_dim {
+                        FilledDim {
+                            dim: idim, extent: _, stride: _,
+                            oob_left: _, oob_right: _,
+                            pad_left: _, pad_right: _
+                        } => {
+                            *dim == *idim
+                        },
+
+                        _ => false
+                    }
+                })
+            }).collect();
+
         let mut joined_offset_map: OffsetMap<isize> = OffsetMap::new(self.offset_map.num_dims());
         for i in 0..joined_offset_map.num_dims() {
-            let min_offset = 
-                min(*self.offset_map.get(i), *other.offset_map.get(i));
+            let self_offset = self.offset_map[i];
+            let other_offset = other.offset_map[i];
+            if vectorized_dims.contains(&i) {
+                let min_offset = min(self_offset, other_offset);
+                joined_offset_map.set(i, min_offset);
 
-            // clip to 0
-            joined_offset_map.set(i, min_offset);
+            } else {
+                assert_eq!(self_offset, other_offset);
+                joined_offset_map.set(i, self_offset)
+            }
         }
 
         let joined_dims: im::Vector<VectorDimContent> = 

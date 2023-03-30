@@ -4,7 +4,7 @@ use std::{
 };
 
 use indexmap::IndexMap;
-use log::info;
+use log::{info, debug};
 
 use crate::{
     circ::{vector_info::VectorInfo, CircuitValue, IndexCoordinateMap},

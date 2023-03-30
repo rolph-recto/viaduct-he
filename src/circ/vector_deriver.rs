@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use disjoint_sets::UnionFindNode;
-use log::info;
+use log::{info, debug};
 
 use crate::{
     circ::{vector_info::VectorInfo, *},
@@ -108,6 +108,7 @@ impl VectorDeriver {
     ) -> (VectorInfo, isize, PlaintextObject) {
         if let Some(vector_set) = self.vector_map.get(vector) {
             let parent = vector_set.borrow().clone_data();
+
             if let Some((steps, mask)) = parent.derive(vector) {
                 (parent, steps, mask)
 
@@ -143,6 +144,7 @@ impl VectorDeriver {
 
                 let (parent, steps, mask) =
                     self.derive_vector::<T>(&vector);
+
                 obj_map.set(coord.clone(), T::input_vector(parent));
                 step_map.set(coord.clone(), steps);
                 mask_map.set(coord, mask);

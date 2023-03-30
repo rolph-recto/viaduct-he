@@ -236,6 +236,7 @@ impl ArrayTransform {
     }
 }
 
+#[derive(Clone,Debug)]
 pub struct OffsetEnvironment {
     index_map: HashMap<DimName, usize>,
     function_values: HashMap<String, isize>,
