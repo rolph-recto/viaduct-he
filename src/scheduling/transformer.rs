@@ -168,7 +168,7 @@ impl ScheduleTransformer for SplitDimTransformer {
 
         let num_split_dims_within_limit =
             self.num_dims_to_split
-            .map_or(true, |limit| num_split_dims <= limit);
+            .map_or(true, |limit| num_split_dims < limit);
 
         if !num_split_dims_within_limit {
             return HashSet::new()

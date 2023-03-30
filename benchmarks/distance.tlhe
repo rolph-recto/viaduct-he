@@ -1,0 +1,7 @@
+input point: [64] from client
+input tests: [64,64] from server
+for i: 64 {
+    sum(for j: 64 {
+        (point[j] - tests[i][j]) * (point[j] - tests[i][j])
+    })
+}

@@ -56,7 +56,8 @@ pub enum ArrayPreprocessing {
 impl Display for ArrayPreprocessing {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ArrayPreprocessing::Roll(dim_i, dim_j) => write!(f, "permute({},{})", dim_i, dim_j),
+            ArrayPreprocessing::Roll(dim_i, dim_j) =>
+                write!(f, "roll({},{})", dim_i, dim_j),
         }
     }
 }
@@ -234,6 +235,14 @@ impl HasExplodedDims for IndexingSiteSchedule {
 
 impl Display for IndexingSiteSchedule {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let preprocessing_str = 
+            if let Some(preprocessing) = self.preprocessing {
+                preprocessing.to_string()
+
+            } else {
+                String::new()
+            };
+
         let exploded_str = self
             .exploded_dims
             .iter()
@@ -248,7 +257,7 @@ impl Display for IndexingSiteSchedule {
             .collect::<Vec<String>>()
             .join(", ");
 
-        write!(f, "{{{}}}[{}]", exploded_str, vectorized_str)
+        write!(f, "{}{{{}}}[{}]", preprocessing_str, exploded_str, vectorized_str)
     }
 }
 

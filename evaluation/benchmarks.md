@@ -26,6 +26,10 @@ vec-size: 2048?
 vec-size: 2048 (?)
 * show off tiling + diagonal layout (hybrid layout from gazelle)
 
+6. single-channel convolution (from gazelle)
+
+7. multiple-channel convolution (from gazelle)
+
 ## Research Question 2
 RQ2: Can the compiler optimize circuits efficiently?
 
