@@ -28,6 +28,24 @@ impl<'a> ScheduleTransformerFactory<'a> for DefaultScheduleTransformerFactory {
     }
 }
 
+struct TransformerUtil;
+
+impl TransformerUtil {
+    fn get_schedule_level(
+        schedule: &Schedule,
+        indexing_levels: &HashMap<IndexingId, usize>
+    ) -> usize {
+        schedule.schedule_map.iter()
+        .filter(|(_, isched)| {
+            isched.get_tiling().iter().any(|dim| dim.len() > 1) ||
+            isched.vectorized_dims.len() > 0
+        })
+        .fold(0, |acc, (site, _)| {
+            max(acc, indexing_levels[site])
+        })
+    }
+}
+
 /// a transformer that turns exploded dims to vectorized dims
 #[derive(Default)]
 pub struct VectorizeDimTransformer {
@@ -50,15 +68,8 @@ impl ScheduleTransformer for VectorizeDimTransformer {
     fn transform(&self, schedule: &Schedule) -> HashSet<Schedule> {
         let mut neighbors = HashSet::new();
 
-        let cur_level: usize = 
-            schedule.schedule_map.iter()
-            .filter(|(_, isched)| {
-                isched.get_tiling().iter().any(|dim| dim.len() > 1) ||
-                isched.vectorized_dims.len() > 0
-            })
-            .fold(0, |acc, (site, _)| {
-                max(acc, self.indexing_levels[site])
-            });
+        let cur_level: usize =
+            TransformerUtil::get_schedule_level(schedule, &self.indexing_levels);
 
         // find candidate dims to be vectorized
         let mut candidate_dims: HashSet<(usize, usize, usize)> = HashSet::new();
@@ -129,7 +140,7 @@ pub struct SplitDimTransformer {
     split_limit: Option<usize>,
     num_dims_to_split: Option<usize>,
     dim_classes: HashMap<(IndexingId, DimIndex), usize>,
-   indexing_levels: HashMap<IndexingId, usize>,
+    indexing_levels: HashMap<IndexingId, usize>,
 }
 
 impl SplitDimTransformer {
@@ -166,15 +177,7 @@ impl ScheduleTransformer for SplitDimTransformer {
         let mut neighbors = HashSet::new();
 
         let cur_level: usize =
-            schedule.schedule_map.iter()
-            .filter(|(_, isched)| {
-                isched.get_tiling().iter().any(|dim| dim.len() > 1) ||
-                isched.vectorized_dims.len() > 0
-            })
-            .fold(0, |acc, (site, _)| {
-                max(acc, self.indexing_levels[site])
-            });
-
+            TransformerUtil::get_schedule_level(schedule, &self.indexing_levels);
 
         // find candidate dims to be vectorized
         let mut candidate_dims: HashSet<(usize, usize, usize)> = HashSet::new();
@@ -265,6 +268,85 @@ impl ScheduleTransformer for SplitDimTransformer {
     }
 }
 
+/// applies roll preprocessing to schedules
+pub struct RollTransformer {
+    dim_classes: HashMap<(IndexingId, DimIndex), usize>,
+    indexing_levels: HashMap<IndexingId, usize>,
+}
+
+impl RollTransformer {
+    pub fn new(
+        dim_classes: HashMap<(IndexingId, DimIndex), usize>,
+        indexing_levels: HashMap<IndexingId, usize>
+    ) -> Self {
+        Self { dim_classes, indexing_levels }
+    }
+}
+
+impl ScheduleTransformer for RollTransformer {
+    fn name(&self) -> &str { "RollTransformer" }
+
+    fn transform(&self, schedule: &Schedule) -> HashSet<Schedule> {
+        let mut neighbors = HashSet::new();
+
+        let cur_level = TransformerUtil::get_schedule_level(schedule, &self.indexing_levels);
+
+        let mut candidate_pairs: Vec<(usize, usize)> = Vec::new();
+        for (site, ischedule) in schedule.schedule_map.iter() {
+            let tiling = ischedule.get_tiling();
+            if self.indexing_levels[site] >= cur_level {
+                let vdim = ischedule.vectorized_dims.head().unwrap();
+                let vdim_valid_tiling = tiling[vdim.index].len() == 1;
+                let no_preprocessing = ischedule.preprocessing == None;
+
+                if vdim_valid_tiling && no_preprocessing {
+                    let vclass = self.dim_classes[&(site.clone(), vdim.index)];
+                    for edim in ischedule.exploded_dims.iter() {
+                        let edim_valid_tiling = tiling[edim.index].len() == 1;
+                        let same_extent = edim.extent == vdim.extent;
+                        let no_padding =
+                            edim.pad_left == 0 && edim.pad_right == 0
+                            && vdim.pad_left == 0 && vdim.pad_right == 0;
+
+                        if edim_valid_tiling && same_extent && no_padding {
+                            let eclass = self.dim_classes[&(site.clone(), edim.index)];
+                            candidate_pairs.push((eclass, vclass));
+                        }
+                    }
+                }
+            }
+        }
+
+        for (roll_eclass, roll_vclass) in candidate_pairs {
+            let mut new_schedule_map: im::HashMap<IndexingId, IndexingSiteSchedule> =
+                im::HashMap::new();
+
+            for (site, ischedule) in schedule.schedule_map.iter() {
+                let mut new_site_schedule = ischedule.clone();
+                let vdim = ischedule.vectorized_dims.head().unwrap();
+                let vclass = *self.dim_classes.get(&(site.clone(), vdim.index)).unwrap();
+
+                if vclass == roll_vclass {
+                    for edim in ischedule.exploded_dims.iter() {
+                        let eclass = *self.dim_classes.get(&(site.clone(), edim.index)).unwrap();
+                        if eclass == roll_eclass {
+                            new_site_schedule.preprocessing =
+                                Some(ArrayPreprocessing::Roll(edim.index, vdim.index));
+
+                            break;
+                        }
+                    }
+                }
+
+                new_schedule_map.insert(site.clone(), new_site_schedule);
+            }
+
+            neighbors.insert(Schedule { schedule_map: new_schedule_map });
+        }
+
+        neighbors
+    }
+}
 
 // transformers:
 // - dimension split transformer

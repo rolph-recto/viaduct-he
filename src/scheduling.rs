@@ -50,13 +50,13 @@ impl Display for ScheduleDim {
 pub enum ArrayPreprocessing {
     // TODO add more complicated permutations
     // Permute(i, j) means to permute dim i along dim j
-    Permute(DimIndex, DimIndex),
+    Roll(DimIndex, DimIndex),
 }
 
 impl Display for ArrayPreprocessing {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ArrayPreprocessing::Permute(dim_i, dim_j) => write!(f, "permute({},{})", dim_i, dim_j),
+            ArrayPreprocessing::Roll(dim_i, dim_j) => write!(f, "permute({},{})", dim_i, dim_j),
         }
     }
 }
@@ -64,7 +64,7 @@ impl Display for ArrayPreprocessing {
 impl ArrayPreprocessing {
     pub fn transformed_dims(&self) -> HashSet<DimIndex> {
         match self {
-            ArrayPreprocessing::Permute(dim_i, _) => {
+            ArrayPreprocessing::Roll(dim_i, _) => {
                 let mut set: HashSet<DimIndex> = HashSet::new();
                 set.insert(*dim_i);
                 set

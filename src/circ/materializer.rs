@@ -990,7 +990,7 @@ impl<'a> InputArrayMaterializer<'a> for DiagonalArrayMaterializer {
         schedule: &IndexingSiteSchedule,
         _base: &ArrayTransform,
     ) -> bool {
-        if let Some(ArrayPreprocessing::Permute(dim_i, dim_j)) = schedule.preprocessing {
+        if let Some(ArrayPreprocessing::Roll(dim_i, dim_j)) = schedule.preprocessing {
             // dim i must be exploded and dim j must be the outermost vectorized dim
             let i_exploded = schedule
                 .exploded_dims
@@ -1047,7 +1047,7 @@ impl<'a> InputArrayMaterializer<'a> for DiagonalArrayMaterializer {
         transform: &ArrayTransform,
         registry: &mut CircuitObjectRegistry,
     ) -> CircuitId {
-        if let Some(ArrayPreprocessing::Permute(dim_i, dim_j)) = schedule.preprocessing {
+        if let Some(ArrayPreprocessing::Roll(dim_i, dim_j)) = schedule.preprocessing {
             match (&transform.dims[dim_i], &transform.dims[dim_j]) {
                 // if dim i is empty, then the permutation is a no-op
                 // materialize the schedule normally
@@ -1094,7 +1094,7 @@ impl<'a> InputArrayMaterializer<'a> for DiagonalArrayMaterializer {
                             shape,
                             schedule,
                             transform,
-                            Some(ArrayPreprocessing::Permute(*idim_i, *idim_j)),
+                            Some(ArrayPreprocessing::Roll(*idim_i, *idim_j)),
                             registry,
                         ),
 
@@ -1104,7 +1104,7 @@ impl<'a> InputArrayMaterializer<'a> for DiagonalArrayMaterializer {
                             shape,
                             schedule,
                             transform,
-                            Some(ArrayPreprocessing::Permute(*idim_i, *idim_j)),
+                            Some(ArrayPreprocessing::Roll(*idim_i, *idim_j)),
                             registry,
                         ),
                 },
@@ -1555,7 +1555,7 @@ mod tests {
         };
 
         let schedule = IndexingSiteSchedule {
-            preprocessing: Some(ArrayPreprocessing::Permute(0, 1)),
+            preprocessing: Some(ArrayPreprocessing::Roll(0, 1)),
             exploded_dims: im::vector![ScheduleDim {
                 index: 0,
                 stride: 1,
@@ -1604,7 +1604,7 @@ mod tests {
         };
 
         let schedule = IndexingSiteSchedule {
-            preprocessing: Some(ArrayPreprocessing::Permute(0, 1)),
+            preprocessing: Some(ArrayPreprocessing::Roll(0, 1)),
             exploded_dims: im::vector![ScheduleDim {
                 index: 0,
                 stride: 1,

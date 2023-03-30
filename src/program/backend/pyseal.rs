@@ -789,7 +789,7 @@ impl SEALLowering {
         let preprocess_str = 
             if let Some(preprocess) = vector.preprocessing {
                 match preprocess {
-                    ArrayPreprocessing::Permute(i, j) => {
+                    ArrayPreprocessing::Roll(i, j) => {
                         format!("Permute({},{})", i, j)
                     }
                 }
