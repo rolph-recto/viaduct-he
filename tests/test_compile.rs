@@ -49,13 +49,11 @@ fn test_compile(src: &str) {
     let program = CircuitLowering::new().run(pe_circuit);
     println!("program:\n{}", program);
 
-    let seal_backend =
+    let mut seal_backend =
         SEALBackend::new(None, true, 1024);
 
-    let mut code_str: String = String::new();
-    seal_backend.compile(program, &mut code_str).unwrap();
-
-    println!("generated code:\n{}", code_str);
+    let writer: Box<dyn std::io::Write> = Box::new(std::io::stdout());
+    seal_backend.compile(program, writer).unwrap();
 }
 
 #[test]

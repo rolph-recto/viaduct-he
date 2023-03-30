@@ -992,12 +992,12 @@ impl SEALBackend {
     }
 
     fn codegen_template(
-        self,
+        &mut self,
         program: SEALProgram,
     ) -> Result<String, RenderError> {
-        let template_file = self.template_file_opt.unwrap();
+        let template_file = self.template_file_opt.as_ref().unwrap();
         let template_str =
-            std::fs::read_to_string(&template_file)
+            std::fs::read_to_string(template_file)
             .expect(&format!("Could not read file {}", &template_file));
 
         let mut handlebars = Handlebars::new();
@@ -1010,29 +1010,33 @@ impl SEALBackend {
     }
 }
 
-impl HEBackend for SEALBackend {
+impl<'a> HEBackend<'a> for SEALBackend {
+    fn name(&self) -> &str { "pyseal" }
+        
     fn compile(
-        self,
+        &mut self,
         program: HEProgram,
-        writer: &mut impl std::fmt::Write
-    ) -> std::fmt::Result {
+        mut writer: Box<dyn std::io::Write + 'a>,
+    ) -> std::io::Result<()> {
         let backend = SEALLowering::new(program, self.enable_inplace);
         let program = backend.lower();
 
         if let Some(_) = &self.template_file_opt {
             match self.codegen_template(program) {
                 Ok(prog_str) => {
-                    writer.write_str(&prog_str)
+                    write!(writer, "{}", prog_str)?;
+                    Ok(())
                 },
 
                 Err(err) => {
                     info!("{}", err);
-                    Err(std::fmt::Error)
+                    Err(std::io::Error::new(std::io::ErrorKind::Other, err.to_string()))
                 }
             }
 
         } else {
-            writer.write_str(&program.to_string())
+            write!(writer, "{}", &program.to_string())?;
+            Ok(())
         }
     }
 }

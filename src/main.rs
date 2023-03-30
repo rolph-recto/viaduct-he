@@ -26,7 +26,7 @@ use he_vectorizer::{
         lowering::CircuitLowering,
         backend::{
             HEBackend,
-            pyseal::SEALBackend
+            pyseal::SEALBackend, DummyBackend
         }
     },
 };
@@ -73,9 +73,24 @@ struct HEArguments {
     /// number of epochs to run scheduler
     #[clap(short = 'e', long = "epochs", value_parser, default_value_t = 1)]
     epochs: usize,
+
+    /// number of epochs to run scheduler
+    #[clap(short = 'b', long = "backend", value_parser, default_value = "pyseal")]
+    backend: String,
 }
 
-// fn dumpinfo() {}
+fn get_backends(args: &HEArguments) -> Vec<Box<dyn HEBackend>> {
+    vec![
+        Box::new(DummyBackend),
+        Box::new(
+            SEALBackend::new(
+                args.template.clone(), 
+                !args.noinplace,
+                args.size
+            )
+        ),
+    ]
+}
 
 fn main() {
     let mut log_builder = env_logger::builder();
@@ -161,27 +176,37 @@ fn main() {
     let program = CircuitLowering::new().run(circuit_pe);
     info!("program:\n{}", program);
 
-    info!("compiling with PySEAL backend...");
-    let seal_backend =
-        SEALBackend::new(
-            args.template.clone(), 
-            !args.noinplace,
-            args.size
-        );
+    let backends = get_backends(&args);
 
-    let mut code_str: String = String::new();
-    seal_backend.compile(program, &mut code_str).unwrap();
+    let backend_opt =
+        backends.into_iter()
+        .find(|backend| backend.name() == args.backend);
 
-    match args.outfile {
-        Some(outfile) => {
-            let mut file = File::create(&outfile).unwrap();
-            file.write(code_str.as_bytes()).unwrap();
-            info!("wrote generated code to {}", outfile);
-        },
+    if let Some(mut backend) = backend_opt {
+        info!("compiling with {} backend...", args.backend);
 
-        None => {
-            info!("printed generated code to stdout");
-            println!("{}", code_str)
+        let writer: Box<dyn std::io::Write> = 
+            match &args.outfile {
+                Some(outfile) => {
+                    info!("wrote generated code to {}", outfile);
+                    Box::new(File::create(outfile).unwrap())
+                },
+
+                None => {
+                    info!("printed generated code to stdout");
+                    Box::new(std::io::stdout())
+                }
+            };
+
+        match backend.compile(program, writer) {
+            Ok(_) => {},
+
+            Err(err) => {
+                println!("{}", err.to_string())
+            }
         }
+
+    } else {
+        println!("no backend with name {} found", args.backend)
     }
 }

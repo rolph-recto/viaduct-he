@@ -36,7 +36,7 @@ define_language! {
     }
 }
 
-#[derive(Clone, ValueEnum)]
+#[derive(Copy, Clone, ValueEnum)]
 pub enum ExtractorType {
     Greedy,
     LP,
