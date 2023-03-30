@@ -166,7 +166,14 @@ fn main() {
             opt_circuit
 
         } else {
-            circuit
+            // run the optimizer even if there is no optimization
+            // since the optimizer will perform value numbering
+            let (opt_exprs, context) = circuit.to_opt_circuit();
+            let (res_opt_exprs, opt_roots) =
+                Optimizer::new(args.size)
+                .optimize(opt_exprs, context, args.duration, args.extractor);
+
+            circuit.from_opt_circuit(res_opt_exprs, opt_roots)
         };
 
     info!("plaintext hoisting...");

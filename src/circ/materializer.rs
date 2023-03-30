@@ -1,18 +1,21 @@
 use std::{
     collections::{HashMap, HashSet},
-    hash::Hash, ops::Index
+    hash::Hash, ops::Index, rc::Rc, cell::RefCell
 };
 
+use disjoint_sets::UnionFindNode;
 use log::{info, debug};
 
 use crate::{
-    circ::{vector_deriver::VectorDeriver, vector_info::VectorInfo, *},
+    circ::{ *,
+        array_materializer::*,
+        vector_deriver::VectorDeriver,
+        vector_info::VectorInfo
+    },
     lang::index_elim::{InlinedExpr, InlinedProgram},
     scheduling::*,
     util::{self, NameGenerator},
 };
-
-use super::{cost::CostFeatures, array_materializer::*};
 
 pub trait MaterializerFactory {
     fn create<'a>(&self) -> Materializer<'a>;
@@ -94,6 +97,10 @@ impl<'a> Materializer<'a> {
                     circuit_list.push((array, dims, circuit_id));
                 }
 
+                // coalesce cipher/plaintext vars that map to equal values
+                // this allows for value numbering optimizations
+                self.coalesce_vars(circuit_id);
+
                 self.expr_circuit_map.insert(array.clone(), circuit_id);
                 self.expr_schedule_map.insert(array.clone(), expr_schedule);
                 self.expr_array_type_map.insert(array.clone(), array_type);
@@ -106,6 +113,142 @@ impl<'a> Materializer<'a> {
             native_expr_list: vec![],
             circuit_expr_list: circuit_list,
         })
+    }
+
+    fn coalesce_vars(&mut self, expr_id: CircuitId) {
+        let mut varctx_map: HashMap<im::Vector<DimName>, Vec<CircuitId>> = HashMap::new();
+        self.get_vars_with_context(expr_id, &mut im::Vector::new(), &mut varctx_map);
+
+        let var_classes = self.get_var_equiv_classes(varctx_map);
+
+        let mut removed_ct_vars: Vec<VarName> = Vec::new();
+        let mut removed_pt_vars: Vec<VarName> = Vec::new();
+        self.repoint_vars(var_classes, &mut removed_ct_vars, &mut removed_pt_vars);
+
+        for ct_var in removed_ct_vars {
+            self.registry.ct_var_values.remove(&ct_var);
+        }
+
+        for pt_var in removed_pt_vars {
+            self.registry.pt_var_values.remove(&pt_var);
+        }
+    }
+
+    fn get_vars_with_context(
+        &self,
+        expr_id: CircuitId,
+        reduced_dims: &mut im::Vector<DimName>,
+        varctx_map: &mut HashMap<im::Vector<DimName>, Vec<CircuitId>>
+    ) {
+        match self.registry.get_circuit(expr_id) {
+            ParamCircuitExpr::ReduceDim(dim, _, _, body) => {
+                reduced_dims.push_back(dim.clone());
+                self.get_vars_with_context(
+                    *body,
+                    reduced_dims,
+                    varctx_map
+                )
+            },
+
+            ParamCircuitExpr::Op(_, expr1, expr2) => {
+                self.get_vars_with_context(*expr1, reduced_dims, varctx_map);
+                self.get_vars_with_context(*expr2, reduced_dims, varctx_map);
+            },
+
+            ParamCircuitExpr::Literal(_) => {},
+
+            ParamCircuitExpr::Rotate(_, body) => {
+                self.get_vars_with_context(*body, reduced_dims, varctx_map)
+            },
+
+            ParamCircuitExpr::CiphertextVar(_) |
+            ParamCircuitExpr::PlaintextVar(_) => {
+                if let Some(vars) = varctx_map.get_mut(&reduced_dims) {
+                    vars.push(expr_id);
+
+                } else {
+                    varctx_map.insert(reduced_dims.clone(), vec![expr_id]);
+                }
+            },
+        }
+    }
+
+    fn get_var_equiv_classes(
+        &self,
+        varctx_map: HashMap<im::Vector<DimName>, Vec<CircuitId>>,
+    ) -> HashMap<CircuitId,CircuitId> {
+        let mut uf_nodes: HashMap<CircuitId, Rc<RefCell<UnionFindNode<CircuitId>>>> =
+            HashMap::new();
+
+        for (_, var_ids) in varctx_map {
+            for id in var_ids.iter() {
+                uf_nodes.insert(*id, Rc::new(RefCell::new(UnionFindNode::new(*id))));
+            }
+
+            for (i, id1) in var_ids.iter().enumerate() {
+                for j in (i+1)..var_ids.len() {
+                    let id2 = var_ids[j];
+                    if *id1 != id2 {
+                        match (self.registry.get_circuit(*id1), self.registry.get_circuit(id2)) {
+                            (ParamCircuitExpr::CiphertextVar(var1),
+                            ParamCircuitExpr::CiphertextVar(var2)) => {
+                                let val1 = self.registry.get_ct_var_value(var1);
+                                let val2 = self.registry.get_ct_var_value(var2);
+                                if val1 == val2 {
+                                    let mut node1 = uf_nodes.get(id1).unwrap().borrow_mut();
+                                    let mut node2 = uf_nodes.get(&id2).unwrap().borrow_mut();
+                                    node1.union(&mut node2);
+                                }
+                            }
+
+                            (ParamCircuitExpr::PlaintextVar(var1),
+                            ParamCircuitExpr::PlaintextVar(var2)) => {
+                                let val1 = self.registry.get_pt_var_value(var1);
+                                let val2 = self.registry.get_pt_var_value(var2);
+                                if val1 == val2 {
+                                    let mut node1 = uf_nodes.get(id1).unwrap().borrow_mut();
+                                    let mut node2 = uf_nodes.get(&id2).unwrap().borrow_mut();
+                                    node1.union(&mut node2);
+                                }
+                            }
+    
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+
+        uf_nodes.into_iter().map(|(id, node)| {
+            (id, node.borrow().clone_data())
+        }).collect()
+    }
+
+    fn repoint_vars(
+        &mut self,
+        var_classes: HashMap<CircuitId, CircuitId>,
+        removed_ct_vars: &mut Vec<VarName>,
+        removed_pt_vars: &mut Vec<VarName>,
+    ) {
+        for (id, parent) in var_classes {
+            if id != parent {
+                let circ = self.registry.circuit_map.remove(&id).unwrap();
+                let parent_circ = self.registry.circuit_map.get(&parent).unwrap();
+                self.registry.circuit_map.insert(id, parent_circ.clone());
+
+                match circ {
+                    ParamCircuitExpr::CiphertextVar(var) => {
+                        removed_ct_vars.push(var);
+                    },
+
+                    ParamCircuitExpr::PlaintextVar(var) => {
+                        removed_pt_vars.push(var);
+                    }
+
+                    _ => unreachable!()
+                }
+            }
+        }
     }
 
     fn register_input_indexing_sites(
@@ -511,10 +654,6 @@ impl<'a> Materializer<'a> {
             }
         }
     }
-
-    // method to fast reject 
-    // used to speed up scheduling
-    // fn can_materialize()
 }
 
 #[cfg(test)]

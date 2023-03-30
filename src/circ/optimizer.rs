@@ -587,6 +587,31 @@ impl Optimizer {
         &self.rules
     }
 
+    // perform value numbering by dumping the circuit
+    // into an e-graph and then extract immediately
+    // each e-class is guaranteed to have a single e-node
+    fn value_number(
+        exprs: Vec<RecExpr<HEOptCircuit>>,
+        context: HEOptimizerContext,
+    ) -> (Vec<RecExpr<HEOptCircuit>>, Vec<egg::Id>) {
+        let mut egraph = HEGraph::new(HEAnalysis { context });
+
+        let roots: Vec<egg::Id> =
+            exprs.into_iter()
+            .map(|expr| egraph.add_expr(&expr))
+            .collect();
+
+        let get_first_enode =
+            |id| egraph[id].nodes[0].clone();
+
+        let exprs: Vec<RecExpr<HEOptCircuit>> =
+            roots.iter()
+            .map(|root| get_first_enode(*root).build_recexpr(get_first_enode))
+            .collect();
+
+        (exprs, roots)
+    }
+
     pub fn optimize(
         &self,
         exprs: Vec<RecExpr<HEOptCircuit>>,
@@ -594,6 +619,11 @@ impl Optimizer {
         timeout: usize,
         extractor_type: ExtractorType,
     ) -> (Vec<RecExpr<HEOptCircuit>>, Vec<egg::Id>) {
+        // if timeout is 0, add 
+        if timeout == 0 {
+            return Self::value_number(exprs, context)
+        }
+
         info!("running equality saturation for {} seconds...", timeout);
 
         let optimization_time = Instant::now();

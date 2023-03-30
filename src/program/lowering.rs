@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, process::id};
+use std::collections::{HashMap, HashSet};
 
 use crate::{circ::*, lang::*, program::*, util::NameGenerator};
 
@@ -185,7 +185,7 @@ impl CircuitLowering {
         HEOperand::Literal(*offset)
     }
 
-    fn process_circuit_val<T: Clone>(
+    fn process_circuit_val<T: Eq+Clone>(
         value: &CircuitValue<T>,
         var: String,
         decl_type: HEType,

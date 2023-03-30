@@ -10,6 +10,7 @@ vectorize at all and use one slot per ciphertext
 ## Benchmarks
 1. private information retrieval (retrieval)
 vec-size = 8192
+- do another one that showcases tiling by doubling database size
 
 2. private set union (set-union)
 vec-size = 16384
@@ -19,16 +20,12 @@ vec-size = 4096
 
 4. L2 distance (l2-distance)
 compare a user test point with a set of test points
-vec-size: 2048?
+vec-size: 2048
 * want to show off diagonal layout
 
-5. mat-vec
-vec-size: 2048 (?)
-* show off tiling + diagonal layout (hybrid layout from gazelle)
+5. single-channel convolution (from gazelle)
 
-6. single-channel convolution (from gazelle)
-
-7. multiple-channel convolution (from gazelle)
+6. multiple-channel convolution (from gazelle)
 
 ## Research Question 2
 RQ2: Can the compiler optimize circuits efficiently?

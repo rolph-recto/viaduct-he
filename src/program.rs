@@ -90,7 +90,7 @@ pub enum HERef {
 impl Display for HERef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            HERef::Instruction(id) => write!(f, "i{}", id),
+            HERef::Instruction(id) => write!(f, "instr{}", id),
 
             HERef::Array(vector, indices) => {
                 let index_str = indices
@@ -171,16 +171,16 @@ impl fmt::Display for HEInstruction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             HEInstruction::Add(optype, id, op1, op2) =>
-                write!(f, "{:<2}: i{} = {} + {}", optype, id, op1, op2),
+                write!(f, "{:<2}: instr{} = {} + {}", optype, id, op1, op2),
 
             HEInstruction::Sub(optype, id, op1, op2) =>
-                write!(f, "{:<2}: i{} = {} - {}", optype, id, op1, op2),
+                write!(f, "{:<2}: instr{} = {} - {}", optype, id, op1, op2),
 
             HEInstruction::Mul(optype, id, op1, op2) =>
-                write!(f, "{:<2}: i{} = {} * {}", optype, id, op1, op2),
+                write!(f, "{:<2}: instr{} = {} * {}", optype, id, op1, op2),
 
             HEInstruction::Rot(optype, id, op1, op2) =>
-                write!(f, "{:<2}: i{} = rot {} {}", optype, id, op1, op2),
+                write!(f, "{:<2}: instr{} = rot {} {}", optype, id, op1, op2),
         }
     }
 }

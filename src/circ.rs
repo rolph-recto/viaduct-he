@@ -110,7 +110,7 @@ impl CanCreateObjectVar<PlaintextObject> for ParamCircuitExpr {
 
 pub type IndexCoord = im::Vector<usize>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IndexCoordinateSystem(Vec<(DimName, usize)>);
 
 impl IndexCoordinateSystem {
@@ -207,7 +207,7 @@ impl IndexCoordinateSystem {
 }
 
 // map from index variable coordinates to values
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq)]
 pub struct IndexCoordinateMap<T: Clone> {
     coord_system: IndexCoordinateSystem,
     coord_map: HashMap<IndexCoord, T>,
@@ -316,7 +316,23 @@ impl<T: Clone+Display> Display for IndexCoordinateMap<T> {
     }
 }
 
-pub trait CircuitObject: Clone {
+impl<T: Clone+PartialEq> PartialEq for IndexCoordinateMap<T> {
+    fn eq(&self, other: &Self) -> bool {
+        if self.coord_system != other.coord_system {
+            return false;
+        }
+
+        for coord in self.coord_system.coord_iter() {
+            if self.coord_map.get(&coord) != other.coord_map.get(&coord) {
+                return false;
+            }
+        }
+        
+        return true;
+    }
+}
+
+pub trait CircuitObject: Clone + Eq {
     fn input_vector(vector: VectorInfo) -> Self;
     fn expr_vector(array: String, coord: IndexCoord) -> Self;
     fn get_fresh_variable(registry: &mut CircuitObjectRegistry) -> ParamCircuitExpr;
@@ -441,16 +457,16 @@ impl Display for PlaintextObject {
 }
 
 /// objects that are referenced in a param circuit
-#[derive(Clone, Debug)]
-pub enum CircuitValue<T: Clone> {
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum CircuitValue<T: Eq+Clone> {
     CoordMap(IndexCoordinateMap<T>),
     Single(T),
 }
 
-impl<T: Clone> CircuitValue<T> {
+impl<T: Eq+Clone> CircuitValue<T> {
     pub fn map<U, F>(&self, f: F) -> CircuitValue<U>
     where
-        U: Clone, F: Fn(&IndexCoord, &T) -> U,
+        U: Eq+Clone, F: Fn(&IndexCoord, &T) -> U,
     {
         match self {
             CircuitValue::CoordMap(coord_map) => CircuitValue::CoordMap(coord_map.map(f)),
@@ -460,7 +476,7 @@ impl<T: Clone> CircuitValue<T> {
     }
 }
 
-impl<T: Clone+Display> Display for CircuitValue<T>
+impl<T: Eq+Clone+Display> Display for CircuitValue<T>
 where
     T: Display,
 {
