@@ -24,6 +24,6 @@ impl<'a> HEBackend<'a> for DummyBackend {
         program: HEProgram,
         mut writer: Box<dyn std::io::Write + 'a>,
     ) -> std::io::Result<()> {
-        program.to_doc().render(80, &mut (*writer))
+        write!(writer, "{}", program.to_string())
     }
 }

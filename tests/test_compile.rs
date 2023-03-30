@@ -52,7 +52,8 @@ fn test_compile(src: &str) {
     let mut seal_backend =
         SEALBackend::new(None, true, 1024);
 
-    let writer: Box<dyn std::io::Write> = Box::new(std::io::stdout());
+    // throw output away in anonymous buffer
+    let writer: Box<dyn std::io::Write> = Box::new(Vec::new());
     seal_backend.compile(program, writer).unwrap();
 }
 
