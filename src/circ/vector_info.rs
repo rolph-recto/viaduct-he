@@ -271,7 +271,6 @@ impl VectorInfo {
         shape: &Shape,
         schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
-        preprocessing: Option<ArrayPreprocessing>,
     ) -> Self {
         let offset_env = OffsetEnvironment::new(index_map);
 
@@ -297,7 +296,7 @@ impl VectorInfo {
 
         VectorInfo {
             array: transform.array.clone(),
-            preprocessing,
+            preprocessing: schedule.preprocessing,
             offset_map: clipped_offset_map,
             dims: materialized_dims,
         }
@@ -308,7 +307,6 @@ impl VectorInfo {
         shape: &Shape,
         schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
-        preprocessing: Option<ArrayPreprocessing>,
     ) -> CircuitValue<VectorInfo> {
         if !coord_system.is_empty() {
             let mut coord_map = IndexCoordinateMap::from_coord_system(coord_system);
@@ -318,7 +316,6 @@ impl VectorInfo {
                     shape,
                     schedule,
                     transform,
-                    preprocessing,
                 );
 
                 coord_map.set(coord_map.index_map_as_coord(index_map), vector);
@@ -331,7 +328,6 @@ impl VectorInfo {
                 shape,
                 schedule,
                 transform,
-                preprocessing,
             );
 
             CircuitValue::Single(vector)

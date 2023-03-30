@@ -1,4 +1,4 @@
-use std::cmp::max;
+use std::{cmp::max, rc::Rc};
 
 use crate::util;
 
@@ -19,11 +19,12 @@ pub struct DefaultScheduleTransformerFactory;
 
 impl<'a> ScheduleTransformerFactory<'a> for DefaultScheduleTransformerFactory {
     fn create(&self, program: &InlinedProgram) -> Vec<Box<dyn ScheduleTransformer + 'a>> {
-        let dim_classes = program.get_dim_classes();
-        let indexing_levels = program.get_indexing_levels();
+        let dim_classes = Rc::new(program.get_dim_classes());
+        let indexing_levels = Rc::new(program.get_indexing_levels());
         vec![
             Box::new(VectorizeDimTransformer::new(dim_classes.clone(), indexing_levels.clone())),
-            Box::new(SplitDimTransformer::new(Some(2), dim_classes, indexing_levels.clone()))
+            Box::new(SplitDimTransformer::new(Some(2), dim_classes.clone(), indexing_levels.clone())),
+            Box::new(RollTransformer::new(dim_classes, indexing_levels))
         ]
     }
 }
@@ -49,14 +50,14 @@ impl TransformerUtil {
 /// a transformer that turns exploded dims to vectorized dims
 #[derive(Default)]
 pub struct VectorizeDimTransformer {
-    dim_classes: HashMap<(IndexingId, DimIndex), usize>,
-    indexing_levels: HashMap<IndexingId, usize>,
+    dim_classes: Rc<HashMap<(IndexingId, DimIndex), usize>>,
+    indexing_levels: Rc<HashMap<IndexingId, usize>>,
 }
 
 impl VectorizeDimTransformer {
     pub fn new(
-        dim_classes: HashMap<(IndexingId, DimIndex), usize>,
-        indexing_levels: HashMap<IndexingId, usize>,
+        dim_classes: Rc<HashMap<(IndexingId, DimIndex), usize>>,
+        indexing_levels: Rc<HashMap<IndexingId, usize>>,
     ) -> Self {
         Self { dim_classes, indexing_levels }
     }
@@ -74,7 +75,7 @@ impl ScheduleTransformer for VectorizeDimTransformer {
         // find candidate dims to be vectorized
         let mut candidate_dims: HashSet<(usize, usize, usize)> = HashSet::new();
         for (site, ischedule) in schedule.schedule_map.iter() {
-            if self.indexing_levels[site] >= cur_level { 
+            if ischedule.preprocessing.is_none() && self.indexing_levels[site] >= cur_level { 
                 let vectorized_dims: HashSet<DimIndex> =
                     ischedule.vectorized_dims.iter()
                     .map(|vdim| vdim.index)
@@ -139,15 +140,15 @@ impl ScheduleTransformer for VectorizeDimTransformer {
 pub struct SplitDimTransformer {
     split_limit: Option<usize>,
     num_dims_to_split: Option<usize>,
-    dim_classes: HashMap<(IndexingId, DimIndex), usize>,
-    indexing_levels: HashMap<IndexingId, usize>,
+    dim_classes: Rc<HashMap<(IndexingId, DimIndex), usize>>,
+    indexing_levels: Rc<HashMap<IndexingId, usize>>,
 }
 
 impl SplitDimTransformer {
     pub fn new(
         split_limit: Option<usize>,
-        dim_classes: HashMap<(IndexingId, DimIndex), usize>,
-        indexing_levels: HashMap<IndexingId, usize>,
+        dim_classes: Rc<HashMap<(IndexingId, DimIndex), usize>>,
+        indexing_levels: Rc<HashMap<IndexingId, usize>>,
     ) -> Self {
         Self { split_limit, num_dims_to_split: None, dim_classes, indexing_levels, }
     }
@@ -184,7 +185,7 @@ impl ScheduleTransformer for SplitDimTransformer {
         for (site, ischedule) in schedule.schedule_map.iter() {
             let tiling = ischedule.get_tiling();
 
-            if self.indexing_levels[site] >= cur_level && num_split_dims_within_limit {
+            if self.indexing_levels[site] >= cur_level && ischedule.preprocessing.is_none() {
                 for edim in ischedule.exploded_dims.iter() {
                     let dim_tiling = tiling[edim.index].len();
 
@@ -270,14 +271,14 @@ impl ScheduleTransformer for SplitDimTransformer {
 
 /// applies roll preprocessing to schedules
 pub struct RollTransformer {
-    dim_classes: HashMap<(IndexingId, DimIndex), usize>,
-    indexing_levels: HashMap<IndexingId, usize>,
+    dim_classes: Rc<HashMap<(IndexingId, DimIndex), usize>>,
+    indexing_levels: Rc<HashMap<IndexingId, usize>>,
 }
 
 impl RollTransformer {
     pub fn new(
-        dim_classes: HashMap<(IndexingId, DimIndex), usize>,
-        indexing_levels: HashMap<IndexingId, usize>
+        dim_classes: Rc<HashMap<(IndexingId, DimIndex), usize>>,
+        indexing_levels: Rc<HashMap<IndexingId, usize>>
     ) -> Self {
         Self { dim_classes, indexing_levels }
     }
@@ -294,7 +295,7 @@ impl ScheduleTransformer for RollTransformer {
         let mut candidate_pairs: Vec<(usize, usize)> = Vec::new();
         for (site, ischedule) in schedule.schedule_map.iter() {
             let tiling = ischedule.get_tiling();
-            if self.indexing_levels[site] >= cur_level {
+            if self.indexing_levels[site] >= cur_level && ischedule.vectorized_dims.len() > 0 {
                 let vdim = ischedule.vectorized_dims.head().unwrap();
                 let vdim_valid_tiling = tiling[vdim.index].len() == 1;
                 let no_preprocessing = ischedule.preprocessing == None;
@@ -425,7 +426,8 @@ mod tests {
 
         let schedule = Schedule { schedule_map };
 
-        let transformer = VectorizeDimTransformer::new(dim_classes, indexing_levels);
+        let transformer =
+            VectorizeDimTransformer::new(Rc::new(dim_classes), Rc::new(indexing_levels));
         let neighbors = transformer.transform(&schedule);
         assert_eq!(neighbors.len(), 2);
 

@@ -3,7 +3,7 @@ use std::{
     hash::Hash, ops::Index
 };
 
-use log::info;
+use log::{info, debug};
 
 use crate::{
     circ::{vector_deriver::VectorDeriver, vector_info::VectorInfo, *},
@@ -61,7 +61,8 @@ impl MaterializerFactory for DefaultMaterializerFactory {
     fn create<'a>(&self) -> Materializer<'a> {
         let amats: Vec<Box<dyn InputArrayMaterializer + 'a>> =
             vec![
-                Box::new(DefaultArrayMaterializer::new())
+                Box::new(RollArrayMaterializer::new()),
+                Box::new(DefaultArrayMaterializer::new()),
             ];
 
         Materializer::new(amats)
@@ -109,7 +110,7 @@ impl<'a> Materializer<'a> {
         expr_list
             .into_iter()
             .try_for_each(|(array, expr)| -> Result<(), String> {
-                self.register_input_indexing_sites(program, &expr, schedule);
+                self.register_input_indexing_sites(program, &expr, schedule)?;
 
                 let mut expr_preludes: Vec<CircuitDecl> = Vec::new();
                 let (expr_schedule, array_type, circuit_id) =
@@ -149,18 +150,18 @@ impl<'a> Materializer<'a> {
         program: &InlinedProgram,
         expr: &InlinedExpr,
         schedule: &Schedule,
-    ) {
+    ) -> Result<(), String> {
         match expr {
             InlinedExpr::ReduceNode(_, _, body) => {
-                self.register_input_indexing_sites(program, body, schedule);
+                self.register_input_indexing_sites(program, body, schedule)
             },
 
             InlinedExpr::Op(_, expr1, expr2) => {
-                self.register_input_indexing_sites(program, expr1, schedule);
-                self.register_input_indexing_sites(program, expr2, schedule);
+                self.register_input_indexing_sites(program, expr1, schedule)?;
+                self.register_input_indexing_sites(program, expr2, schedule)
             },
 
-            InlinedExpr::Literal(_) => {},
+            InlinedExpr::Literal(_) => Ok(()),
 
             InlinedExpr::ExprRef(indexing_id, transform) => {
                 if !program.is_expr(&transform.array) {
@@ -186,8 +187,14 @@ impl<'a> Materializer<'a> {
                     }
 
                     if !processed {
-                        panic!("No array materializer can process expr ref {}", indexing_id);
+                        Err(format!("No array materializer can process expr ref {}", indexing_id))
+
+                    } else {
+                        Ok(())
                     }
+
+                } else {
+                    Ok(())
                 }
             }
         }
@@ -477,7 +484,6 @@ impl<'a> Materializer<'a> {
                                 &ref_expr_sched.shape,
                                 schedule,
                                 transform,
-                                schedule.preprocessing,
                             );
 
                             let (sched_type, array_type, circ_id, prelude_circ_opt) = match array_type {
@@ -591,7 +597,6 @@ impl<'a> InputArrayMaterializer<'a> for DummyArrayMaterializer {
             shape,
             schedule,
             transform,
-            schedule.preprocessing,
         )
         .map(|_, vector| CiphertextObject::InputVector(vector.clone()));
 
@@ -619,7 +624,6 @@ impl<'a> InputArrayMaterializer<'a> for DummyArrayMaterializer {
                     array_shape,
                     schedule,
                     transform,
-                    schedule.preprocessing,
                 );
 
             vectors.insert(vector);
@@ -801,7 +805,6 @@ impl<'a> InputArrayMaterializer<'a> for DefaultArrayMaterializer {
                     shape,
                     schedule,
                     transform,
-                    None,
                     registry,
                 ),
 
@@ -811,7 +814,6 @@ impl<'a> InputArrayMaterializer<'a> for DefaultArrayMaterializer {
                     shape,
                     schedule,
                     transform,
-                    None,
                     registry,
                 ),
         }
@@ -842,15 +844,52 @@ impl<'a> InputArrayMaterializer<'a> for DefaultArrayMaterializer {
     }
 }
 
-pub struct DiagonalArrayMaterializer {
+// how to materialize a roll preprocessing
+enum RollMaterializationType {
+    // lay out the vectors as generalized diagonals
+    Diagonal(usize, usize),
+
+    // rotate the vector
+    Rotate(usize, usize),
+
+    // the roll preprocessing is a no-op
+    None
+}
+
+pub struct RollArrayMaterializer {
     deriver: VectorDeriver,
 }
 
-impl DiagonalArrayMaterializer {
+impl RollArrayMaterializer {
     pub fn new() -> Self {
-        DiagonalArrayMaterializer {
+        RollArrayMaterializer {
             deriver: VectorDeriver::new(),
         }
+    }
+
+    // switch the innermost tiles of dim_i (exploded) and dim_j (vectorized)
+    fn rotate_schedule(
+        &self,
+        schedule: &IndexingSiteSchedule,
+        dim_i: usize,
+        dim_j: usize
+    ) -> (IndexingSiteSchedule, String, Extent) {
+        let mut new_schedule = schedule.clone();
+
+        // switch innermost tiles of i and j in the schedule
+        let inner_i_dim = new_schedule
+            .exploded_dims
+            .iter_mut()
+            .find(|dim| dim.index == dim_i && dim.stride == 1)
+            .unwrap();
+        let inner_i_dim_name = inner_i_dim.name.clone();
+        let inner_i_dim_extent = inner_i_dim.extent;
+        inner_i_dim.index = dim_j;
+
+        let inner_j_dim = new_schedule.vectorized_dims.get_mut(0).unwrap();
+        inner_j_dim.index = dim_i;
+
+        (new_schedule, inner_i_dim_name, inner_i_dim_extent)
     }
 
     // if dim j is an empty dim, then we can apply the "diagonal"
@@ -874,37 +913,25 @@ impl DiagonalArrayMaterializer {
         CircuitObjectRegistry: CanRegisterObject<'a, T>,
         ParamCircuitExpr: CanCreateObjectVar<T>,
     {
+        let (new_schedule, inner_i_dim_name, inner_i_dim_extent) =
+            self.rotate_schedule(schedule, dim_i, dim_j);
+
         let mut obj_map: IndexCoordinateMap<T> =
             IndexCoordinateMap::new(schedule.exploded_dims.iter());
         let mut mask_map: IndexCoordinateMap<PlaintextObject> =
             IndexCoordinateMap::new(schedule.exploded_dims.iter());
         let mut step_map: IndexCoordinateMap<isize> =
             IndexCoordinateMap::new(schedule.exploded_dims.iter());
-        let mut new_schedule = schedule.clone();
-
-        // switch innermost tiles of i and j in the schedule
-        let inner_i_dim = new_schedule
-            .exploded_dims
-            .iter_mut()
-            .find(|dim| dim.index == dim_i && dim.stride == 1)
-            .unwrap();
-        let inner_i_dim_name = inner_i_dim.name.clone();
-        let inner_i_dim_extent = inner_i_dim.extent;
-        inner_i_dim.index = dim_j;
-
-        let inner_j_dim = new_schedule.vectorized_dims.get_mut(0).unwrap();
-        inner_j_dim.index = dim_i;
 
         let zero_inner_j_coords =
             obj_map.coord_iter_subset(
                 HashMap::from([(inner_i_dim_name.clone(), 0..1)])
             );
 
-        self.deriver.locally_register_and_derive_vectors::<T>(
+        self.deriver.derive_vectors::<T>(
             shape,
-            &new_schedule,
+            &new_schedule.with_preprocessing(None),
             transform,
-            None,
             zero_inner_j_coords.clone(),
             &mut obj_map,
             &mut mask_map,
@@ -924,7 +951,7 @@ impl DiagonalArrayMaterializer {
 
         let obj_var = registry.fresh_obj_var();
 
-        // given expr e is at coord where inner_j=0,
+        // given expr e is at coord where inner_j = 0,
         // expr rot(inner_j, e) is at coord where inner_j != 0
         let rest_inner_j_coords =
             obj_map.coord_iter_subset(
@@ -976,11 +1003,54 @@ impl DiagonalArrayMaterializer {
 
         registry.register_circuit(output_expr)
     }
+
+    fn roll_materialization_type(
+        &self,
+        preprocessing: ArrayPreprocessing,
+        transform: &ArrayTransform
+    ) -> RollMaterializationType {
+        if let ArrayPreprocessing::Roll(dim_i, dim_j) = preprocessing {
+            match (&transform.dims[dim_i], &transform.dims[dim_j]) {
+                // if dim i is empty, then the permutation is a no-op
+                // materialize the schedule normally
+                (DimContent::EmptyDim { extent: _ }, _) =>
+                    RollMaterializationType::None,
+
+                // if dim j is a filled dim, then the permutation must actually
+                // be done by the client; record this fact and then materialize
+                // the schedule normally
+                (
+                    DimContent::FilledDim {
+                        dim: cdim_i,
+                        extent: _,
+                        stride: _,
+                    },
+                    DimContent::FilledDim {
+                        dim: cdim_j,
+                        extent: _,
+                        stride: _,
+                    },
+                ) => RollMaterializationType::Diagonal(*cdim_i, *cdim_j),
+
+                (
+                    DimContent::FilledDim {
+                        dim: _,
+                        extent: _,
+                        stride: _,
+                    },
+                    DimContent::EmptyDim { extent: _ },
+                ) => RollMaterializationType::Rotate(dim_i, dim_j)
+            }
+
+        } else {
+            unreachable!()
+        }
+    }
 }
 
-impl<'a> InputArrayMaterializer<'a> for DiagonalArrayMaterializer {
+impl<'a> InputArrayMaterializer<'a> for RollArrayMaterializer {
     fn create(&self) -> Box<dyn InputArrayMaterializer + 'a> {
-        Box::new(DiagonalArrayMaterializer::new())
+        Box::new(RollArrayMaterializer::new())
     }
 
     fn can_materialize(
@@ -1031,9 +1101,32 @@ impl<'a> InputArrayMaterializer<'a> for DiagonalArrayMaterializer {
         schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
     ) {
+        let mat_type =
+            self.roll_materialization_type(
+                schedule.preprocessing.unwrap(),
+                transform
+            );
+
+        let new_schedule = match mat_type {
+            RollMaterializationType::Diagonal(cdim_i, cdim_j)=>
+                schedule.with_preprocessing(
+                    Some(ArrayPreprocessing::Roll(cdim_i, cdim_j))
+                ),
+
+            RollMaterializationType::Rotate(dim_i, dim_j) => {
+                let (rotated_schedule, _, _) =
+                    self.rotate_schedule(schedule, dim_i, dim_j);
+
+                rotated_schedule.with_preprocessing(None)
+            }
+
+            RollMaterializationType::None =>
+                schedule.with_preprocessing(None)
+        };
+
         self.deriver.register_vectors(
             array_shape,
-            schedule,
+            &new_schedule,
             transform,
             &IndexCoordinateSystem::new(schedule.exploded_dims.iter()),
         );
@@ -1047,18 +1140,46 @@ impl<'a> InputArrayMaterializer<'a> for DiagonalArrayMaterializer {
         transform: &ArrayTransform,
         registry: &mut CircuitObjectRegistry,
     ) -> CircuitId {
-        if let Some(ArrayPreprocessing::Roll(dim_i, dim_j)) = schedule.preprocessing {
-            match (&transform.dims[dim_i], &transform.dims[dim_j]) {
-                // if dim i is empty, then the permutation is a no-op
-                // materialize the schedule normally
-                (DimContent::EmptyDim { extent: _ }, _) => match array_type {
+        let preprocessing = schedule.preprocessing.unwrap();
+        match self.roll_materialization_type(preprocessing, transform) {
+            // if dim i is empty, then the permutation is a no-op
+            // materialize the schedule normally
+            RollMaterializationType::None => match array_type {
+                ArrayType::Ciphertext => self
+                    .deriver
+                    .derive_vectors_and_gen_circuit::<CiphertextObject>(
+                        shape,
+                        &schedule.with_preprocessing(None),
+                        transform,
+                        registry,
+                    ),
+
+                ArrayType::Plaintext => self
+                    .deriver
+                    .derive_vectors_and_gen_circuit::<PlaintextObject>(
+                        shape,
+                        &schedule.with_preprocessing(None),
+                        transform,
+                        registry,
+                    ),
+            },
+
+            // if dim j is a filled dim, then the permutation must actually
+            // be done by the client; record this fact and then materialize
+            // the schedule normally
+            RollMaterializationType::Diagonal(cdim_i, cdim_j) => {
+                let new_schedule = 
+                    schedule.with_preprocessing(
+                        Some(ArrayPreprocessing::Roll(cdim_i, cdim_j))
+                    );
+
+                match array_type {
                     ArrayType::Ciphertext => self
                         .deriver
                         .derive_vectors_and_gen_circuit::<CiphertextObject>(
                             shape,
-                            schedule,
+                            &new_schedule,
                             transform,
-                            None,
                             registry,
                         ),
 
@@ -1066,77 +1187,31 @@ impl<'a> InputArrayMaterializer<'a> for DiagonalArrayMaterializer {
                         .deriver
                         .derive_vectors_and_gen_circuit::<PlaintextObject>(
                             shape,
-                            schedule,
+                            &new_schedule,
                             transform,
-                            None,
                             registry,
                         ),
-                },
+                }
+            },
 
-                // if dim j is a filled dim, then the permutation must actually
-                // be done by the client; record this fact and then materialize
-                // the schedule normally
-                (
-                    DimContent::FilledDim {
-                        dim: idim_i,
-                        extent: _,
-                        stride: _,
-                    },
-                    DimContent::FilledDim {
-                        dim: idim_j,
-                        extent: _,
-                        stride: _,
-                    },
-                ) => match array_type {
-                    ArrayType::Ciphertext => self
-                        .deriver
-                        .derive_vectors_and_gen_circuit::<CiphertextObject>(
-                            shape,
-                            schedule,
-                            transform,
-                            Some(ArrayPreprocessing::Roll(*idim_i, *idim_j)),
-                            registry,
-                        ),
+            RollMaterializationType::Rotate(dim_i, dim_j) => match array_type {
+                ArrayType::Ciphertext => self.diagonal_materialize::<CiphertextObject>(
+                    dim_i, dim_j, shape, schedule, transform, registry,
+                ),
 
-                    ArrayType::Plaintext => self
-                        .deriver
-                        .derive_vectors_and_gen_circuit::<PlaintextObject>(
-                            shape,
-                            schedule,
-                            transform,
-                            Some(ArrayPreprocessing::Roll(*idim_i, *idim_j)),
-                            registry,
-                        ),
-                },
-
-                (
-                    DimContent::FilledDim {
-                        dim: _,
-                        extent: _,
-                        stride: _,
-                    },
-                    DimContent::EmptyDim { extent: _ },
-                ) => match array_type {
-                    ArrayType::Ciphertext => self.diagonal_materialize::<CiphertextObject>(
-                        dim_i, dim_j, shape, schedule, transform, registry,
-                    ),
-
-                    ArrayType::Plaintext => self.diagonal_materialize::<PlaintextObject>(
-                        dim_i, dim_j, shape, schedule, transform, registry,
-                    ),
-                },
-            }
-        } else {
-            unreachable!()
+                ArrayType::Plaintext => self.diagonal_materialize::<PlaintextObject>(
+                    dim_i, dim_j, shape, schedule, transform, registry,
+                ),
+            },
         }
     }
 
     fn estimate_cost(
         &mut self,
-        array_type: ArrayType,
-        array_shape: &Shape,
-        schedule: &IndexingSiteSchedule,
-        transform: &ArrayTransform,
+        _array_type: ArrayType,
+        _array_shape: &Shape,
+        _schedule: &IndexingSiteSchedule,
+        _transform: &ArrayTransform,
     ) -> CostFeatures {
         todo!()
     }
@@ -1575,7 +1650,7 @@ mod tests {
         };
 
         test_array_materializer(
-            Box::new(DiagonalArrayMaterializer::new()),
+            Box::new(RollArrayMaterializer::new()),
             shape,
             schedule,
             transform,
@@ -1624,7 +1699,7 @@ mod tests {
         };
 
         test_array_materializer(
-            Box::new(DiagonalArrayMaterializer::new()),
+            Box::new(RollArrayMaterializer::new()),
             shape,
             schedule,
             transform,

@@ -228,7 +228,6 @@ impl<'a> PseudoMaterializer<'a> {
                         &ref_expr_sched.shape,
                         schedule,
                         transform,
-                        schedule.preprocessing,
                     );
 
                     let derive_opt =

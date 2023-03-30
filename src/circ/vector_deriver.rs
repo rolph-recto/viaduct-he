@@ -79,7 +79,6 @@ impl VectorDeriver {
                 array_shape,
                 schedule,
                 transform,
-                schedule.preprocessing,
             );
 
             self.register_vector(vector.clone());
@@ -95,7 +94,6 @@ impl VectorDeriver {
                     array_shape,
                     schedule,
                     transform,
-                    schedule.preprocessing,
                 );
 
                 self.register_vector(vector.clone());
@@ -117,7 +115,10 @@ impl VectorDeriver {
             }
 
         } else {
-            unreachable!()
+            for (v2, v2_set) in self.vector_map.iter() {
+                debug!("{} {:?}", v2, v2_set.borrow());
+            }
+            unreachable!("no set for vector {}", vector)
         }
     }
 
@@ -126,7 +127,6 @@ impl VectorDeriver {
         array_shape: &Shape,
         schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
-        preprocessing: Option<ArrayPreprocessing>,
         coords: impl Iterator<Item = IndexCoord> + Clone,
         obj_map: &mut IndexCoordinateMap<T>,
         mask_map: &mut IndexCoordinateMap<PlaintextObject>,
@@ -139,7 +139,6 @@ impl VectorDeriver {
                     array_shape,
                     schedule,
                     transform,
-                    preprocessing,
                 );
 
                 let (parent, steps, mask) =
@@ -157,7 +156,6 @@ impl VectorDeriver {
                     array_shape,
                     schedule,
                     transform,
-                    preprocessing,
                 );
 
                 obj_map.set(coord.clone(), T::input_vector(vector));
@@ -192,7 +190,6 @@ impl VectorDeriver {
                 array_shape,
                 schedule,
                 transform,
-                preprocessing,
             );
 
             let vector_set =
@@ -716,7 +713,6 @@ impl VectorDeriver {
         array_shape: &Shape,
         schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
-        preprocessing: Option<ArrayPreprocessing>,
         registry: &mut CircuitObjectRegistry,
     ) -> CircuitId
     where
@@ -739,7 +735,6 @@ impl VectorDeriver {
                 array_shape,
                 schedule,
                 transform,
-                preprocessing,
                 coords.clone(),
                 &mut obj_map,
                 &mut mask_map,
@@ -761,7 +756,6 @@ impl VectorDeriver {
                     array_shape,
                     schedule,
                     transform,
-                    preprocessing,
                 );
 
             let (parent, steps, mask) =

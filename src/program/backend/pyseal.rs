@@ -788,11 +788,7 @@ impl SEALLowering {
 
         let preprocess_str = 
             if let Some(preprocess) = vector.preprocessing {
-                match preprocess {
-                    ArrayPreprocessing::Roll(i, j) => {
-                        format!("Permute({},{})", i, j)
-                    }
-                }
+                preprocess.to_string()
 
             } else {
                 String::from("None")

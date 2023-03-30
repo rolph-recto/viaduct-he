@@ -11,7 +11,7 @@ class ArrayPreprocessing:
         raise NotImplemented
 
 
-class PermuteDims(ArrayPreprocessing):
+class Roll(ArrayPreprocessing):
     def __init__(self, dim_i, dim_j):
         self.dim_i = dim_i
         self.dim_j = dim_j
@@ -27,7 +27,7 @@ class PermuteDims(ArrayPreprocessing):
         return np.stack(slices, axis=self.dim_i)
 
     def __str__(self):
-        return "Permute({},{})".format(self.dim_i, self.dim_j)
+        return "Roll({},{})".format(self.dim_i, self.dim_j)
 
 
 class VectorDimContent:

@@ -49,7 +49,7 @@ impl Display for ScheduleDim {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ArrayPreprocessing {
     // TODO add more complicated permutations
-    // Permute(i, j) means to permute dim i along dim j
+    // Roll(i, j) means to apply numpy.roll on dim i along dim j
     Roll(DimIndex, DimIndex),
 }
 
@@ -57,7 +57,7 @@ impl Display for ArrayPreprocessing {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ArrayPreprocessing::Roll(dim_i, dim_j) =>
-                write!(f, "roll({},{})", dim_i, dim_j),
+                write!(f, "Roll({},{})", dim_i, dim_j),
         }
     }
 }
@@ -150,6 +150,13 @@ pub struct IndexingSiteSchedule {
 }
 
 impl IndexingSiteSchedule {
+    // return a schedule like self, except with different preprocessing
+    pub fn with_preprocessing(&self, preprocessing: Option<ArrayPreprocessing>) -> Self {
+        let mut new_schedule = self.clone();
+        new_schedule.preprocessing = preprocessing;
+        new_schedule
+    }
+
     // compute the scheduled tiling for a given dimension
     pub fn get_dim_tiling(&self, dim: DimIndex) -> Vec<usize> {
         let mut sdims: Vec<(usize, usize)> = Vec::new();
