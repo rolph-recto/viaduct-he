@@ -8,7 +8,9 @@ use super::*;
 pub trait ScheduleTransformer {
     fn name(&self) -> &str;
     fn transform(&self, schedule: &Schedule) -> HashSet<Schedule>;
-    fn next_epoch(&mut self, _epoch: usize) {}
+
+    // return whether the transformer changed
+    fn next_epoch(&mut self, _epoch: usize) -> bool { false }
 }
 
 pub trait ScheduleTransformerFactory<'a> {
@@ -64,7 +66,7 @@ impl VectorizeDimTransformer {
 }
 
 impl ScheduleTransformer for VectorizeDimTransformer {
-    fn name(&self) -> &str { "VectorizeDimTransformer "}
+    fn name(&self) -> &str { "VectorizeDimTransformer" }
 
     fn transform(&self, schedule: &Schedule) -> HashSet<Schedule> {
         let mut neighbors = HashSet::new();
@@ -139,7 +141,7 @@ impl ScheduleTransformer for VectorizeDimTransformer {
 
 pub struct SplitDimTransformer {
     split_limit: Option<usize>,
-    num_dims_to_split: Option<usize>,
+    num_dims_to_split: usize,
     dim_classes: Rc<HashMap<(IndexingId, DimIndex), usize>>,
     indexing_levels: Rc<HashMap<IndexingId, usize>>,
 }
@@ -150,12 +152,12 @@ impl SplitDimTransformer {
         dim_classes: Rc<HashMap<(IndexingId, DimIndex), usize>>,
         indexing_levels: Rc<HashMap<IndexingId, usize>>,
     ) -> Self {
-        Self { split_limit, num_dims_to_split: None, dim_classes, indexing_levels, }
+        Self { split_limit, num_dims_to_split: 0, dim_classes, indexing_levels, }
     }
 }
 
 impl ScheduleTransformer for SplitDimTransformer {
-    fn name(&self) -> &str { "SplitDimTransformer "}
+    fn name(&self) -> &str { "SplitDimTransformer" }
 
     fn transform(&self, schedule: &Schedule) -> HashSet<Schedule> {
         let num_split_dims =
@@ -167,9 +169,7 @@ impl ScheduleTransformer for SplitDimTransformer {
                 acc + isched_tiled_dims
             });
 
-        let num_split_dims_within_limit =
-            self.num_dims_to_split
-            .map_or(true, |limit| num_split_dims < limit);
+        let num_split_dims_within_limit = num_split_dims < self.num_dims_to_split;
 
         if !num_split_dims_within_limit {
             return HashSet::new()
@@ -264,8 +264,9 @@ impl ScheduleTransformer for SplitDimTransformer {
     }
 
     // increase the number of dims to split by 1 per epoch
-    fn next_epoch(&mut self, epoch: usize) {
-        self.num_dims_to_split = Some(epoch - 1);
+    fn next_epoch(&mut self, epoch: usize) -> bool {
+        self.num_dims_to_split = epoch - 1;
+        true
     }
 }
 
@@ -324,17 +325,20 @@ impl ScheduleTransformer for RollTransformer {
 
             for (site, ischedule) in schedule.schedule_map.iter() {
                 let mut new_site_schedule = ischedule.clone();
-                let vdim = ischedule.vectorized_dims.head().unwrap();
-                let vclass = *self.dim_classes.get(&(site.clone(), vdim.index)).unwrap();
 
-                if vclass == roll_vclass {
-                    for edim in ischedule.exploded_dims.iter() {
-                        let eclass = *self.dim_classes.get(&(site.clone(), edim.index)).unwrap();
-                        if eclass == roll_eclass {
-                            new_site_schedule.preprocessing =
-                                Some(ArrayPreprocessing::Roll(edim.index, vdim.index));
+                if ischedule.vectorized_dims.len() > 0 {
+                    let vdim = ischedule.vectorized_dims.head().unwrap();
+                    let vclass = *self.dim_classes.get(&(site.clone(), vdim.index)).unwrap();
 
-                            break;
+                    if vclass == roll_vclass {
+                        for edim in ischedule.exploded_dims.iter() {
+                            let eclass = *self.dim_classes.get(&(site.clone(), edim.index)).unwrap();
+                            if eclass == roll_eclass {
+                                new_site_schedule.preprocessing =
+                                    Some(ArrayPreprocessing::Roll(edim.index, vdim.index));
+
+                                break;
+                            }
                         }
                     }
                 }

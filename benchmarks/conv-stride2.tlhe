@@ -1,0 +1,11 @@
+input img: [32,32] from client
+input filter: [3,3] from server
+for x: 16 {
+    for y: 16 {
+        sum(for i: 3 {
+            sum(for j: 3 {
+                img[2*x + i][2*y + j] * filter[i][j]
+            })
+        })
+    }
+}

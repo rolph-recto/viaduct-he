@@ -91,14 +91,14 @@ impl<'t> InlineScheduler<'t> {
                             });
                         let should_estimate = self.should_estimate_cost(&neighbor);
 
-                        debug!("neighbor: {}; valid? {:?} within_size? {} should estimate? {}", neighbor, valid, within_size_limit, should_estimate);
                         if should_estimate && valid.is_ok() && within_size_limit
                         {
                             let mat = materializer_factory.create();
                             if let Ok(circuit) = mat.run(&self.program, &neighbor) {
                                 let cost = cost_estimator.estimate_cost(&circuit);
                                 // let cost = cost_estimator.estimate_pseudo_cost(&circuit);
-                                debug!("neighbor cost {:?}", cost);
+                                debug!("found valid schedule:\n{}", neighbor);
+                                debug!("schedule cost:\n{:?}", cost);
 
                                 valid_neighbors.push((neighbor.clone(), cost));
                                 self.valid_schedules_visited += 1;
@@ -107,8 +107,9 @@ impl<'t> InlineScheduler<'t> {
 
                         if let Err(ScheduleDerivationFailure::MaybeTransformableToValid) | Ok(()) = valid {
                             self.frontier.insert(neighbor.clone());
-                            self.visited.insert(neighbor);
                         }
+
+                        self.visited.insert(neighbor);
                     }
                 }
             }
@@ -117,10 +118,20 @@ impl<'t> InlineScheduler<'t> {
         (self.frontier.len(), valid_neighbors)
     }
 
-    pub fn next_epoch(&mut self, epoch: usize) {
+    // when transitioning to a new epoch, add all visited schedules to the frontier
+    pub fn next_epoch(&mut self, epoch: usize) -> bool {
+        let mut changed = false;
         for transformer in self.transformers.iter_mut() {
-            transformer.next_epoch(epoch);
+            changed = changed || transformer.next_epoch(epoch);
         }
+
+        // if transformers have changed, add entire visited set to the frontier
+        // since new schedules can be neighbors of *any* visited schedule
+        if changed {
+            self.frontier = self.visited.clone();
+        }
+
+        changed
     }
 }
 
@@ -200,13 +211,12 @@ impl<'m, 't> Scheduler<'m, 't> {
                 max_epochs,
             };
 
-        info!("initializing pareto frontier...");
         for (inline_id, init_schedule, cost) in init_schedules {
             scheduler.update_pareto_frontier(inline_id, init_schedule, cost);
         }
 
-        info!("inline schedulers: {:?}", scheduler.inline_schedulers.len());
-        info!("init pareto frontier size: {:?}", scheduler.pareto_frontier.len());
+        debug!("inline schedulers: {:?}", scheduler.inline_schedulers.len());
+        debug!("init pareto frontier size: {:?}", scheduler.pareto_frontier.len());
 
         scheduler
     }
@@ -245,8 +255,8 @@ impl<'m, 't> Scheduler<'m, 't> {
 
         for res in results {
             for (schedule, cost) in res.pareto_frontier {
-                info!("pareto schedule: {}", schedule);
-                info!("cost: {:?}", cost);
+                debug!("pareto schedule: {}", schedule);
+                debug!("cost: {:?}", cost);
                 let mut replace_best = false;
                 if let Some((_, _, best_cost)) = best {
                     if cost.weighted_cost(&weights) < best_cost.weighted_cost(&weights) {
@@ -296,7 +306,7 @@ impl<'m, 't> Scheduler<'m, 't> {
 
     /// apply transformers to the current set of visited
     /// this uses a trick similar to semi-naive evaluation to Datalog
-    /// returns true if new schedules were visited; otherwise
+    /// returns true if new schedules were visited
     pub fn iterate(&mut self) -> (usize, usize) {
         let mut frontier_size = 0;
         let mut new_schedules: Vec<(usize, Vec<(Schedule, CostFeatures)>)> = Vec::new();
@@ -309,9 +319,6 @@ impl<'m, 't> Scheduler<'m, 't> {
                     );
 
                 frontier_size += inline_frontier_size;
-                if inline_frontier_size == 0 {
-                    *do_run = false;
-                }
 
                 if new_inline_schedules.len() > 0 { 
                     new_schedules.push((*id, new_inline_schedules));
@@ -336,31 +343,40 @@ impl<'m, 't> Scheduler<'m, 't> {
     /// run a certain number of iterations, or until reaching quiescence
     pub fn run(&mut self, iter_limit: Option<usize>) {
         info!("running scheduler with iter limit: {:?}", iter_limit);
-        let mut iter = 0;
+        let mut iter = 1;
         let mut changed = true;
         let within_limit = |x: usize| {
             match iter_limit {
-                Some(limit) => x < limit,
+                Some(limit) => x <= limit,
                 None => true
             }
         };
     
         while self.epoch <= self.max_epochs {
             info!("starting scheduler epoch {}", self.epoch);
-            for (_, (_, inline_scheduler)) in self.inline_schedulers.iter_mut() {
-                inline_scheduler.next_epoch(self.epoch)
-            }
 
-            while changed && within_limit(iter) {
+            let schedulers_active =
+                self.inline_schedulers.iter().any(|(_, (run, _))| *run);
+
+            while changed && schedulers_active && within_limit(iter) {
                 let iter_res = self.iterate();
+
+                info!("iteration {}", iter);
+                info!("new schedules visited: {}", iter_res.0);
+                info!("new valid schedules found: {}", iter_res.1);
+
                 changed = iter_res.0 > 0;
-                info!("iteration {}\nnew schedules visited: {}; new valid schedules found: {}",
-                    iter, iter_res.0, iter_res.1);
                 iter += 1;
             }
-            info!("finished scheduler epoch {}", self.epoch);
 
             self.epoch += 1;
+            changed = true;
+
+            for (_, (run_scheduler, inline_scheduler)) in self.inline_schedulers.iter_mut() {
+                if !inline_scheduler.next_epoch(self.epoch) {
+                    *run_scheduler = false;
+                }
+            }
         }
     }
 }

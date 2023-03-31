@@ -93,6 +93,7 @@ fn get_backends(args: &HEArguments) -> Vec<Box<dyn HEBackend>> {
 }
 
 fn main() {
+    let time_compile = Instant::now();
     let mut log_builder = env_logger::builder();
     log_builder.target(env_logger::Target::Stdout);
     log_builder.init();
@@ -101,13 +102,14 @@ fn main() {
     let input_str =
         std::fs::read_to_string(&args.file).expect(&format!("Could not read file {}", &args.file));
 
-    info!("parsing...");
+    let time_parsing = Instant::now();
     let source = ProgramParser::new().parse(&input_str).unwrap();
+    info!("parsing: {}ms", time_parsing.elapsed().as_millis());
 
-    info!("elaboration...");
+    let time_elaboration = Instant::now();
     let elaborated = Elaborator::new().run(source);
+    info!("elaboration: {}ms", time_elaboration.elapsed().as_millis());
 
-    info!("generating inline sets and array groups...");
     // let inline_sets = elaborated.simple_inline_sets();
     let inline_sets = vec![elaborated.no_inlined_set()];
     let inlined_programs: Vec<InlinedProgram> =
@@ -121,7 +123,7 @@ fn main() {
             inlined_program
         }).collect();
 
-    info!("scheduling...");
+    let time_scheduler = Instant::now();
     let mut scheduler =
         Scheduler::new(
             inlined_programs,
@@ -133,6 +135,7 @@ fn main() {
 
     scheduler.run(None);
     let best_opt = scheduler.get_best_schedule(CostFeatures::default_weights());
+    info!("scheduling: {}ms", time_scheduler.elapsed().as_millis());
 
     if let None = best_opt {
         info!("No schedule found");
@@ -140,28 +143,29 @@ fn main() {
     }
 
     let (inlined, schedule, cost) = best_opt.unwrap();
-    info!("found schedule:\n{}", schedule);
-    info!("cost:\n{:?}", cost);
-    info!("inlined program:\n{}", inlined);
+    debug!("found schedule:\n{}", schedule);
+    debug!("cost:\n{:?}", cost);
+    debug!("inlined program:\n{}", inlined);
 
-    info!("circuit generation...");
+    let time_circgen = Instant::now();
     let materializer = DefaultMaterializerFactory.create();
 
     let res_materialize =
         materializer.run(&inlined, &schedule);
 
     let circuit = res_materialize.unwrap();
-    info!("generated circuit:\n{}", circuit);
+    info!("circuit generation: {}ms", time_circgen.elapsed().as_millis());
 
     let opt_circuit = 
         if args.duration > 0 {
-            info!("circuit optimization...");
+            let time_circopt = Instant::now();
             let (opt_exprs, context) = circuit.to_opt_circuit();
             let (res_opt_exprs, opt_roots) =
                 Optimizer::new(args.size)
                 .optimize(opt_exprs, context, args.duration, args.extractor);
 
             let opt_circuit = circuit.from_opt_circuit(res_opt_exprs, opt_roots);
+            info!("circuit optimization: {}ms", time_circopt.elapsed().as_millis());
             opt_circuit
 
         } else {
@@ -172,17 +176,20 @@ fn main() {
                 Optimizer::new(args.size)
                 .optimize(opt_exprs, context, args.duration, args.extractor);
 
+            info!("circuit optimization: 0ms");
             circuit.from_opt_circuit(res_opt_exprs, opt_roots)
         };
 
-    info!("plaintext hoisting...");
+    let time_hoisting = Instant::now();
     let circuit_pe = PlaintextHoisting::new().run(opt_circuit);
+    info!("plaintext hoisting: {}ms", time_hoisting.elapsed().as_millis());
 
-    info!("circuit to lower:\n{}", circuit_pe);
+    debug!("circuit to lower:\n{}", circuit_pe);
 
-    info!("circuit lowering...");
+    let time_lowering = Instant::now();
     let program = CircuitLowering::new().run(circuit_pe);
-    info!("program:\n{}", program);
+    info!("circuit lowering: {}ms", time_lowering.elapsed().as_millis());
+    debug!("program:\n{}", program);
 
     let backends = get_backends(&args);
 
@@ -191,7 +198,7 @@ fn main() {
         .find(|backend| backend.name() == args.backend);
 
     if let Some(mut backend) = backend_opt {
-        info!("compiling with {} backend...", args.backend);
+        info!("using {} backend for code generation", args.backend);
 
         let writer: Box<dyn std::io::Write> = 
             match &args.outfile {
@@ -206,6 +213,7 @@ fn main() {
                 }
             };
 
+        let time_codegen = Instant::now();
         match backend.compile(program, writer) {
             Ok(_) => {},
 
@@ -213,6 +221,9 @@ fn main() {
                 println!("{}", err.to_string())
             }
         }
+
+        info!("code generation: {}ms", time_codegen.elapsed().as_millis());
+        info!("total compile time: {}ms", time_compile.elapsed().as_millis())
 
     } else {
         println!("no backend with name {} found", args.backend)

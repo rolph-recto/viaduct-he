@@ -31,5 +31,5 @@ vec-size: 2048
 RQ2: Can the compiler optimize circuits efficiently?
 
 ### Benchmarks
-- use Porcupine benchmarks
+- use Porcupine benchmarks ?
 - fix layout

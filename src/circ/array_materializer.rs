@@ -9,6 +9,8 @@ use crate::{
 pub trait InputArrayMaterializer<'a> {
     fn create(&self) -> Box<dyn InputArrayMaterializer + 'a>;
 
+    fn name(&self) -> &str;
+
     fn can_materialize(
         &self,
         array_type: ArrayType,
@@ -50,6 +52,8 @@ impl<'a> InputArrayMaterializer<'a> for DummyArrayMaterializer {
     fn create(&self) -> Box<dyn InputArrayMaterializer + 'a> {
         Box::new(Self {})
     }
+
+    fn name(&self) -> &str { "dummy array materializer" }
 
     // the dummy materializer can only materialize arrays w/o client preprocessing
     fn can_materialize(
@@ -252,6 +256,8 @@ impl<'a> InputArrayMaterializer<'a> for DefaultArrayMaterializer {
     fn create(&self) -> Box<dyn InputArrayMaterializer + 'a> {
         Box::new(DefaultArrayMaterializer::new())
     }
+
+    fn name(&self) -> &str { "default array materializer" }
 
     /// the default materializer can only apply when there is no client preprocessing
     fn can_materialize(
@@ -541,6 +547,8 @@ impl<'a> InputArrayMaterializer<'a> for RollArrayMaterializer {
     fn create(&self) -> Box<dyn InputArrayMaterializer + 'a> {
         Box::new(RollArrayMaterializer::new())
     }
+
+    fn name(&self) -> &str { "roll array materializer" }
 
     fn can_materialize(
         &self,

@@ -679,9 +679,7 @@ impl Optimizer {
             return Self::value_number(exprs, context)
         }
 
-        info!("running equality saturation for {} seconds...", timeout);
-
-        let optimization_time = Instant::now();
+        let time_eqsat = Instant::now();
 
         // simplify the expression using a Runner, which creates an e-graph with
         // the given expression and runs the given rules over it
@@ -697,16 +695,12 @@ impl Optimizer {
         runner = runner.run(&self.rules);
 
         info!("{}", runner.report().to_string());
-        info!(
-            "Optimization time: {}ms",
-            optimization_time.elapsed().as_millis()
-        );
+        info!("equality saturation: {}ms", time_eqsat.elapsed().as_millis());
 
         let roots = runner.roots.clone();
         let egraph = &mut runner.egraph;
 
-        let extraction_time = Instant::now();
-
+        let time_extraction = Instant::now();
         match extractor_type {
             ExtractorType::Greedy => {
                 info!("using greedy extractor to derive optimized program...");
@@ -731,11 +725,7 @@ impl Optimizer {
                     .map(|x| Id::from(x.as_ref().len() - 1))
                     .collect();
 
-                info!(
-                    "Extraction time: {}ms",
-                    extraction_time.elapsed().as_millis()
-                );
-
+                info!("extraction: {}ms", time_extraction.elapsed().as_millis());
                 (opt_exprs, new_roots)
             },
 
@@ -753,10 +743,7 @@ impl Optimizer {
                 let (opt_expr, roots) = lp_extractor.solve_multiple(&roots);
                 let opt_exprs = roots.iter().map(|_| opt_expr.clone()).collect();
 
-                info!(
-                    "Extraction time: {}ms",
-                    extraction_time.elapsed().as_millis()
-                );
+                info!("extraction: {}ms", time_extraction.elapsed().as_millis());
 
                 (opt_exprs, roots)
             }
