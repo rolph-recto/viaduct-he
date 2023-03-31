@@ -17,6 +17,7 @@ use crate::circ::{
 mod greedy_extractor;
 pub mod lp_extractor;
 mod dijkstra_extractor;
+mod z3_extractor;
 pub mod cost;
 
 define_language! {
@@ -697,8 +698,12 @@ impl Optimizer {
         info!("{}", runner.report().to_string());
         info!("equality saturation: {}ms", time_eqsat.elapsed().as_millis());
 
-        let roots = runner.roots.clone();
         let egraph = &mut runner.egraph;
+
+        let roots: Vec<Id> =
+            runner.roots.iter()
+            .map(|root| egraph.find(*root))
+            .collect();
 
         let time_extraction = Instant::now();
         match extractor_type {
@@ -741,7 +746,8 @@ impl Optimizer {
                     );
 
                 let (opt_expr, roots) = lp_extractor.solve_multiple(&roots);
-                let opt_exprs = roots.iter().map(|_| opt_expr.clone()).collect();
+                let opt_exprs =
+                    roots.iter().map(|_| opt_expr.clone()).collect();
 
                 info!("extraction: {}ms", time_extraction.elapsed().as_millis());
 

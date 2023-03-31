@@ -63,12 +63,18 @@ impl Display for ArrayPreprocessing {
 }
 
 impl ArrayPreprocessing {
-    pub fn transformed_dims(&self) -> HashSet<DimIndex> {
+    pub fn process_reduce(&self, reduced_dim: usize) -> Result<Option<Self>, String> {
         match self {
-            ArrayPreprocessing::Roll(dim_i, _) => {
-                let mut set: HashSet<DimIndex> = HashSet::new();
-                set.insert(*dim_i);
-                set
+            ArrayPreprocessing::Roll(dim_i, dim_j) => {
+                if reduced_dim == *dim_i {
+                    Ok(None)
+
+                } else if reduced_dim == *dim_j {
+                    Err(format!("dimension {} is pinned by roll preprocessing and cannot be reduced", dim_j))
+
+                } else {
+                    Ok(Some(*self))
+                }
             }
         }
     }
@@ -755,7 +761,8 @@ impl Schedule {
         body_sched: &ExprScheduleType,
     ) -> Result<ExprScheduleType, String> {
         match body_sched {
-            ExprScheduleType::Any => Err(String::from("Cannot reduce a literal expression")),
+            ExprScheduleType::Any =>
+                Err(String::from("Cannot reduce a literal expression")),
 
             ExprScheduleType::Specific(body_sched_spec) => {
                 let mut new_exploded_dims: im::Vector<ScheduleDim> = im::Vector::new();
@@ -808,15 +815,26 @@ impl Schedule {
                 let mut new_shape = body_sched_spec.shape.clone();
                 new_shape.remove(reduced_index);
 
-                Ok(ExprScheduleType::Specific(
-                    // TODO support preprocessing here
-                    ExprSchedule {
-                        shape: new_shape,
-                        preprocessing: None,
-                        exploded_dims: new_exploded_dims,
-                        vectorized_dims: new_vectorized_dims,
-                    },
-                ))
+                let new_preprocessing_res = 
+                    match body_sched_spec.preprocessing {
+                        Some(p) =>
+                            p.process_reduce(reduced_index),
+
+                        None => Ok(None),
+                    };
+
+                new_preprocessing_res
+                .map(|new_preprocessing| {
+                    ExprScheduleType::Specific(
+                        // TODO support preprocessing here
+                        ExprSchedule {
+                            shape: new_shape,
+                            preprocessing: new_preprocessing,
+                            exploded_dims: new_exploded_dims,
+                            vectorized_dims: new_vectorized_dims,
+                        },
+                    )
+                })
             }
         }
     }

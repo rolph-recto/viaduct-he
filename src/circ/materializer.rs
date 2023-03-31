@@ -577,6 +577,10 @@ impl<'a> Materializer<'a> {
                         }
 
                         ExprScheduleType::Specific(ref_expr_sched) => {
+                            if ref_expr_sched.preprocessing.is_some() {
+                                return Err(format!("no support for indexing expression array with preprocessing yet"))
+                            }
+
                             // TODO: refactor this so we don't inline derivation logic here
                             let coord_system =
                                 IndexCoordinateSystem::new(schedule.exploded_dims.iter());
