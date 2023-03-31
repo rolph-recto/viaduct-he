@@ -337,6 +337,7 @@ pub trait CircuitObject: Clone + Eq {
     fn expr_vector(array: String, coord: IndexCoord) -> Self;
     fn get_fresh_variable(registry: &mut CircuitObjectRegistry) -> ParamCircuitExpr;
     fn set_var_value(registry: &mut CircuitObjectRegistry, var: ParamCircuitExpr, value: CircuitValue<Self>);
+    fn is_uniform(&self) -> bool;
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -365,6 +366,18 @@ impl CircuitObject for CiphertextObject {
         };
 
         registry.set_ct_var_value(var_name, value);
+    }
+
+    fn is_uniform(&self) -> bool {
+        match self {
+            CiphertextObject::InputVector(vec) =>
+                vec.is_uniform(),
+
+            // too complicated to determine whether a vector from
+            // an expression is uniform, so just conservatively say no
+            CiphertextObject::ExprVector(_, _) =>
+                false
+        }
     }
 }
 
@@ -425,6 +438,24 @@ impl CircuitObject for PlaintextObject {
         };
         
         registry.set_pt_var_value(var_name, value);
+    }
+
+    fn is_uniform(&self) -> bool {
+        match self {
+            PlaintextObject::InputVector(vec) =>
+                vec.is_uniform(),
+
+            PlaintextObject::ExprVector(_, _) => 
+                false,
+
+            PlaintextObject::Const(_) =>
+                true,
+
+            PlaintextObject::Mask(dims) => 
+                dims.iter().all(|(extent, lo, hi)| {
+                    *lo == 0 && *hi == *extent - 1
+                })
+        }
     }
 }
 
@@ -943,14 +974,33 @@ impl ParamCircuitProgram {
         (dims.clone(), *id)
     }
 
+    fn is_value_uniform<T: CircuitObject>(circval: &CircuitValue<T>) -> bool {
+        match circval {
+            CircuitValue::CoordMap(obj_map) => {
+                obj_map.object_iter().all(|(_, obj_opt)| {
+                    if let Some(obj) = obj_opt {
+                        obj.is_uniform()
+
+                    } else {
+                        false
+                    }
+                })
+            },
+
+            CircuitValue::Single(obj) => obj.is_uniform()
+        }
+    }
+
     pub fn to_opt_circuit(&self) -> (Vec<RecExpr<HEOptCircuit>>, HEOptimizerContext) {
         // only run optimization *before* partial evaluation
         assert!(self.native_expr_list.len() == 0);
         let mut cost_ctx =
             HEOptimizerContext {
                 ct_multiplicity_map: HashMap::new(),
+                uniform_ct_set: HashSet::new(),
                 pt_multiplicity_map: HashMap::new(),
                 dim_extent_map: HashMap::new(),
+                uniform_pt_set: HashSet::new(),
             };
 
         let mut rec_exprs: Vec<RecExpr<HEOptCircuit>> = Vec::new();
@@ -973,6 +1023,11 @@ impl ParamCircuitProgram {
                             };
 
                         cost_ctx.ct_multiplicity_map.insert(var.clone(), mult);
+
+                        if Self::is_value_uniform(self.registry.get_ct_var_value(var)) {
+                            cost_ctx.uniform_ct_set.insert(var.clone());
+                        }
+
                         eclasses.push(eclass);
                     },
 
@@ -987,6 +1042,11 @@ impl ParamCircuitProgram {
                             };
 
                         cost_ctx.pt_multiplicity_map.insert(var.clone(), mult);
+
+                        if Self::is_value_uniform(self.registry.get_pt_var_value(var)) {
+                            cost_ctx.uniform_pt_set.insert(var.clone());
+                        }
+
                         eclasses.push(eclass);
                     },
 
@@ -1462,12 +1522,20 @@ impl Display for ParamCircuitProgram {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.registry)?;
 
+        self.native_expr_list.iter().try_for_each(|(name, dims, circuit)| {
+            let mut dims_str = String::new();
+            for dim in dims.iter() {
+                dims_str.push_str(&format!("[{}: {}]", dim.0, dim.1))
+            }
+            write!(f, "let {}{} = {}\n{}", name, dims_str, *circuit, self.registry.display_circuit(*circuit))
+        })?;
+
         self.circuit_expr_list.iter().try_for_each(|(name, dims, circuit)| {
             let mut dims_str = String::new();
             for dim in dims.iter() {
                 dims_str.push_str(&format!("[{}: {}]", dim.0, dim.1))
             }
-            write!(f, "let {}{} = {}\n", name, dims_str, self.registry.display_circuit(*circuit))
+            write!(f, "let {}{} = {}\n{}", name, dims_str, *circuit, self.registry.display_circuit(*circuit))
         })
     }
 }

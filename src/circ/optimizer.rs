@@ -97,6 +97,7 @@ pub struct HEData {
     node_type: HEOptNodeType,
     muldepth: usize,
     multiplicity: Option<usize>,
+    is_uniform: bool,
 }
 
 impl Analysis<HEOptCircuit> for HEAnalysis {
@@ -156,7 +157,16 @@ impl Analysis<HEOptCircuit> for HEAnalysis {
                 to.multiplicity != from.multiplicity
             );
 
-        constval_merge | vars_merge | type_merge | muldepth_merge | multiplicity_merge
+        let old_is_uniform = to.is_uniform;
+        to.is_uniform = to.is_uniform && from.is_uniform;
+        let is_uniform_merge =
+            DidMerge(
+                to.is_uniform != old_is_uniform,
+                to.is_uniform != from.is_uniform
+            );
+
+        constval_merge | vars_merge | type_merge | muldepth_merge
+        | multiplicity_merge | is_uniform_merge
     }
 
     fn make(egraph: &HEGraph, enode: &HEOptCircuit) -> Self::Data {
@@ -170,12 +180,17 @@ impl Analysis<HEOptCircuit> for HEAnalysis {
                     node_type: HEOptNodeType::Plain,
                     muldepth: 0,
                     multiplicity: None,
+                    is_uniform: true,
                 },
 
             HEOptCircuit::Add([id1, id2]) |
             HEOptCircuit::Sub([id1, id2]) => {
                 let data1 = data(id1);
                 let data2 = data(id2);
+
+                let mut index_vars: HashSet<String> = HashSet::new();
+                index_vars.extend(data1.index_vars.clone());
+                index_vars.extend(data2.index_vars.clone());
 
                 let multiplicity: Option<usize> =
                     match (data1.multiplicity, data2.multiplicity) {
@@ -200,16 +215,15 @@ impl Analysis<HEOptCircuit> for HEAnalysis {
                         }
                     });
 
-                let mut index_vars: HashSet<String> = HashSet::new();
-                index_vars.extend(data1.index_vars.clone());
-                index_vars.extend(data2.index_vars.clone());
+                let is_const: bool = data1.is_uniform && data2.is_uniform;
 
                 HEData {
                     constval,
                     index_vars,
                     node_type: data1.node_type.combine(&data2.node_type),
                     muldepth: max(data1.muldepth, data2.muldepth),
-                    multiplicity
+                    multiplicity,
+                    is_uniform: is_const,
                 }
             },
 
@@ -252,12 +266,15 @@ impl Analysis<HEOptCircuit> for HEAnalysis {
                             max(data1.muldepth, data2.muldepth) + 1,
                     };
 
+                let is_const = data1.is_uniform && data2.is_uniform;
+
                 HEData {
                     constval,
                     index_vars,
                     node_type: data1.node_type.combine(&data2.node_type),
                     muldepth,
                     multiplicity,
+                    is_uniform: is_const,
                 }
             },
 
@@ -271,6 +288,7 @@ impl Analysis<HEOptCircuit> for HEAnalysis {
                     node_type: data2.node_type,
                     muldepth: data2.muldepth,
                     multiplicity: data2.multiplicity,
+                    is_uniform: data2.is_uniform,
                 }
             },
 
@@ -305,6 +323,7 @@ impl Analysis<HEOptCircuit> for HEAnalysis {
                     node_type: data2.node_type,
                     muldepth,
                     multiplicity,
+                    is_uniform: data2.is_uniform,
                 }
             },
 
@@ -315,16 +334,23 @@ impl Analysis<HEOptCircuit> for HEAnalysis {
                     node_type: HEOptNodeType::Plain,
                     muldepth: 0,
                     multiplicity: None,
+                    is_uniform: false,
                 }
             },
 
             HEOptCircuit::CiphertextVar(var) => {
+                if !egraph.analysis.context.ct_multiplicity_map.contains_key(var.as_str()) {
+                    debug!("ct multiplicity map {:?}", egraph.analysis.context.ct_multiplicity_map);
+                    debug!("ciphertext var: {}", var);
+                }
+
                 HEData {
                     constval: None,
                     index_vars: HashSet::new(),
                     node_type: HEOptNodeType::Cipher,
                     muldepth: 0,
                     multiplicity: Some(egraph.analysis.context.ct_multiplicity_map[var.as_str()]),
+                    is_uniform: egraph.analysis.context.uniform_ct_set.contains(var.as_str()),
                 }
             },
             
@@ -335,6 +361,7 @@ impl Analysis<HEOptCircuit> for HEAnalysis {
                     node_type: HEOptNodeType::Plain,
                     muldepth: 0,
                     multiplicity: Some(egraph.analysis.context.pt_multiplicity_map[var.as_str()]),
+                    is_uniform: egraph.analysis.context.uniform_pt_set.contains(var.as_str()),
                 }
             },
 
@@ -345,6 +372,7 @@ impl Analysis<HEOptCircuit> for HEAnalysis {
                     node_type: HEOptNodeType::Plain,
                     muldepth: 0,
                     multiplicity: None,
+                    is_uniform: false,
                 }
             },
         }
@@ -381,7 +409,15 @@ fn index_var_free(var1_str: &'static str, var2_str: &'static str) -> impl Fn(&mu
     }
 }
 
-// eclass has a constant value
+// eclass is uniform (same value for entire vector)
+fn is_uniform(var: &'static str) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
+    let var = var.parse().unwrap();
+    move |egraph, _, subst| {
+        egraph[subst[var]].data.is_uniform
+    }
+}
+
+// eclass has a constant (statically known) value
 fn is_const(var: &'static str) -> impl Fn(&mut HEGraph, Id, &Subst) -> bool {
     let var = var.parse().unwrap();
     move |egraph, _, subst| {
@@ -570,13 +606,28 @@ impl Optimizer {
 
             // distribute rotations from reduction of vectors
             rewrite!("sumvec-distribute-rot";
-                "(sumvec ?o1 (rot ?o2 ?x))" => "(rot ?o2 (sumvec ?o1 x))"
+                "(sumvec ?o1 (rot ?o2 ?x))" => "(rot ?o2 (sumvec ?o1 ?x))"
                 if index_var_free("?o1", "?o2")
             ),
 
             rewrite!("prodvec-distribute-rot";
-                "(prodvec ?o1 (rot ?o2 ?x))" => "(rot ?o2 (sumvec ?o1 x))"
+                "(prodvec ?o1 (rot ?o2 ?x))" => "(rot ?o2 (sumvec ?o1 ?x))"
                 if index_var_free("?o1", "?o2")
+            ),
+
+            rewrite!("rot-uniform-add";
+                "(+ (rot ?o ?x) ?y)" => "(rot ?o (+ ?x ?y))"
+                if is_uniform("?y")
+            ),
+
+            rewrite!("rot-uniform-mul";
+                "(* (rot ?o ?x) ?y)" => "(rot ?o (* ?x ?y))"
+                if is_uniform("?y")
+            ),
+
+            rewrite!("rot-uniform-sub";
+                "(- (rot ?o ?x) ?y)" => "(rot ?o (- ?x ?y))"
+                if is_uniform("?y")
             ),
         ]);
 
@@ -751,7 +802,9 @@ mod tests {
 
         let context = HEOptimizerContext {
             ct_multiplicity_map: HashMap::from([(ct_var.to_string(), 1)]),
+            uniform_ct_set: HashSet::from([ct_var.to_string()]),
             pt_multiplicity_map: HashMap::new(),
+            uniform_pt_set: HashSet::new(),
             dim_extent_map: HashMap::new(),
         };
 
@@ -772,7 +825,9 @@ mod tests {
     fn run_extractor(ct_var: &str, s: &str) {
         let context = HEOptimizerContext {
             ct_multiplicity_map: HashMap::from([(ct_var.to_string(), 1)]),
+            uniform_ct_set: HashSet::from([ct_var.to_string()]),
             pt_multiplicity_map: HashMap::new(),
+            uniform_pt_set: HashSet::new(),
             dim_extent_map: HashMap::new(),
         };
 
@@ -789,36 +844,6 @@ mod tests {
             })
             .run(optimizer.rules());
         let root = *runner.roots.first().unwrap();
-
-        let mut context =
-            HEOptimizerContext {
-                ct_multiplicity_map: HashMap::new(),
-                pt_multiplicity_map: HashMap::new(),
-                dim_extent_map: HashMap::new(),
-            };
-
-        for node in expr.as_ref() {
-            match node {
-                HEOptCircuit::CiphertextVar(var) => {
-                    context.ct_multiplicity_map.insert(var.to_string(), 1);
-                },
-
-                HEOptCircuit::PlaintextVar(var) => {
-                    context.pt_multiplicity_map.insert(var.to_string(), 1);
-                },
-
-                HEOptCircuit::SumVectors([ind_id, _]) |
-                HEOptCircuit::ProductVectors([ind_id, _]) => {
-                    let index =
-                        runner.egraph[*ind_id].data.index_vars
-                        .iter().next().unwrap().clone();
-
-                    context.dim_extent_map.insert(index, 1);
-                },
-
-                _ => {}
-            }
-        }
 
         let cost_func =
             HECostFunction {
@@ -877,6 +902,12 @@ mod tests {
     #[ignore]
     fn test_constant_fold() {
         assert!(run_equiv("x", "(+ x (* 2 3))", "(+ x 6)").0);
+    }
+
+    #[test]
+    #[ignore]
+    fn test_rot_uniform() {
+        assert!(run_equiv("x", "(+ (rot 1 x) x)", "(rot 1 (* 2 x))").0);
     }
 
     #[test]
@@ -962,7 +993,9 @@ mod tests {
 
         let context = HEOptimizerContext {
             ct_multiplicity_map: HashMap::from([(ct_var, 1)]),
+            uniform_ct_set: HashSet::new(),
             pt_multiplicity_map: HashMap::new(),
+            uniform_pt_set: HashSet::new(),
             dim_extent_map: HashMap::from([(String::from("j"), 2)]),
         };
 

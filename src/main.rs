@@ -162,7 +162,6 @@ fn main() {
                 .optimize(opt_exprs, context, args.duration, args.extractor);
 
             let opt_circuit = circuit.from_opt_circuit(res_opt_exprs, opt_roots);
-            info!("optimized circuit:\n{}", opt_circuit);
             opt_circuit
 
         } else {
@@ -178,6 +177,8 @@ fn main() {
 
     info!("plaintext hoisting...");
     let circuit_pe = PlaintextHoisting::new().run(opt_circuit);
+
+    info!("circuit to lower:\n{}", circuit_pe);
 
     info!("circuit lowering...");
     let program = CircuitLowering::new().run(circuit_pe);

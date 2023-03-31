@@ -132,7 +132,7 @@ impl PlaintextHoisting {
                     ParamCircuitExpr::Rotate(_, _) |
                     ParamCircuitExpr::ReduceDim(_, _, _, _) => {
                         let new_array =
-                            self.name_generator.get_fresh_name("__partial__");
+                            self.name_generator.get_fresh_name("__partial");
 
                         let new_var = new_registry.fresh_pt_var();
 
@@ -227,7 +227,7 @@ impl PlaintextHoisting {
                 (partial_circ, new_id)
             },
 
-            ParamCircuitExpr::Literal(lit) => {
+            ParamCircuitExpr::Literal(_) => {
                 let new_id = new_registry.register_circuit(circuit.clone());
                 let partial_circ = PartialCircuit::Plaintext(circuit.clone());
                 cache.insert(circuit_id, (partial_circ.clone(), new_id));
@@ -306,14 +306,16 @@ impl PlaintextHoisting {
             },
 
             ParamCircuitExpr::ReduceDim(dim, extent, op, body) => {
+                let mut new_dims = dims.clone();
+                new_dims.push((dim.clone(), *extent));
                 let (body_circ, new_body_id) =
                     self.partial_eval(
                         *body,
-                        dims,
-                         old_registry,
-                         new_registry,
-                         native_expr_list,
-                         cache,
+                        &new_dims,
+                        old_registry,
+                        new_registry,
+                        native_expr_list,
+                        cache,
                     );
 
                 let new_circuit =
@@ -343,7 +345,7 @@ impl PlaintextHoisting {
         let mut new_circuit_expr_list: Vec<(ArrayName, Vec<(DimName, Extent)>, CircuitId)> = Vec::new();
         let mut new_registry = CircuitObjectRegistry::new();
 
-        for (array, dims, circuit_id) in program.circuit_expr_list {
+        for (array, mut dims, circuit_id) in program.circuit_expr_list {
             let (partial_circ, new_id) =
                 self.partial_eval(
                     circuit_id,

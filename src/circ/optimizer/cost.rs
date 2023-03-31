@@ -78,7 +78,9 @@ impl Ord for HECost {
 #[derive(Clone, Default)]
 pub struct HEOptimizerContext {
     pub ct_multiplicity_map: HashMap<VarName, usize>,
+    pub uniform_ct_set: HashSet<VarName>,
     pub pt_multiplicity_map: HashMap<VarName, usize>,
+    pub uniform_pt_set: HashSet<VarName>,
     pub dim_extent_map: HashMap<DimName, usize>,
 }
 

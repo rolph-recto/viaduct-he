@@ -173,6 +173,22 @@ impl Display for VectorInfo {
 }
 
 impl VectorInfo {
+    pub fn is_uniform(&self) -> bool {
+        self.dims.iter().all(|dim| {
+            match dim {
+                VectorDimContent::EmptyDim {
+                    extent: _,
+                    pad_left, pad_right,
+                    oob_right 
+                } => {
+                    *oob_right == 0 && *pad_left == 0 && *pad_right == 0
+                },
+
+                _ => false,
+            }
+        })
+    }
+
     fn process_schedule_dim(
         shape: &Shape,
         transform: &ArrayTransform,
