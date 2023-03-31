@@ -74,67 +74,6 @@ class EmptyDim(VectorDimContent):
         return self.pad_left + self.extent + self.oob_right + self.pad_right
 
 
-class AbstractArray:
-    def __init__(self, size: int, extents: list[int]):
-        if len(extents) == 0:
-            self.single = NativeVector(size, None)
-
-        else:
-            self.map = {}
-            coords = itertools.product(*map(lambda e: tuple(range(e)), extents))
-            for coord in coords:
-                self.map[coord] = NativeVector(size, None)
-
-    def set(self, coord: list[int], val):
-        if len(coord) == 0:
-            self.single = val
-
-        else:
-            self.map[tuple(coord)] = val
-
-    def get(self, coord=[]):
-        if len(coord) == 0:
-            return self.single
-
-        else:
-            return self.map[tuple(coord)]
-
-    def create_vector(self, size):
-        pass
-
-    def show(self):
-        if self.single is not None:
-            print(self.single)
-
-        else:
-            for coord, val in self.map.items():
-                print("{} => {}", coord, val)
-
-
-class CiphertextArray(AbstractArray):
-    def __init__(self, size: int, extents: list[int]):
-        super().__init__(size, extents)
-
-    def create_vector(self, size: int):
-        return CiphertextVector(size)
-
-
-class PlaintextArray(AbstractArray):
-    def __init__(self, size: int, extents: list[int]):
-        super().__init__(size, extents)
-
-    def create_vector(self, size: int):
-        return PlaintextVector(size)
-
-
-class NativeArray(AbstractArray):
-    def __init__(self, size: int, extents: list[int]):
-        super().__init__(size, extents)
-
-    def create_vector(self, size: int):
-        return NativeVector(size)
-
-
 class AbstractVector:
     def __init__(self, size: int, array=None):
         self.size = size
@@ -186,6 +125,69 @@ class NativeVector(AbstractVector):
         return isinstance(y, NativeVector)
 
 
+class AbstractArray:
+    def __init__(self, size: int, extents: list[int], default):
+        if len(extents) == 0:
+            self.single = default
+
+        else:
+            self.map = {}
+            coords = itertools.product(*map(lambda e: tuple(range(e)), extents))
+            for coord in coords:
+                self.map[coord] = default
+
+    def set(self, coord: list[int], val):
+        if len(coord) == 0:
+            self.single = val
+
+        else:
+            self.map[tuple(coord)] = val
+
+    def get(self, coord=[]):
+        if len(coord) == 0:
+            return self.single
+
+        else:
+            return self.map[tuple(coord)]
+
+    def create_vector(self, size):
+        pass
+
+    def show(self):
+        if self.single is not None:
+            print(self.single)
+
+        else:
+            for coord, val in self.map.items():
+                print("{} => {}", coord, val)
+
+
+class CiphertextArray(AbstractArray):
+    def __init__(self, size: int, extents: list[int], default: CiphertextVector):
+        super().__init__(size, extents, default)
+
+    def create_vector(self, size: int):
+        return CiphertextVector(size)
+
+
+class PlaintextArray(AbstractArray):
+    def __init__(self, size: int, extents: list[int], default: PlaintextVector):
+        super().__init__(size, extents, default)
+
+    def create_vector(self, size: int):
+        return PlaintextVector(size)
+
+
+class NativeArray(AbstractArray):
+    def __init__(self, size: int, extents: list[int], default: NativeVector):
+        super().__init__(size, extents, default)
+
+    def create_vector(self, size: int):
+        return NativeVector(size)
+
+
+
+
 class SEALWrapper:
     def __init__(self, seal, size, client_inputs={}, server_inputs={}):
         self.seal = seal
@@ -197,6 +199,23 @@ class SEALWrapper:
         self.client_buffer = {}
         self.server_buffer = {}
         self.party = None
+        self.server_start_time = 0
+        self.server_exec_duration = 0
+
+    def start_server_exec(self):
+        self.server_start_time = time()
+
+    def end_server_exec(self):
+        self.server_exec_duration = (time() - self.server_start_time) * 1000
+
+    def make_native_zeros(self):
+        return NativeVector(self.size, np.zeros(self.size))
+
+    def make_pt_zeros(self):
+        return self.encode_vec(NativeVector(self.size, np.zeros(self.size)))
+
+    def make_ct_zeros(self):
+        return self.encrypt(self.encode_vec(NativeVector(self.size, np.zeros(self.size))))
 
     def set_party(self, party):
         self.party = party
@@ -260,18 +279,17 @@ class SEALWrapper:
     def vec_to_array(self, vec):
         arr = None
         if isinstance(vec, NativeVector):
-            arr = NativeArray(self.size, [])
+            arr = NativeArray(self.size, [], vec)
 
         elif isinstance(vec, CiphertextVector):
-            arr = CiphertextArray(self.size, [])
+            arr = CiphertextArray(self.size, [], vec)
 
         elif isinstance(vec, PlaintextVector):
-            arr = PlaintextArray(self.size, [])
+            arr = PlaintextArray(self.size, [], vec)
 
         else:
             raise Exception("unknown type")
 
-        arr.set([], vec)
         return arr
 
     def get_array(self, name, preprocess=None):
@@ -297,13 +315,13 @@ class SEALWrapper:
             return arrays[(name, preprocess_str)]
 
     def native_array(self, extents: list[list[int]]):
-        return NativeArray(self.size, extents)
+        return NativeArray(self.size, extents, self.make_native_zeros())
 
     def ciphertext_array(self, extents):
-        return CiphertextArray(self.size, extents)
+        return CiphertextArray(self.size, extents, self.make_ct_zeros())
 
     def plaintext_array(self, extents):
-        return PlaintextArray(self.size, extents)
+        return PlaintextArray(self.size, extents, self.make_pt_zeros())
 
     def build_vector(self, name: str, preprocess: ArrayPreprocessing, src_offset: list[int], dims: list[VectorDimContent]) -> NativeArray:
         array = self.get_array(name, preprocess)
@@ -512,8 +530,6 @@ wrapper = SEALWrapper(seal, vec_size, client_inputs, server_inputs)
 init_end_time = time()
 print("init duration: {}ms".format((init_end_time - init_start_time)*1000))
 
-exec_start_time = time()
-
 wrapper.set_party("client")
 client_pre(wrapper)
 
@@ -523,7 +539,4 @@ server(wrapper)
 wrapper.set_party("client")
 client_post(wrapper)
 
-exec_end_time = time()
-
-print("exec duration: {}ms".format((exec_end_time - exec_start_time)*1000))
-# print("noise budget: {} bits".format(wrapper.invariant_noise_budget({{output}})))
+print("exec duration: {:.0f}ms".format(wrapper.server_exec_duration))
