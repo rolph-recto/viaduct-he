@@ -604,12 +604,16 @@ impl Optimizer {
         let get_first_enode =
             |id| egraph[id].nodes[0].clone();
 
-        let exprs: Vec<RecExpr<HEOptCircuit>> =
-            roots.iter()
-            .map(|root| get_first_enode(*root).build_recexpr(get_first_enode))
-            .collect();
+        roots.iter()
+        .map(|root| {
+            let expr =
+                get_first_enode(*root)
+                .build_recexpr(get_first_enode);
 
-        (exprs, roots)
+            let new_root = expr.as_ref().len() - 1;
+            (expr, egg::Id::from(new_root))
+        })
+        .unzip()
     }
 
     pub fn optimize(
