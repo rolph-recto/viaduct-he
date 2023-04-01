@@ -18,13 +18,13 @@ class Roll(ArrayPreprocessing):
 
     def apply(self, arr):
         slices = []
-        for ind in range(arr.shape[self.dim_i]):
-            i_slice = np.take(arr, ind, axis=self.dim_i)
-            roll_dim = self.dim_j if self.dim_j < self.dim_i else self.dim_j - 1
-            perm_i_slice = np.roll(i_slice, -ind, axis=roll_dim)
-            slices.append(perm_i_slice)
+        for ind in range(arr.shape[self.dim_j]):
+            j_slice = np.take(arr, ind, axis=self.dim_j)
+            roll_dim = self.dim_i if self.dim_i < self.dim_j else self.dim_i - 1
+            perm_j_slice = np.roll(j_slice, -ind, axis=roll_dim)
+            slices.append(perm_j_slice)
 
-        return np.stack(slices, axis=self.dim_i)
+        return np.stack(slices, axis=self.dim_j)
 
     def __str__(self):
         return "Roll({},{})".format(self.dim_i, self.dim_j)
@@ -154,7 +154,7 @@ class AbstractArray:
         pass
 
     def show(self):
-        if self.single is not None:
+        if hasattr(self, "single"):
             print(self.single)
 
         else:
@@ -206,14 +206,14 @@ class SEALWrapper:
     def end_server_exec(self):
         self.server_exec_duration = (time() - self.server_start_time) * 1000
 
-    def make_native_zeros(self):
-        return NativeVector(self.size, np.zeros(self.size))
+    def make_native_full(self, value):
+        return NativeVector(self.size, np.full(self.size, value))
 
-    def make_pt_zeros(self):
-        return self.encode_vec(NativeVector(self.size, np.zeros(self.size)))
+    def make_pt_full(self, value):
+        return self.encode_vec(NativeVector(self.size, np.full(self.size, value)))
 
-    def make_ct_zeros(self):
-        return self.encrypt(self.encode_vec(NativeVector(self.size, np.zeros(self.size))))
+    def make_ct_full(self, value):
+        return self.encrypt(self.encode_vec(NativeVector(self.size, np.full(self.size, value))))
 
     def set_party(self, party):
         self.party = party
@@ -239,11 +239,11 @@ class SEALWrapper:
         assert(self.party == "client")
 
         if isinstance(arr, CiphertextArray):
-            if arr.single is not None:
+            if hasattr(arr, "single"):
                 self.output_ciphertext_vector(arr.single)
 
             else:
-                for coord, val in self.map.items():
+                for coord, val in arr.map.items():
                     print("coord ", coord)
                     self.output_ciphertext_vector(val)
 
@@ -312,14 +312,14 @@ class SEALWrapper:
         else:
             return arrays[(name, preprocess_str)]
 
-    def native_array(self, extents: list[list[int]]):
-        return NativeArray(self.size, extents, self.make_native_zeros())
+    def native_array(self, extents: list[list[int]], default=0):
+        return NativeArray(self.size, extents, self.make_native_full(default))
 
-    def ciphertext_array(self, extents):
-        return CiphertextArray(self.size, extents, self.make_ct_zeros())
+    def ciphertext_array(self, extents, default=0):
+        return CiphertextArray(self.size, extents, self.make_ct_full(default))
 
-    def plaintext_array(self, extents):
-        return PlaintextArray(self.size, extents, self.make_pt_zeros())
+    def plaintext_array(self, extents, default=0):
+        return PlaintextArray(self.size, extents, self.make_pt_full(default))
 
     def build_vector(self, name: str, preprocess: ArrayPreprocessing, src_offset: list[int], dims: list[VectorDimContent]) -> NativeArray:
         array = self.get_array(name, preprocess)

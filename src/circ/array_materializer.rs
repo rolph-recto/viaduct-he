@@ -527,6 +527,7 @@ impl RollArrayMaterializer {
                     },
                 ) => RollMaterializationType::Diagonal(*cdim_i, *cdim_j),
 
+                // the preprocessing can be eliminated by rotations
                 (
                     DimContent::FilledDim {
                         dim: _,
