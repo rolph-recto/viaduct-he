@@ -1,7 +1,7 @@
 /// pyseal.rs;
 /// PySEAL backend
 
-use std::{collections::{HashMap, HashSet}, fs::rename};
+use std::collections::{HashMap, HashSet};
 
 use handlebars::{Handlebars, RenderError};
 use log::info;
@@ -266,7 +266,7 @@ impl UseAnalysis {
                 .collect()
             },
 
-            HEStatement::DeclareVar(_, _, _) |
+            HEStatement::DeclareVar(_, _, _, _) |
             HEStatement::AssignVar(_, _, _) |
             HEStatement::Encode(_, _) |
             HEStatement::Instruction(_) => {
@@ -306,7 +306,7 @@ impl UseAnalysis {
         let mut out_set: HashSet<InstructionId> = HashSet::new();
         for stmt in atomic_stmts {
             match stmt {
-                HEStatement::DeclareVar(_, _, _) | HEStatement::Encode(_, _) => {},
+                HEStatement::DeclareVar(_, _, _, _) | HEStatement::Encode(_, _) => {},
 
                 HEStatement::ForNode(_, _, _) =>
                     unreachable!(),
@@ -559,7 +559,7 @@ impl SEALLowering {
                 );
             },
 
-            HEStatement::DeclareVar(array, optype, extent) => {
+            HEStatement::DeclareVar(array, optype, extent, default) => {
                 let extent_str =
                     extent.into_iter()
                     .map(|e| e.to_string()).
@@ -578,7 +578,7 @@ impl SEALLowering {
                         SEALInstruction::Op(
                             instr_type,
                             array,
-                            vec![format!("[{}]", extent_str)]
+                            vec![format!("[{}]", extent_str), default.to_string()]
                         )
                     )
                 );

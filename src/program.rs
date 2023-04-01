@@ -191,7 +191,7 @@ pub enum HEStatement {
     ForNode(String, usize, Vec<HEStatement>),
 
     // declare a new array
-    DeclareVar(String, HEType, Vec<Extent>),
+    DeclareVar(String, HEType, Vec<Extent>, isize),
 
     // assign to a variable
     AssignVar(String, Vec<HEIndex>, HEOperand),
@@ -216,14 +216,14 @@ impl HEStatement {
                     .append(RcDoc::text("}"))
             },
 
-            HEStatement::DeclareVar(var, ty, extents) => {
+            HEStatement::DeclareVar(var, ty, extents, default) => {
                 let extent_str = extents
                     .iter()
                     .map(|i| format!("[{}]", i))
                     .collect::<Vec<String>>()
                     .join("");
 
-                RcDoc::text(format!("var {}: {}{}", var, ty, extent_str))
+                RcDoc::text(format!("var {}: {}{} = {}", var, ty, extent_str, default))
             },
 
             HEStatement::AssignVar(var, indices, val) => {

@@ -199,7 +199,8 @@ impl CircuitLowering {
                     HEStatement::DeclareVar(
                         var.clone(),
                         decl_type,
-                        coord_map.extents()
+                        coord_map.extents(),
+                        0
                     )
                 );
                 for (coords, obj) in coord_map.object_iter() {
@@ -218,7 +219,8 @@ impl CircuitLowering {
                     HEStatement::DeclareVar(
                         var.clone(),
                         decl_type,
-                        vec![]
+                        vec![],
+                        0
                     )
                 );
                 let operand = f(obj, &input);
@@ -449,7 +451,7 @@ impl CircuitLowering {
 
         // generate statements for array expr
         // first, declare array
-        statements.push(HEStatement::DeclareVar(array.clone(), array_type, dim_extents));
+        statements.push(HEStatement::DeclareVar(array.clone(), array_type, dim_extents, 0));
 
         // set the array's value to the body statement's computed value
         body_statements.push(HEStatement::AssignVar(
@@ -709,7 +711,7 @@ impl CircuitLowering {
                         HEInstruction::Add(reduce_type, reduce_id, reduce_var_ref.clone(), body_operand)
                     }
 
-                    Operator::Sub => unimplemented!(),
+                    Operator::Sub => unreachable!(),
 
                     Operator::Mul => {
                         HEInstruction::Mul(reduce_type, reduce_id, reduce_var_ref.clone(), body_operand)
@@ -723,8 +725,15 @@ impl CircuitLowering {
                     HEOperand::Ref(HERef::Instruction(reduce_id)),
                 ));
 
+                let default =
+                    match op {
+                        Operator::Add => 0,
+                        Operator::Sub => unreachable!(),
+                        Operator::Mul => 1,
+                    };
+
                 stmts.extend([
-                    HEStatement::DeclareVar(reduce_var.clone(), HEType::Ciphertext, vec![]),
+                    HEStatement::DeclareVar(reduce_var.clone(), HEType::Ciphertext, vec![], 1),
                     HEStatement::ForNode(dim.clone(), *extent, body_stmts),
                 ]);
 
@@ -886,9 +895,7 @@ impl CircuitLowering {
                         HEInstruction::Add(reduce_type, reduce_id, reduce_var_ref.clone(), body_operand)
                     },
 
-                    Operator::Sub => {
-                        HEInstruction::Sub(reduce_type, reduce_id, reduce_var_ref.clone(), body_operand)
-                    },
+                    Operator::Sub => unreachable!(),
 
                     Operator::Mul => {
                         HEInstruction::Mul(reduce_type, reduce_id, reduce_var_ref.clone(), body_operand)
@@ -902,8 +909,15 @@ impl CircuitLowering {
                     HEOperand::Ref(HERef::Instruction(reduce_id)),
                 ));
 
+                let default = 
+                    match op {
+                        Operator::Add => 0,
+                        Operator::Sub => unreachable!(),
+                        Operator::Mul => 1,
+                    };
+
                 stmts.extend([
-                    HEStatement::DeclareVar(reduce_var.clone(), HEType::Native, vec![]),
+                    HEStatement::DeclareVar(reduce_var.clone(), HEType::Native, vec![], default),
                     HEStatement::ForNode(dim.clone(), *extent, body_stmts),
                 ]);
 
