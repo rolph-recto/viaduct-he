@@ -324,8 +324,7 @@ class SEALWrapper:
     def build_vector(self, name: str, preprocess: ArrayPreprocessing, src_offset: list[int], dims: list[VectorDimContent]) -> NativeArray:
         array = self.get_array(name, preprocess)
         if len(dims) == 0:
-            npvec = np.zeros((self.size,))
-            npvec[0] = array[tuple(src_offset)]
+            npvec = np.full(self.size, array[tuple(src_offset)])
             vec = NativeVector(self.size, npvec)
             return self.vec_to_array(vec)
 

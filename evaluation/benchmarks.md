@@ -23,7 +23,7 @@ vec-size = 16384
 
 baseline: 1 key per vector
 
-4. double matmul (2-matmul)
+4. double matmul (matmul-2) (from CHET)
 vec-size = 4096
 
 5. hamming distance (hamming-distance)

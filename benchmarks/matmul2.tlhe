@@ -1,15 +1,15 @@
-input A1: [4,4] from client
-input A2: [4,4] from client
-input B: [4,4] from client
+input A1: [16,16] from server
+input A2: [16,16] from server
+input B: [16,16] from client
 let res =
-    for i: 4 {
-        for j: 4 {
-            sum(for k: 4 { A1[i][k] * B[k][j] })
+    for i: 16 {
+        for j: 16 {
+            sum(for k: 16 { A1[i][k] * B[k][j] })
         }
     }
 in
-for i: 4 {
-    for j: 4 {
-        sum(for k: 4 { A2[i][k] * res[k][j] })
+for i: 16 {
+    for j: 16 {
+        sum(for k: 16 { A2[i][k] * res[k][j] })
     }
 }
