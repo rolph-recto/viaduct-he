@@ -380,15 +380,16 @@ class SEALWrapper:
     def mask(self, mask_vec: list[(int, int, int)]):
         mask_size = 1
         mask_acc = None
+        clip = lambda val, zero, lo, hi, i: val if lo <= i and i <= hi else zero
         while len(mask_vec) > 0:
             extent, lo, hi = mask_vec.pop()
             mask_size = mask_size * extent
             if mask_acc is None:
-                lst = [1 if lo <= i and i <= hi else 0 for i in extent]
+                lst = [clip(1,0,lo,hi,i) for i in range(extent)]
                 mask_acc = np.array(lst)
 
             else:
-                lst = [mask_acc if lo <= i and i <= hi else np.zeros(mask_acc.shape) for i in extent]
+                lst = [clip(mask_acc,np.zeros(mask_acc.shape),lo,hi,i) for i in range(extent)]
                 mask_acc = np.stack(lst)
 
         mask_flat = mask_acc.reshape(mask_size)
@@ -397,7 +398,7 @@ class SEALWrapper:
             repeats += 1
 
         mask_final = np.tile(mask_flat, repeats)[:self.size]
-        return NativeVector(self.size, mask_final)
+        return self.vec_to_array(NativeVector(self.size, mask_final))
 
     def set(self, arr, coord, val):
         arr.set(coord, val)
