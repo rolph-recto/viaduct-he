@@ -733,7 +733,7 @@ impl CircuitLowering {
                     };
 
                 stmts.extend([
-                    HEStatement::DeclareVar(reduce_var.clone(), HEType::Ciphertext, vec![], 1),
+                    HEStatement::DeclareVar(reduce_var.clone(), HEType::Ciphertext, vec![], default),
                     HEStatement::ForNode(dim.clone(), *extent, body_stmts),
                 ]);
 
