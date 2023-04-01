@@ -709,9 +709,7 @@ impl CircuitLowering {
                         HEInstruction::Add(reduce_type, reduce_id, reduce_var_ref.clone(), body_operand)
                     }
 
-                    Operator::Sub => {
-                        HEInstruction::Sub(reduce_type, reduce_id, reduce_var_ref.clone(), body_operand)
-                    }
+                    Operator::Sub => unimplemented!(),
 
                     Operator::Mul => {
                         HEInstruction::Mul(reduce_type, reduce_id, reduce_var_ref.clone(), body_operand)

@@ -186,8 +186,6 @@ class NativeArray(AbstractArray):
         return NativeVector(size)
 
 
-
-
 class SEALWrapper:
     def __init__(self, seal, size, client_inputs={}, server_inputs={}):
         self.seal = seal
@@ -379,8 +377,27 @@ class SEALWrapper:
     def const(self, const: int):
         return self.vec_to_array(NativeVector(self.size, np.array(self.size * [const])))
 
-    def mask(self, mask: list[(int, int, int)]):
-        raise NotImplemented
+    def mask(self, mask_vec: list[(int, int, int)]):
+        mask_size = 1
+        mask_acc = None
+        while len(mask_vec) > 0:
+            extent, lo, hi = mask_vec.pop()
+            mask_size = mask_size * extent
+            if mask_acc is None:
+                lst = [1 if lo <= i and i <= hi else 0 for i in extent]
+                mask_acc = np.array(lst)
+
+            else:
+                lst = [mask_acc if lo <= i and i <= hi else np.zeros(mask_acc.shape) for i in extent]
+                mask_acc = np.stack(lst)
+
+        mask_flat = mask_acc.reshape(mask_size)
+        repeats = int(self.size / mask_size)
+        if self.size % mask_size != 0:
+            repeats += 1
+
+        mask_final = np.tile(mask_flat, repeats)[:self.size]
+        return NativeVector(self.size, mask_final)
 
     def set(self, arr, coord, val):
         arr.set(coord, val)
@@ -478,7 +495,6 @@ class SEALWrapper:
     def invariant_noise_budget(self, x: CiphertextVector):
         return self.seal["decryptor"].invariant_noise_budget(x.array)
 
-    # TODO add native operations
 
 ### START GENERATED CODE
 {{{ program }}}

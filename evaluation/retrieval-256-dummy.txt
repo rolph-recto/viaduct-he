@@ -1,0 +1,38 @@
+val v_values_1: C = vector(values[0]<{0:256::1}>)
+val v_keys_1: C = vector(keys[0, 0]<{1:8::1}, {0:256::1}>)
+val v_query_1: C = vector(query[0]<{0:8::1}, {256}>)
+val const_1: N = const(1)
+val const_neg1: N = const(-1)
+encode(const_1)
+encode(const_neg1)
+var mask: C
+CC: instr3 = v_query_1 - v_keys_1
+CC: instr4 = instr3 * instr3
+CP: instr5 = instr4 * const_neg1
+CP: instr6 = instr5 + const_1
+CC: instr7 = rot -1024 instr6
+CC: instr8 = instr6 * instr7
+CC: instr9 = rot -512 instr8
+CC: instr10 = instr8 * instr9
+CC: instr11 = rot -256 instr10
+CC: instr12 = instr10 * instr11
+mask = instr12
+var __out: C
+CC: instr15 = v_values_1 * mask
+CC: instr16 = rot -128 instr15
+CC: instr17 = instr15 + instr16
+CC: instr18 = rot -64 instr17
+CC: instr19 = instr17 + instr18
+CC: instr20 = rot -32 instr19
+CC: instr21 = instr19 + instr20
+CC: instr22 = rot -16 instr21
+CC: instr23 = instr21 + instr22
+CC: instr24 = rot -8 instr23
+CC: instr25 = instr23 + instr24
+CC: instr26 = rot -4 instr25
+CC: instr27 = instr25 + instr26
+CC: instr28 = rot -2 instr27
+CC: instr29 = instr27 + instr28
+CC: instr30 = rot -1 instr29
+CC: instr31 = instr29 + instr30
+__out = instr31

@@ -16,7 +16,7 @@ baseline: 1 key per vector
 
 2. PIR with bigger database (retrieval-1024)
 vec-size = 4096
-- shard keys into 5 vectors
+- shard keys into 2 vectors
 
 3. private set union (set-union)
 vec-size = 16384
@@ -34,7 +34,7 @@ vec-size: 2048
 baseline: one point per vector (row-wise layout)
 
 6. single-input single-output convolution (conv-siso) (from gazelle)
-vec-size: 4096
+vec-size: 2048
 
 baseline: sliding windows (i.e. store input pixels that will contribute to a
 single output pixel)

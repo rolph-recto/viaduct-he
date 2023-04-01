@@ -609,7 +609,7 @@ impl VectorInfo {
         // tuple of (dim_size, mask_opt) for each dim
         // if mask_opt is None, nothing to mask;
         // otherwise, mask along interval (lo, hi) where mask_opt = Some((lo, hi))
-        let mut mask_dim_info: Vec<(usize, Option<(usize, usize)>)> = Vec::new();
+        let mut mask_dim_info: im::Vector<(usize, Option<(usize, usize)>)> = im::Vector::new();
 
         self_dims.iter()
         .zip(other_dims.iter()).rev()
@@ -706,7 +706,7 @@ impl VectorInfo {
                             (Some(lo), Some(hi)) => Some((lo, hi))
                         };
 
-                    mask_dim_info.push((dim_size, dim_mask));
+                    mask_dim_info.push_front((dim_size, dim_mask));
                 },
 
                 (EmptyDim {
@@ -730,7 +730,7 @@ impl VectorInfo {
                         } else {
                             Some((pad_left2, dim_size - pad_right2 - oob_right2 -1))
                         };
-                    mask_dim_info.push((dim_size, dim_mask));
+                    mask_dim_info.push_front((dim_size, dim_mask));
                 },
 
                 // an empty dim can be derived from a reduced dim by a clean-and-fill
@@ -752,7 +752,7 @@ impl VectorInfo {
                             Some((pad_left2, dim_size - pad_right2 - oob_right2 -1))
                         };
 
-                    mask_dim_info.push((dim_size, dim_mask));
+                    mask_dim_info.push_front((dim_size, dim_mask));
                     block_size *= dim_size;
                 },
 
@@ -768,7 +768,8 @@ impl VectorInfo {
             PlaintextObject::Const(1)
 
         } else {
-            let mask = mask_dim_info
+            let mask =
+                mask_dim_info
                 .into_iter()
                 .map(|(dim_size, dim_mask)| match dim_mask {
                     Some((lo, hi)) => (dim_size, lo, hi),

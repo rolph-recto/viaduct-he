@@ -640,6 +640,46 @@ impl VectorDeriver {
         ParamCircuitExpr: CanCreateObjectVar<T>,
     {
         let obj_var = registry.fresh_obj_var();
+        registry.set_obj_var_value(obj_var.clone(), obj_val);
+
+        let var_id = registry.register_circuit(ParamCircuitExpr::obj_var(obj_var));
+
+        let offset_expr_opt = match &step_val {
+            // a vector map derived from a vector map
+            CircuitValue::CoordMap(step_map) => {
+                // attempt to compute offset expr
+                VectorDeriver::compute_linear_offset(
+                    &step_map,
+                    step_map.coord_iter(),
+                    step_map.coord_system.index_vars(),
+                )
+            }
+
+            // a single vector derived from a either a single vector or a vector map
+            CircuitValue::Single(step) => Some(OffsetExpr::Literal(*step)),
+        };
+
+        let offset_expr =
+            if let Some(linear_offset_expr) = offset_expr_opt {
+                if let Some(0) = linear_offset_expr.const_value() {
+                    var_id
+
+                } else {
+                    registry.register_circuit(
+                        ParamCircuitExpr::Rotate(linear_offset_expr, var_id)
+                    )
+                }
+
+            } else {
+                // introduce new offset variable, since we can't create an offset expr
+                let offset_var = registry.fresh_offset_fvar();
+                registry.set_offset_var_value(offset_var.clone(), step_val);
+
+                registry.register_circuit(
+                    ParamCircuitExpr::Rotate(OffsetExpr::Var(offset_var), var_id)
+                )
+            };
+
 
         let mask_is_nonconst = match &mask_val {
             CircuitValue::CoordMap(mask_map) => mask_map.object_iter().any(|(_, mask)| {
@@ -659,52 +699,22 @@ impl VectorDeriver {
             }
         };
 
-        let masked_expr = if mask_is_nonconst {
+        if mask_is_nonconst {
             let pt_var = registry.fresh_pt_var();
-            registry.set_obj_var_value(obj_var.clone(), obj_val);
             registry.set_pt_var_value(pt_var.clone(), mask_val);
 
-            let var_id = registry.register_circuit(ParamCircuitExpr::obj_var(obj_var));
-            let mask_id = registry.register_circuit(ParamCircuitExpr::PlaintextVar(pt_var));
+            let mask_id =
+                registry.register_circuit(
+                    ParamCircuitExpr::PlaintextVar(pt_var)
+                );
 
-            ParamCircuitExpr::Op(Operator::Mul, var_id, mask_id)
+            registry.register_circuit(
+                ParamCircuitExpr::Op(Operator::Mul, offset_expr, mask_id)
+            )
+
         } else {
-            registry.set_obj_var_value(obj_var.clone(), obj_val);
-            ParamCircuitExpr::obj_var(obj_var)
-        };
-
-        let masked_expr_id = registry.register_circuit(masked_expr.clone());
-
-        let offset_expr_opt = match &step_val {
-            // a vector map derived from a vector map
-            CircuitValue::CoordMap(step_map) => {
-                // attempt to compute offset expr
-                VectorDeriver::compute_linear_offset(
-                    &step_map,
-                    step_map.coord_iter(),
-                    step_map.coord_system.index_vars(),
-                )
-            }
-
-            // a single vector derived from a either a single vector or a vector map
-            CircuitValue::Single(step) => Some(OffsetExpr::Literal(*step)),
-        };
-
-        let output_expr = if let Some(linear_offset_expr) = offset_expr_opt {
-            if let Some(0) = linear_offset_expr.const_value() {
-                masked_expr
-            } else {
-                ParamCircuitExpr::Rotate(linear_offset_expr, masked_expr_id)
-            }
-        } else {
-            // introduce new offset variable, since we can't create an offset expr
-            let offset_var = registry.fresh_offset_fvar();
-            registry.set_offset_var_value(offset_var.clone(), step_val);
-
-            ParamCircuitExpr::Rotate(OffsetExpr::Var(offset_var), masked_expr_id)
-        };
-
-        registry.register_circuit(output_expr)
+            offset_expr
+        }
     }
 
     // default method for generating circuit expression for an array materializer

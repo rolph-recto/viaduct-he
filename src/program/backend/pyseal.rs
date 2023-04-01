@@ -10,7 +10,6 @@ use serde::Serialize;
 use crate::{
     program::*,
     lang::Operator,
-    scheduling::ArrayPreprocessing,
     circ::vector_info::VectorDimContent
 };
 
@@ -59,7 +58,6 @@ enum SEALOpType {
     DeclareConst,
     BuildVector,
 
-    GetVector,
     ServerInput,
     ServerRecv,
     ServerSend,
@@ -68,6 +66,9 @@ enum SEALOpType {
     ClientOutput,
     ClientSend,
     ClientRecv,
+
+    StartServerExec,
+    EndServerExec,
 }
 
 impl SEALOpType {
@@ -110,7 +111,6 @@ impl SEALOpType {
             SEALOpType::DeclareMask => RcDoc::text("wrapper.mask"),
             SEALOpType::DeclareConst => RcDoc::text("wrapper.const"),
 
-            SEALOpType::GetVector => RcDoc::text("wrapper.get_vector"),
             SEALOpType::BuildVector => RcDoc::text("wrapper.build_vector"),
 
             SEALOpType::ServerInput => RcDoc::text("wrapper.server_input"),
@@ -121,6 +121,9 @@ impl SEALOpType {
             SEALOpType::ClientOutput => RcDoc::text("wrapper.client_output"),
             SEALOpType::ClientSend => RcDoc::text("wrapper.client_send"),
             SEALOpType::ClientRecv => RcDoc::text("wrapper.client_recv"),
+
+            SEALOpType::StartServerExec => RcDoc::text("wrapper.start_server_exec"),
+            SEALOpType::EndServerExec => RcDoc::text("wrapper.end_server_exec"),
         }
     }
 }
@@ -940,10 +943,22 @@ impl SEALLowering {
         self.lower_context_client(&program.context, &mut client_pre_code);
         self.lower_context_server(&program.context, &mut server_code);
 
+        server_code.push(
+            SEALStatement::Instruction(
+                SEALInstruction::OpInplace(SEALOpType::StartServerExec, vec![])
+            )
+        );
+
         let mut rename_map = HashMap::new();
         for stmt in program.statements {
             self.lower_recur(stmt, &mut server_code, &mut rename_map);
         }
+
+        server_code.push(
+            SEALStatement::Instruction(
+                SEALInstruction::OpInplace(SEALOpType::EndServerExec, vec![])
+            )
+        );
 
         server_code.push(
             SEALStatement::Instruction(

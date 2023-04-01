@@ -108,8 +108,13 @@ impl ScheduleTransformer for VectorizeDimTransformer {
                     let eclass = self.dim_classes[&(site.clone(), edim.index)];
 
                     // vectorize the exploded dim
-                    if class == eclass && edim.stride == stride && edim.extent == extent {
-                        let vec_extent = util::get_nearest_pow2(extent);
+                    // the extent must be a power of 2, otherwise the result
+                    // of the computation might be wrong because of OOB values!
+                    let vec_extent = util::get_nearest_pow2(extent);
+                    // if class == eclass && edim.stride == stride
+                    //     && edim.extent == extent && vec_extent == extent
+                    if class == eclass && edim.stride == stride && edim.extent == extent
+                    {
                         let new_sched_dim = ScheduleDim {
                             index: edim.index,
                             stride,
