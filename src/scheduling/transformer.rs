@@ -26,7 +26,7 @@ impl<'a> ScheduleTransformerFactory<'a> for DefaultScheduleTransformerFactory {
         vec![
             Box::new(VectorizeDimTransformer::new(dim_classes.clone(), indexing_levels.clone())),
             Box::new(SplitDimTransformer::new(Some(2), dim_classes.clone(), indexing_levels.clone())),
-            Box::new(RollTransformer::new(dim_classes, indexing_levels))
+            // Box::new(RollTransformer::new(dim_classes, indexing_levels))
         ]
     }
 }

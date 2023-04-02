@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    hash::Hash, ops::Index, rc::Rc, cell::RefCell
+    hash::Hash, ops::Index, rc::Rc, cell::RefCell, time::Instant
 };
 
 use disjoint_sets::UnionFindNode;
@@ -27,7 +27,7 @@ impl MaterializerFactory for DefaultMaterializerFactory {
     fn create<'a>(&self) -> Materializer<'a> {
         let amats: Vec<Box<dyn InputArrayMaterializer + 'a>> =
             vec![
-                Box::new(RollArrayMaterializer::new()),
+                // Box::new(RollArrayMaterializer::new()),
                 Box::new(DefaultArrayMaterializer::new()),
             ];
 
@@ -63,6 +63,7 @@ impl<'a> Materializer<'a> {
         program: &InlinedProgram,
         schedule: &Schedule
     ) -> Result<ParamCircuitProgram, String> {
+        let time_materialization = Instant::now();
         let mut circuit_list: Vec<CircuitDecl> = vec![];
 
         // need to clone expr_map here because the iteration through it is mutating
@@ -108,6 +109,8 @@ impl<'a> Materializer<'a> {
                 Ok(())
             })?;
 
+        debug!("materialization ({}ms)", time_materialization.elapsed().as_millis());
+
         Ok(ParamCircuitProgram {
             registry: self.registry,
             native_expr_list: vec![],
@@ -117,7 +120,14 @@ impl<'a> Materializer<'a> {
 
     fn coalesce_vars(&mut self, expr_id: CircuitId) {
         let mut varctx_map: HashMap<im::Vector<DimName>, Vec<CircuitId>> = HashMap::new();
-        self.get_vars_with_context(expr_id, &mut im::Vector::new(), &mut varctx_map);
+        let mut visited_circuits: HashSet<CircuitId> = HashSet::new();
+
+        self.get_vars_with_context(
+            expr_id, 
+            &mut im::Vector::new(),
+            &mut varctx_map,
+            &mut visited_circuits,
+        );
 
         let var_classes = self.get_var_equiv_classes(varctx_map);
 
@@ -138,27 +148,55 @@ impl<'a> Materializer<'a> {
         &self,
         expr_id: CircuitId,
         reduced_dims: &mut im::Vector<DimName>,
-        varctx_map: &mut HashMap<im::Vector<DimName>, Vec<CircuitId>>
+        varctx_map: &mut HashMap<im::Vector<DimName>, Vec<CircuitId>>,
+        visited_circuits: &mut HashSet<CircuitId>,
     ) {
+        if visited_circuits.contains(&expr_id) {
+            return;
+        }
+
         match self.registry.get_circuit(expr_id) {
             ParamCircuitExpr::ReduceDim(dim, _, _, body) => {
                 reduced_dims.push_back(dim.clone());
                 self.get_vars_with_context(
                     *body,
                     reduced_dims,
-                    varctx_map
-                )
+                    varctx_map,
+                    visited_circuits
+                );
+                visited_circuits.insert(expr_id);
             },
 
             ParamCircuitExpr::Op(_, expr1, expr2) => {
-                self.get_vars_with_context(*expr1, reduced_dims, varctx_map);
-                self.get_vars_with_context(*expr2, reduced_dims, varctx_map);
+                self.get_vars_with_context(
+                    *expr1,
+                    reduced_dims,
+                    varctx_map,
+                    visited_circuits
+                );
+
+                self.get_vars_with_context(
+                    *expr2,
+                    reduced_dims,
+                    varctx_map,
+                    visited_circuits
+                );
+
+                visited_circuits.insert(expr_id);
             },
 
-            ParamCircuitExpr::Literal(_) => {},
+            ParamCircuitExpr::Literal(_) => {
+                visited_circuits.insert(expr_id);
+            },
 
             ParamCircuitExpr::Rotate(_, body) => {
-                self.get_vars_with_context(*body, reduced_dims, varctx_map)
+                self.get_vars_with_context(
+                    *body,
+                    reduced_dims,
+                    varctx_map,
+                    visited_circuits
+                );
+                visited_circuits.insert(expr_id);
             },
 
             ParamCircuitExpr::CiphertextVar(_) |
@@ -169,6 +207,8 @@ impl<'a> Materializer<'a> {
                 } else {
                     varctx_map.insert(reduced_dims.clone(), vec![expr_id]);
                 }
+
+                visited_circuits.insert(expr_id);
             },
         }
     }
@@ -418,6 +458,8 @@ impl<'a> Materializer<'a> {
         CircuitObjectRegistry: CanRegisterObject<'b, T>,
         ParamCircuitExpr: CanCreateObjectVar<T>,
     {
+        let time_src_derivation = Instant::now();
+
         let derivation_opt =
             VectorDeriver::derive_from_source::<T>(&expr_circ_val, &transform_circ_val);
 
@@ -584,7 +626,7 @@ impl<'a> Materializer<'a> {
                             // TODO: refactor this so we don't inline derivation logic here
                             let coord_system =
                                 IndexCoordinateSystem::new(schedule.exploded_dims.iter());
-                            
+
                             // vectors of the expr array being indexed
                             let expr_circ_val = ref_expr_sched.materialize(&transform.array);
 

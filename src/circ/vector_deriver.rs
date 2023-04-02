@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc, time::Instant};
 
 use disjoint_sets::UnionFindNode;
 use log::{info, debug};
@@ -88,6 +88,8 @@ impl VectorDeriver {
             return
         
         } else {
+            let time_registration = Instant::now();
+
             for coord in coord_system.coord_iter() {
                 let vector = VectorInfo::get_input_vector_at_coord(
                     coord_system.coord_as_index_map(coord.clone()),
@@ -98,6 +100,8 @@ impl VectorDeriver {
 
                 self.register_vector(vector.clone());
             }
+
+            debug!("registration ({}ms)", time_registration.elapsed().as_millis())
         }
     }
 
@@ -133,6 +137,8 @@ impl VectorDeriver {
         step_map: &mut IndexCoordinateMap<isize>,
     ) {
         if schedule.vectorized_dims.len() > 0 {
+            let time_derivation = Instant::now();
+
             for coord in coords {
                 let vector = VectorInfo::get_input_vector_at_coord(
                     obj_map.coord_as_index_map(coord.clone()),
@@ -148,6 +154,8 @@ impl VectorDeriver {
                 step_map.set(coord.clone(), steps);
                 mask_map.set(coord, mask);
             }
+
+            debug!("derivation ({}ms)", time_derivation.elapsed().as_millis());
 
         } else {
             for coord in coords {

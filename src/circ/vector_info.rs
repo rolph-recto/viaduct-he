@@ -448,7 +448,7 @@ impl VectorInfo {
 
                         // multiple dims cannot stride the same indexed dim
                         // TODO is this necessary
-                        // let dim_unseen = !seen_dims.contains(&idim1);
+                        let dim_unseen = !seen_dims.contains(&idim1);
 
                         // dimensions have the same stride
                         let same_stride = stride1 == stride2;
@@ -481,7 +481,8 @@ impl VectorInfo {
                         seen_dims.insert(idim1);
                         same_dim && same_padding && same_stride && offset_equiv
                         && same_size && in_extent
-                        // && dim_unseen && self_no_oob
+                        && dim_unseen
+                        // && self_no_oob
                     },
 
                     // empty dims will not be rotated for derivation, but
