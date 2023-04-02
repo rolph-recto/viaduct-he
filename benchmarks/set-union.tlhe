@@ -1,14 +1,14 @@
-input a_id: [128, 7] from client
-input a_data: [128] from client
-input b_id: [128, 7] from client
-input b_data: [128] from client
+input a_id: [16, 4] from client
+input a_data: [16] from client
+input b_id: [16, 4] from client
+input b_data: [16] from client
 let a_sum = sum(a_data) in
 let b_sum =
-	sum(for j: 128 {
+	sum(for j: 16 {
 		b_data[j] *
-		product(for i: 128 {
+		product(for i: 16 {
 			1 - 
-			product(for k: 7 {
+			product(for k: 4 {
 				1 -
 				((a_id[i][k] - b_id[j][k]) * (a_id[i][k] - b_id[j][k]))
 			})
