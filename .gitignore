@@ -2,3 +2,4 @@
 *.so
 *.py
 !runtime/*
+!evaluation/*.py
