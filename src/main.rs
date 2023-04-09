@@ -54,8 +54,8 @@ struct HEArguments {
     )]
     outfile: Option<String>,
 
-    /// duration in seconds to run equality saturation (if 0, duration is unbounded)
-    #[clap(short = 'd', long = "duration", value_parser, default_value_t = 20)]
+    /// duration in seconds to run equality saturation (if 0, optimization is skipped)
+    #[clap(short = 'd', long = "duration", value_parser, default_value_t = 0)]
     duration: usize,
 
     /// e-graph extractor to use

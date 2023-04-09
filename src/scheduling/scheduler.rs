@@ -236,6 +236,8 @@ impl<'m, 't> Scheduler<'m, 't> {
         pareto_map.into_iter().map(|(id, schedule_list)| {  
             let (_, inline_sched) = self.inline_schedulers.get(&id).unwrap();
 
+            info!("inline scheduler {} total visited schedules: {}", id, inline_sched.visited.len());
+
             SchedulingResult {
                 inlined_program: inline_sched.program.clone(),
                 visited: inline_sched.visited.clone(),
@@ -245,7 +247,6 @@ impl<'m, 't> Scheduler<'m, 't> {
         }).collect()
     }
 
-    // TODO finish
     pub fn get_best_schedule(
         &self,
         weights: CostFeatures

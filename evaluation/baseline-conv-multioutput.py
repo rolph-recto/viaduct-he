@@ -499,6 +499,7 @@ class SEALWrapper:
 ### START GENERATED CODE
 w, h = 30, 30
 fw, fh = 3, 3
+num_f = 4
 
 def client_pre(wrapper):
     wrapper.client_input("img")
@@ -517,12 +518,15 @@ def client_post(wrapper):
 
 def server(wrapper):
     wrapper.server_input("filter")
+    
+    v_filter = wrapper.plaintext_array([h,w], 0)
+    for i in range(num_f):
+        cur_filter = \
+            wrapper.encode_vec(
+                wrapper.build_vector("filter", None, [i,0,0], \
+                    [FilledDim(1, fh, 1, 0, 1), FilledDim(2, fw, 1, 0, 1)]).get())
 
-    v_filter = \
-        wrapper.encode_vec(
-            wrapper.build_vector("filter", None, [0,0], \
-                [FilledDim(0, fh, 1, 0, 1), FilledDim(1, fw, 1, 0, 1)]).get()
-        )
+        wrapper.set(v_filter, [i], cur_filter)
 
     v_img = wrapper.ciphertext_array([h,w], 0)
     for y in range(h):
@@ -531,26 +535,28 @@ def server(wrapper):
             wrapper.set(v_img, [y,x], cur_img)
             
     wrapper.start_server_exec()
-    __out = wrapper.ciphertext_array([h,w], 0)
-    for y in range(h):
-        for x in range(w):
-            cur_img = v_img.get([y,x])
-            instr1 = wrapper.multiply_plain(cur_img, v_filter)
-            wrapper.relinearize_inplace(instr1)
+    __out = wrapper.ciphertext_array([num_f,h,w], 0)
+    for i in range(num_f):
+        for y in range(h):
+            for x in range(w):
+                cur_img = v_img.get([y,x])
+                cur_filter = v_filter.get([i])
+                instr1 = wrapper.multiply_plain(cur_img, cur_filter)
+                wrapper.relinearize_inplace(instr1)
 
-            instr2 = wrapper.rotate_rows(-2, instr1)
-            instr3 = wrapper.add(instr2, instr1)
+                instr2 = wrapper.rotate_rows(-2, instr1)
+                instr3 = wrapper.add(instr2, instr1)
 
-            instr4 = wrapper.rotate_rows(-1, instr3)
-            instr5 = wrapper.add(instr4, instr3)
+                instr4 = wrapper.rotate_rows(-1, instr3)
+                instr5 = wrapper.add(instr4, instr3)
 
-            instr6 = wrapper.rotate_rows(-8, instr5)
-            instr7 = wrapper.add(instr6, instr5)
+                instr6 = wrapper.rotate_rows(-8, instr5)
+                instr7 = wrapper.add(instr6, instr5)
 
-            instr8 = wrapper.rotate_rows(-4, instr7)
-            instr9 = wrapper.add(instr8, instr7)
+                instr8 = wrapper.rotate_rows(-4, instr7)
+                instr9 = wrapper.add(instr8, instr7)
 
-            wrapper.set(__out, [y,x], instr9)
+                wrapper.set(__out, [y,x], instr9)
 
     wrapper.end_server_exec()
     wrapper.server_send("__out", __out)

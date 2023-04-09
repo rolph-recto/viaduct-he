@@ -104,6 +104,10 @@ def collect_compile(args):
         print("no trials found in that time interval")
         return
 
+    elif n == 1:
+        print("cannot compute standard error with only one trial")
+        return
+
     csv_out = io.StringIO()
     fields = [
         "bench","cfg","trials",
@@ -229,6 +233,10 @@ def collect_exec(args):
     n = len(trials)
     if n == 0:
         print("no trials found in that time interval")
+        return
+
+    elif n == 1:
+        print("cannot compute standard error with only one trial")
         return
 
     csv_out = io.StringIO()
