@@ -34,8 +34,25 @@ exec_benchmarks = {
     "distance": ["baseline"]
 }
 
-def compile_dummy(args):
-    pass
+def get_trials(out_path, from_dir, to_dir):
+    out_dir = Path(out_path)
+    if not out_dir.is_dir():
+        raise Exception(f"output directory {out_dir} does not exist")
+
+    start = None if from_dir is None else int(from_dir)
+    end = None if to_dir is None else int(to_dir)
+    trials = []
+    for path in out_dir.glob("*"):
+        if path.is_dir():
+            path_time = int(path.stem)
+
+            within_start = True if start is None else start <= path_time
+            within_end = True if end is None else path_time <= end
+            if within_start and within_end:
+                trials.append(path)
+
+    return trials
+
 
 def bench_compile(args):
     timestamps = []
@@ -78,6 +95,82 @@ def bench_compile(args):
                     out_file.write(compile_proc.stdout)
 
         print(f"finished trial {trial+1}")
+
+
+def collect_compile(args):
+    trials = get_trials(args.out_path, args.from_dir, args.to_dir)
+    n = len(trials)
+    if n == 0:
+        print("no trials found in that time interval")
+        return
+
+    csv_out = io.StringIO()
+    fields = [
+        "bench","cfg","trials",
+        "scheduling","scheduling_sterror","scheduling_error_pct",
+        "optimization","optimization_sterror","optimization_error_pct",
+        "total","total_sterror","total_error_pct",
+    ]
+    writer = csv.DictWriter(csv_out, fieldnames=fields)
+    writer.writeheader()
+    benchmarks = sorted(exec_benchmarks.keys())
+    for bench in benchmarks:
+        for cfg in compile_benchmarks[bench]:
+            cfg_name = cfg["name"]
+            scheduling_times = []
+            optimization_times = []
+            total_times = []
+            for trial in trials:
+                cfg_bench = Path(trial, f"{cfg_name}-{bench}.txt")
+                if not cfg_bench.is_file():
+                    raise Exception(f"expected output file {cfg_bench} does not exist")
+
+                with open(cfg_bench) as cfg_bench_file:
+                    cfg_bench_out = cfg_bench_file.read()
+                    scheduling_res = re.search("scheduling: (?P<scheduling>[0-9]+)ms", cfg_bench_out)
+                    optimization_res = re.search("circuit optimization: (?P<optimization>[0-9]+)ms", cfg_bench_out)
+                    total_res = re.search("total compile time: (?P<total>[0-9]+)ms", cfg_bench_out)
+
+                    scheduling_times.append(int(scheduling_res.group("scheduling")))
+                    optimization_times.append(int(optimization_res.group("optimization")))
+                    total_times.append(int(total_res.group("total")))
+
+            assert(len(scheduling_times) == n)
+            assert(len(optimization_times) == n)
+            assert(len(total_times) == n)
+
+            scheduling_mean = round(statistics.mean(scheduling_times), 2)
+            scheduling_sterror = round(statistics.stdev(scheduling_times) / math.sqrt(n), 2)
+            scheduling_error_pct = round(scheduling_sterror / scheduling_mean, 2)
+
+            optimization_mean = round(statistics.mean(optimization_times), 2)
+            if optimization_mean > 0:
+                optimization_sterror = round(statistics.stdev(optimization_times) / math.sqrt(n), 2)
+                optimization_error_pct = round(optimization_sterror / optimization_mean, 2)
+            else:
+                optimization_sterror = 0
+                optimization_error_pct = 0
+
+            total_mean = round(statistics.mean(total_times), 2)
+            total_sterror = round(statistics.stdev(total_times) / math.sqrt(n), 2)
+            total_error_pct = round(total_sterror / total_mean, 2)
+
+            writer.writerow({
+                "bench": bench,
+                "cfg": cfg_name,
+                "trials": n,
+                "scheduling": scheduling_mean,
+                "scheduling_sterror": scheduling_sterror,
+                "scheduling_error_pct": scheduling_error_pct,
+                "optimization": optimization_mean,
+                "optimization_sterror": optimization_sterror,
+                "optimization_error_pct": optimization_error_pct,
+                "total": total_mean,
+                "total_sterror": total_sterror,
+                "total_error_pct": total_error_pct,
+            })
+
+    print(csv_out.getvalue())
             
 
 def bench_exec(args):
@@ -132,29 +225,16 @@ def bench_exec(args):
 
 
 def collect_exec(args):
-    out_dir = Path(args.out_path)
-    if not out_dir.is_dir():
-        raise Exception(f"output directory {out_dir} does not exist")
-
-    start = None if args.from_dir is None else int(args.from_dir)
-    end = None if args.to_dir is None else int(args.to_dir)
-    trials = []
-    for path in out_dir.glob("*"):
-        if path.is_dir():
-            path_time = int(path.stem)
-
-            within_start = True if start is None else start <= path_time
-            within_end = True if end is None else path_time <= end
-            if within_start and within_end:
-                trials.append(path)
-
-    if len(trials) == 0:
+    trials = get_trials(args.out_path, args.from_dir, args.to_dir)
+    n = len(trials)
+    if n == 0:
         print("no trials found in that time interval")
         return
 
-    n = len(trials)
     csv_out = io.StringIO()
-    writer = csv.DictWriter(csv_out, fieldnames=["bench","cfg","trials","exec_time","sterror","error_pct"])
+    fields = ["bench","cfg","trials","exec_time","sterror","error_pct"]
+    writer = csv.DictWriter(csv_out, fieldnames=fields)
+    writer.writeheader()
     benchmarks = sorted(exec_benchmarks.keys())
     for bench in benchmarks:
         for cfg in exec_benchmarks[bench]:
@@ -205,6 +285,22 @@ def argument_parser():
     bench_compile_parser.add_argument(
         "-o", "--outpath", dest="out_path", type=str, default="bench-compile",
         help="base path to store trial information")
+
+    # collect execution data
+    collect_compile_parser = subparsers.add_parser("collect-compile", help="collect compilation data")
+    collect_compile_parser.set_defaults(func=collect_compile)
+
+    collect_compile_parser.add_argument(
+        "-f" "--from", dest="from_dir", type=str,
+        help="timestamp of start folder")
+
+    collect_compile_parser.add_argument(
+        "-t" "--to", dest="to_dir", type=str,
+        help="timestamp of end folder")
+
+    collect_compile_parser.add_argument(
+        "-o", "--outpath", dest="out_path", type=str, default="bench-compile",
+        help="base path to retrieve trial information")
 
     # benchmark execution data
     bench_exec_parser = subparsers.add_parser("bench-exec", help="benchmark execution time")

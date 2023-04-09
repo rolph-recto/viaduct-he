@@ -3,3 +3,5 @@
 *.py
 !runtime/*
 !evaluation/*.py
+evaluation/bench-compile/*
+evaluation/bench-exec/*
