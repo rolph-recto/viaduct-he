@@ -1,0 +1,15 @@
+input A1: [16,16] from server
+input A2: [16,16] from server
+input B: [16,16] from client
+let res =
+    for i: 16 {
+        for j: 16 {
+            sum(for k: 16 { A1[i][k] * B[k][j] })
+        }
+    }
+in
+for i: 16 {
+    for j: 16 {
+        sum(for k: 16 { A2[i][k] * res[k][j] })
+    }
+}

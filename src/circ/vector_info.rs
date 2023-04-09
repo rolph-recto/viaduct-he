@@ -211,21 +211,23 @@ impl VectorInfo {
 
                 // indexing less than 0; clip
                 let mut oob_left: usize = 0;
-                while dim_offset + ((oob_left * new_stride) as isize) < 0 {
+                while oob_left < dim.extent
+                    && dim_offset + ((oob_left * new_stride) as isize) < 0
+                {
                     oob_left += 1;
                 }
 
                 // indexing beyond array_extent; clip
                 let mut oob_right: usize = 0;
-                while dim_offset + ((new_stride * (dim.extent - 1 - oob_right)) as isize)
-                    >= array_extent as isize
+                while oob_left + oob_right < dim.extent
+                    && dim_offset + ((new_stride * (dim.extent - 1 - oob_right)) as isize) >= array_extent as isize
                 {
                     oob_right += 1;
                 }
 
                 // clip data beyond transform bounds
-                while transform_dim_offset + (dim.stride * (dim.extent - 1 - oob_right))
-                    >= *transform_extent
+                while oob_left + oob_right < dim.extent
+                    && transform_dim_offset + (dim.stride * (dim.extent - 1 - oob_right)) >= *transform_extent
                 {
                     oob_right += 1;
                 }
@@ -287,23 +289,27 @@ impl VectorInfo {
         shape: &Shape,
         schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
+        indexed_offset_map_sym: &OffsetMap<OffsetExpr>,
+        transform_offset_map_sym: &OffsetMap<OffsetExpr>,
     ) -> Self {
         let offset_env = OffsetEnvironment::new(index_map);
 
-        let mut clipped_offset_map = schedule
-            .get_indexed_offset_map(transform)
+        let mut indexed_offset_map =
+            indexed_offset_map_sym
             .map(|offset| offset.eval(&offset_env));
 
-        let transform_offset_map = schedule
-            .get_transform_offset_map(transform)
-            .map(|offset| usize::try_from(offset.eval(&offset_env)).unwrap());
+        let transform_offset_map =
+            transform_offset_map_sym
+            .map(|offset| {
+                usize::try_from(offset.eval(&offset_env)).unwrap()
+            });
 
         let mut materialized_dims: im::Vector<VectorDimContent> = im::Vector::new();
         for dim in schedule.vectorized_dims.iter() {
             let materialized_dim = VectorInfo::process_schedule_dim(
                 shape,
                 transform,
-                &mut clipped_offset_map,
+                &mut indexed_offset_map,
                 &transform_offset_map,
                 dim,
             );
@@ -313,7 +319,7 @@ impl VectorInfo {
         VectorInfo {
             array: transform.array.clone(),
             preprocessing: schedule.preprocessing,
-            offset_map: clipped_offset_map,
+            offset_map: indexed_offset_map,
             dims: materialized_dims,
         }
     }
@@ -324,6 +330,9 @@ impl VectorInfo {
         schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
     ) -> CircuitValue<VectorInfo> {
+        let indexed_offset_map_sym = schedule.get_indexed_offset_map(transform);
+        let transform_offset_map_sym = schedule.get_transform_offset_map(transform);
+
         if !coord_system.is_empty() {
             let mut coord_map = IndexCoordinateMap::from_coord_system(coord_system);
             for index_map in coord_map.index_map_iter() {
@@ -332,6 +341,8 @@ impl VectorInfo {
                     shape,
                     schedule,
                     transform,
+                    &indexed_offset_map_sym,
+                    &transform_offset_map_sym,
                 );
 
                 coord_map.set(coord_map.index_map_as_coord(index_map), vector);
@@ -344,6 +355,8 @@ impl VectorInfo {
                 shape,
                 schedule,
                 transform,
+                &indexed_offset_map_sym,
+                &transform_offset_map_sym,
             );
 
             CircuitValue::Single(vector)
@@ -440,6 +453,13 @@ impl VectorInfo {
                         oob_left: oob_left2, oob_right: oob_right2,
                         pad_left: pad_left2, pad_right: pad_right2,
                     }) => {
+                        if (extent1 == 0 && extent2 == 0) || (extent1 > 0 && extent2 == 0) {
+                            return true
+
+                        } else if extent1 == 0 && extent2 > 0 {
+                            return false
+                        } 
+
                         // dimensions point to the same indexed dimension (duh)
                         let same_dim = idim1 == idim2;
 
@@ -448,7 +468,7 @@ impl VectorInfo {
 
                         // multiple dims cannot stride the same indexed dim
                         // TODO is this necessary
-                        let dim_unseen = !seen_dims.contains(&idim1);
+                        // let dim_unseen = !seen_dims.contains(&idim1);
 
                         // dimensions have the same stride
                         let same_stride = stride1 == stride2;
@@ -481,7 +501,7 @@ impl VectorInfo {
                         seen_dims.insert(idim1);
                         same_dim && same_padding && same_stride && offset_equiv
                         && same_size && in_extent
-                        && dim_unseen
+                        // && dim_unseen
                         // && self_no_oob
                     },
 

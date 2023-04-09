@@ -2,7 +2,7 @@ use std::{ops::Range, collections::{HashMap, HashSet}};
 
 use crate::{
     circ::{ *, cost::*, vector_deriver::* },
-    scheduling::{IndexingSiteSchedule, ArrayPreprocessing},
+    scheduling::{IndexingSiteSchedule, ArrayPreprocessing, HasExplodedDims},
     lang::{Shape, ArrayType, ArrayTransform, DimName, Extent, OffsetExpr, DimContent}
 };
 
@@ -109,6 +109,9 @@ impl<'a> InputArrayMaterializer<'a> for DummyArrayMaterializer {
             coord_system.index_vars().into_iter()
             .map(|var| (var, 0..1)).collect();
 
+        let indexed_offset_map_sym = schedule.get_indexed_offset_map(transform);
+        let transform_offset_map_sym = schedule.get_transform_offset_map(transform);
+
         let mut vectors: HashSet<VectorInfo> = HashSet::new();
         for coord in coord_system.coord_iter_subset(dim_range) {
             let vector = 
@@ -117,6 +120,8 @@ impl<'a> InputArrayMaterializer<'a> for DummyArrayMaterializer {
                     array_shape,
                     schedule,
                     transform,
+                    &indexed_offset_map_sym,
+                    &transform_offset_map_sym,
                 );
 
             vectors.insert(vector);

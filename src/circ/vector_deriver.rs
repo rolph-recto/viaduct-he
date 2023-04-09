@@ -2,10 +2,11 @@ use std::{cell::RefCell, rc::Rc, time::Instant};
 
 use disjoint_sets::UnionFindNode;
 use log::{info, debug};
+use rand::seq::index;
 
 use crate::{
     circ::{vector_info::VectorInfo, *},
-    scheduling::{ArrayPreprocessing, IndexingSiteSchedule, ExprSchedule}, util,
+    scheduling::{ArrayPreprocessing, IndexingSiteSchedule, ExprSchedule, HasExplodedDims}, util,
 };
 
 use super::cost::CostFeatures;
@@ -73,21 +74,23 @@ impl VectorDeriver {
         transform: &ArrayTransform,
         coord_system: &IndexCoordinateSystem,
     ) {
+        let indexed_offset_map_sym = schedule.get_indexed_offset_map(transform);
+        let transform_offset_map_sym = schedule.get_transform_offset_map(transform);
+
         if coord_system.is_empty() {
             let vector = VectorInfo::get_input_vector_at_coord(
                 HashMap::new(),
                 array_shape,
                 schedule,
                 transform,
+                &indexed_offset_map_sym,
+                &transform_offset_map_sym,
             );
 
             self.register_vector(vector.clone());
 
         // if there are no vectorized dims, then you can't derive vectors
-        } else if schedule.vectorized_dims.len() == 0 {
-            return
-        
-        } else {
+        } else if schedule.vectorized_dims.len() > 0 {
             let time_registration = Instant::now();
 
             for coord in coord_system.coord_iter() {
@@ -96,6 +99,8 @@ impl VectorDeriver {
                     array_shape,
                     schedule,
                     transform,
+                    &indexed_offset_map_sym,
+                    &transform_offset_map_sym,
                 );
 
                 self.register_vector(vector.clone());
@@ -136,6 +141,12 @@ impl VectorDeriver {
         mask_map: &mut IndexCoordinateMap<PlaintextObject>,
         step_map: &mut IndexCoordinateMap<isize>,
     ) {
+        let indexed_offset_map_sym =
+            schedule.get_indexed_offset_map(transform);
+
+        let transform_offset_map_sym =
+            schedule.get_transform_offset_map(transform);
+
         if schedule.vectorized_dims.len() > 0 {
             let time_derivation = Instant::now();
 
@@ -145,6 +156,8 @@ impl VectorDeriver {
                     array_shape,
                     schedule,
                     transform,
+                    &indexed_offset_map_sym,
+                    &transform_offset_map_sym,
                 );
 
                 let (parent, steps, mask) =
@@ -164,6 +177,8 @@ impl VectorDeriver {
                     array_shape,
                     schedule,
                     transform,
+                    &indexed_offset_map_sym,
+                    &transform_offset_map_sym,
                 );
 
                 obj_map.set(coord.clone(), T::input_vector(vector));
@@ -191,6 +206,9 @@ impl VectorDeriver {
         // a mutable reference to *some* them until all nodes have finished merging
         let mut vector_map: HashMap<IndexCoord, (VectorInfo, Rc<RefCell<UnionFindNode<VectorInfo>>>)> =
             HashMap::new();
+        
+        let indexed_offset_map_sym = schedule.get_indexed_offset_map(transform);
+        let transform_offset_map_sym = schedule.get_transform_offset_map(transform);
 
         for coord in coords.clone() {
             let vector = VectorInfo::get_input_vector_at_coord(
@@ -198,6 +216,8 @@ impl VectorDeriver {
                 array_shape,
                 schedule,
                 transform,
+                &indexed_offset_map_sym,
+                &transform_offset_map_sym,
             );
 
             let vector_set =
@@ -774,6 +794,8 @@ impl VectorDeriver {
                     array_shape,
                     schedule,
                     transform,
+                    &schedule.get_indexed_offset_map(transform),
+                    &schedule.get_transform_offset_map(transform)
                 );
 
             let (parent, steps, mask) =

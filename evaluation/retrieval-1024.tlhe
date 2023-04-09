@@ -1,0 +1,11 @@
+input keys: [1024,10] from client
+input values: [1024] from client
+input query: [10] from client
+let mask =
+    for i: 1024 {
+        product(for j: 10 {
+            1 - ((query[j] - keys[i][j]) * (query[j] - keys[i][j]))
+        })
+    }
+in
+sum(values * mask)

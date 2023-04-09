@@ -597,7 +597,8 @@ impl IndexElimination {
                                     extent: indexed_extent,
                                     stride: indexed_stride,
                                 } => {
-                                    let new_offset = indexed_transform.offset_map.get(dim)
+                                    // let new_offset = indexed_transform.offset_map.get(dim)
+                                    let new_offset = indexed_transform.offset_map.get(indexed_dim)
                                         + (output_transform.offset_map.get(dim)
                                             * (indexed_stride as isize));
 

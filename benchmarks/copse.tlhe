@@ -1,0 +1,42 @@
+input x: [8,4] from client
+input y: [8,4] from client
+let leq3 = for i: 16 {
+    (1 - x[i][3]) * y[i][3]
+} in 
+let leq2 = for i: 16 {
+    (1 - x[i][2]) * y[i][2]
+} in 
+let leq1 = for i: 16 {
+    (1 - x[i][1]) * y[i][1]
+} in 
+let leq0 = for i: 16 {
+    (1 - x[i][0]) * y[i][0]
+} in 
+let eq3 = for i: 16 {
+    1 - ((x[i][3] - y[i][3]) *  (x[i][3] - y[i][3]))
+} in
+let eq2 = for i: 16 {
+    1 - ((x[i][2] - y[i][2]) *  (x[i][2] - y[i][2]))
+} in
+let eq1 = for i: 16 {
+    (x[i][1] - y[i][1]) *  (x[i][1] - y[i][1])
+} in
+let ands1 = 
+    (eq3 * eq2) * (eq1 * leq0)
+in
+let ands2 = 
+    eq3 * leq2
+in
+let ands3 = 
+    (eq3 * eq2) * leq1
+in
+let ors1 =
+    ((leq3 * ands1) - ((leq3 - ands1) * (leq3 - ands1))) *
+    ((leq3 * ands1) - ((leq3 - ands1) * (leq3 - ands1)))
+in
+let ors2 = 
+    ((ands2 * ands3) - ((ands2 - ands3) * (ands2 - ands3))) *
+    ((ands2 * ands3) - ((ands2 - ands3) * (ands2 - ands3)))
+in
+((ors1 * ors2) - ((ors1 - ors2) * (ors1 - ors2))) *
+((ors1 * ors2) - ((ors1 - ors2) * (ors1 - ors2)))

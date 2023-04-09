@@ -556,7 +556,7 @@ impl Optimizer {
             // bidirectional addition rules
             rewrite!("add-assoc"; "(+ ?a (+ ?b ?c))" <=> "(+ (+ ?a ?b) ?c)"),
             rewrite!("add-commute"; "(+ ?a ?b)" <=> "(+ ?b ?a)"),
-            rewrite!("add-to-two"; "(+ ?a ?a)" <=> "(* 2 ?a)"),
+            // rewrite!("add-to-two"; "(+ ?a ?a)" <=> "(* 2 ?a)"),
             rewrite!("sub-inverse"; "(- ?a ?b)" <=> "(+ ?a (* -1 ?b))"),
 
             // bidirectional multiplication rules
