@@ -19,22 +19,25 @@ vec-size = 4096
 - shard keys into 2 vectors
 
 3. private set union (set-union)
-vec-size = 16384
+vec-size = 8192
 
 baseline: 1 key per vector
+change DB size to 16 to fit 8192
 
 4. double matmul (matmul-2) (from CHET)
 vec-size = 4096
 
-5. hamming distance (hamming-distance)
+5. hamming distance (distance)
 compare a user test point with a set of test points
 vec-size: 2048
 * want to show off diagonal layout
 
+- infeasible on 4096
+
 baseline: one point per vector (row-wise layout)
 
 6. single-input single-output convolution (conv-siso) (from gazelle)
-vec-size: 2048
+vec-size: 4096
 
 baseline: sliding windows (i.e. store input pixels that will contribute to a
 single output pixel)

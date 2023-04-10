@@ -3,6 +3,7 @@ import itertools
 import json
 import numpy as np
 from time import time
+from typing import *
 
 from seal import *
 
@@ -126,7 +127,7 @@ class NativeVector(AbstractVector):
 
 
 class AbstractArray:
-    def __init__(self, size: int, extents: list[int], default):
+    def __init__(self, size: int, extents: List[int], default):
         if len(extents) == 0:
             self.single = default
 
@@ -136,7 +137,7 @@ class AbstractArray:
             for coord in coords:
                 self.map[coord] = default
 
-    def set(self, coord: list[int], val):
+    def set(self, coord: List[int], val):
         if len(coord) == 0:
             self.single = val
 
@@ -163,7 +164,7 @@ class AbstractArray:
 
 
 class CiphertextArray(AbstractArray):
-    def __init__(self, size: int, extents: list[int], default: CiphertextVector):
+    def __init__(self, size: int, extents: List[int], default: CiphertextVector):
         super().__init__(size, extents, default)
 
     def create_vector(self, size: int):
@@ -171,7 +172,7 @@ class CiphertextArray(AbstractArray):
 
 
 class PlaintextArray(AbstractArray):
-    def __init__(self, size: int, extents: list[int], default: PlaintextVector):
+    def __init__(self, size: int, extents: List[int], default: PlaintextVector):
         super().__init__(size, extents, default)
 
     def create_vector(self, size: int):
@@ -179,7 +180,7 @@ class PlaintextArray(AbstractArray):
 
 
 class NativeArray(AbstractArray):
-    def __init__(self, size: int, extents: list[int], default: NativeVector):
+    def __init__(self, size: int, extents: List[int], default: NativeVector):
         super().__init__(size, extents, default)
 
     def create_vector(self, size: int):
@@ -312,7 +313,7 @@ class SEALWrapper:
         else:
             return arrays[(name, preprocess_str)]
 
-    def native_array(self, extents: list[list[int]], default=0):
+    def native_array(self, extents: List[List[int]], default=0):
         return NativeArray(self.size, extents, self.make_native_full(default))
 
     def ciphertext_array(self, extents, default=0):
@@ -321,7 +322,7 @@ class SEALWrapper:
     def plaintext_array(self, extents, default=0):
         return PlaintextArray(self.size, extents, self.make_pt_full(default))
 
-    def build_vector(self, name: str, preprocess: ArrayPreprocessing, src_offset: list[int], dims: list[VectorDimContent]) -> NativeArray:
+    def build_vector(self, name: str, preprocess: ArrayPreprocessing, src_offset: List[int], dims: List[VectorDimContent]) -> NativeArray:
         array = self.get_array(name, preprocess)
         if len(dims) == 0:
             npvec = np.full(self.size, array[tuple(src_offset)])
@@ -376,7 +377,7 @@ class SEALWrapper:
     def const(self, const: int):
         return self.vec_to_array(NativeVector(self.size, np.array(self.size * [const])))
 
-    def mask(self, mask_vec: list[(int, int, int)]):
+    def mask(self, mask_vec: List[Tuple[int, int, int]]):
         mask_size = 1
         mask_acc = None
         clip = lambda val, zero, lo, hi, i: val if lo <= i and i <= hi else zero
@@ -408,7 +409,7 @@ class SEALWrapper:
         encoded = self.seal["batch_encoder"].encode(np.tile(vec.array, 2))
         return PlaintextVector(vec.size, encoded)
 
-    def encode(self, arr: NativeArray, coord: list[int]):
+    def encode(self, arr: NativeArray, coord: List[int]):
         arr.set(coord, self.encode_vec(arr.get(coord)))
 
     def encrypt(self, x: PlaintextVector):
@@ -498,28 +499,28 @@ class SEALWrapper:
 
 ### START GENERATED CODE
 def client_pre(wrapper):
-    wrapper.client_input("b_id")
     wrapper.client_input("a_id")
     wrapper.client_input("a_data")
+    wrapper.client_input("b_id")
     wrapper.client_input("b_data")
-    v_a_data_1 = wrapper.build_vector("a_data", None, [0], [FilledDim(0, 16, 1, 0, 0, 0, 0)])
-    wrapper.client_send("v_a_data_1", v_a_data_1)
-    v_b_id_1 = wrapper.build_vector("b_id", None, [0, 0], [EmptyDim(16, 0, 0, 0), FilledDim(0, 16, 1, 0, 0, 0, 0), FilledDim(1, 4, 1, 0, 0, 0, 0)])
-    wrapper.client_send("v_b_id_1", v_b_id_1)
-    v_a_id_1 = wrapper.build_vector("a_id", None, [0, 0], [FilledDim(0, 16, 1, 0, 0, 0, 0), EmptyDim(16, 0, 0, 0), FilledDim(1, 4, 1, 0, 0, 0, 0)])
+    v_a_id_1 = wrapper.build_vector("a_id", None, [0, 0], [FilledDim(0, 16, 1, 0, 0, 0, 0), FilledDim(1, 4, 1, 0, 0, 0, 0), EmptyDim(16, 0, 0, 0)])
     wrapper.client_send("v_a_id_1", v_a_id_1)
+    v_b_id_1 = wrapper.build_vector("b_id", None, [0, 0], [EmptyDim(16, 0, 0, 0), FilledDim(1, 4, 1, 0, 0, 0, 0), FilledDim(0, 16, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_b_id_1", v_b_id_1)
     v_b_data_1 = wrapper.build_vector("b_data", None, [0], [FilledDim(0, 16, 1, 0, 0, 0, 0)])
     wrapper.client_send("v_b_data_1", v_b_data_1)
+    v_a_data_1 = wrapper.build_vector("a_data", None, [0], [FilledDim(0, 16, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_a_data_1", v_a_data_1)
 
 def client_post(wrapper):
     __out = wrapper.client_recv("__out")
     wrapper.client_output(__out)
 
 def server(wrapper):
-    v_a_data_1 = wrapper.server_recv("v_a_data_1")
-    v_b_id_1 = wrapper.server_recv("v_b_id_1")
     v_a_id_1 = wrapper.server_recv("v_a_id_1")
+    v_b_id_1 = wrapper.server_recv("v_b_id_1")
     v_b_data_1 = wrapper.server_recv("v_b_data_1")
+    v_a_data_1 = wrapper.server_recv("v_a_data_1")
     const_1 = wrapper.const(1)
     const_neg1 = wrapper.const(-1)
     wrapper.start_server_exec()
@@ -541,10 +542,10 @@ def server(wrapper):
     wrapper.relinearize_inplace(instr13)
     wrapper.multiply_plain_inplace(instr13, const_neg1.get())
     wrapper.add_plain_inplace(instr13, const_1.get())
-    instr17 = wrapper.rotate_rows(-2, instr13)
+    instr17 = wrapper.rotate_rows(-32, instr13)
     wrapper.multiply_inplace(instr13, instr17)
     wrapper.relinearize_inplace(instr13)
-    instr19 = wrapper.rotate_rows(-1, instr13)
+    instr19 = wrapper.rotate_rows(-16, instr13)
     wrapper.multiply_inplace(instr13, instr19)
     wrapper.relinearize_inplace(instr13)
     wrapper.multiply_plain_inplace(instr13, const_neg1.get())

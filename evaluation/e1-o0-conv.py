@@ -498,7 +498,50 @@ class SEALWrapper:
 
 
 ### START GENERATED CODE
-{{{ program }}}
+def client_pre(wrapper):
+    wrapper.client_input("img")
+    v_img_1 = wrapper.build_vector("img", None, [0, 0], [FilledDim(0, 29, 1, 0, 3, 0, 0), FilledDim(1, 31, 1, 0, 1, 0, 0), FilledDim(0, 3, 1, 0, 1, 0, 0)])
+    wrapper.client_send("v_img_1", v_img_1)
+
+def client_post(wrapper):
+    __out = wrapper.client_recv("__out")
+    wrapper.client_output(__out)
+
+def server(wrapper):
+    wrapper.server_input("filter")
+    v_filter_1 = wrapper.build_vector("filter", None, [0, 0], [EmptyDim(29, 0, 0, 3), EmptyDim(29, 0, 0, 3), FilledDim(0, 3, 1, 0, 1, 0, 0)])
+    v_filter_2 = wrapper.build_vector("filter", None, [0, 2], [EmptyDim(29, 0, 0, 3), EmptyDim(29, 0, 0, 3), FilledDim(0, 3, 1, 0, 1, 0, 0)])
+    v_filter_3 = wrapper.build_vector("filter", None, [0, 1], [EmptyDim(29, 0, 0, 3), EmptyDim(29, 0, 0, 3), FilledDim(0, 3, 1, 0, 1, 0, 0)])
+    v_img_1 = wrapper.server_recv("v_img_1")
+    const_neg1 = wrapper.const(-1)
+    mask_1 = wrapper.mask([(32, 0, 28), (32, 0, 28), (4, 0, 2)])
+    wrapper.start_server_exec()
+    wrapper.encode(v_filter_1, [])
+    wrapper.encode(v_filter_2, [])
+    wrapper.encode(v_filter_3, [])
+    wrapper.encode(mask_1, [])
+    wrapper.encode(const_neg1, [])
+    pt2 = wrapper.plaintext_array([3], 0)
+    wrapper.set(pt2, [0], v_filter_1.get())
+    wrapper.set(pt2, [1], v_filter_3.get())
+    wrapper.set(pt2, [2], v_filter_2.get())
+    __out = wrapper.ciphertext_array([], 0)
+    __reduce_1 = wrapper.ciphertext_array([], 0)
+    for i2 in range(3):
+        instr1 = wrapper.rotate_rows((0 + (-4 * i2)), v_img_1.get())
+        wrapper.multiply_plain_inplace(instr1, mask_1.get())
+        wrapper.multiply_plain_inplace(instr1, pt2.get([i2]))
+        wrapper.add_inplace(instr1, __reduce_1.get())
+        wrapper.set(__reduce_1, [], instr1)
+    
+    instr8 = wrapper.rotate_rows(-2, __reduce_1.get())
+    wrapper.add_inplace(instr8, __reduce_1.get())
+    instr10 = wrapper.rotate_rows(-1, instr8)
+    wrapper.add_inplace(instr8, instr10)
+    wrapper.set(__out, [], instr8)
+    wrapper.end_server_exec()
+    wrapper.server_send("__out", __out)
+
 ### END GENERATED CODE
 
 init_start_time = time()
@@ -520,7 +563,7 @@ for key, val in inputs["client"].items():
 for key, val in inputs["server"].items():
     server_inputs[key] = np.array(val)
 
-vec_size = {{ size }}
+vec_size = 4096
 
 seal = {}
 seal["parms"] = EncryptionParameters(scheme_type.bfv)
