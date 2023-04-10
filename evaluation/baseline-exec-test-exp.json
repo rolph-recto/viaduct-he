@@ -1,0 +1,11 @@
+{
+    "benchmarks": {
+        "conv": [
+            "baseline"
+        ]
+    },
+    "trials": [
+        "bench-exec/1681102350",
+        "bench-exec/1681102373"
+    ]
+}

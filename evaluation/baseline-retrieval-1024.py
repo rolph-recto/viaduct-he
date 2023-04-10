@@ -485,12 +485,12 @@ def client_pre(wrapper):
     wrapper.client_input("keys")
     wrapper.client_input("query")
 
-    v_query = wrapper.build_vector("query", None, [0], [FilledDim(0, 8, 1, 0, 0, 0, 0)])
+    v_query = wrapper.build_vector("query", None, [0], [FilledDim(0, 10, 1, 0, 6)])
     wrapper.client_send("v_query", v_query)
 
     for i in range(1024):
         cur_v_values = wrapper.build_vector("values", None, [i], [])
-        cur_v_keys = wrapper.build_vector("keys", None, [i, 0], [FilledDim(1, 8, 1, 0, 0, 0, 0)])
+        cur_v_keys = wrapper.build_vector("keys", None, [i, 0], [FilledDim(1, 10, 1, 0, 6)])
         wrapper.client_send("v_values_{}".format(i), cur_v_values)
         wrapper.client_send("v_keys_{}".format(i), cur_v_keys)
 
@@ -515,28 +515,36 @@ def server(wrapper):
 
     __out = wrapper.ciphertext_array([])
     for i in range(1024):
-        instr1 = wrapper.subtract(v_query.get(), v_keys[i].get())
-        instr2 = wrapper.subtract(v_query.get(), v_keys[i].get())
-        instr3 = wrapper.multiply(instr1, instr2)
-        wrapper.relinearize_inplace(instr3)
-        instr3 = wrapper.multiply_plain(instr2, const_neg1.get())
-        instr4 = wrapper.add_plain(instr3, const_1.get())
-        instr5 = wrapper.rotate_rows(-4, instr4)
-        instr6 = wrapper.multiply(instr4, instr5)
-        wrapper.relinearize_inplace(instr6)
-        instr7 = wrapper.rotate_rows(-2, instr6)
-        instr8 = wrapper.multiply(instr6, instr7)
-        wrapper.relinearize_inplace(instr8)
-        instr9 = wrapper.rotate_rows(-1, instr8)
-        mask   = wrapper.multiply(instr8, instr9)
-        wrapper.relinearize_inplace(mask)
-        result = wrapper.multiply(v_values[i].get(), mask)
-        wrapper.relinearize_inplace(result)
-        acc    = wrapper.add(result, __out.get())
-        wrapper.set(__out, [], acc)
+      instr1 = wrapper.subtract(v_query.get(), v_keys[i].get())
+      instr2 = wrapper.subtract(v_query.get(), v_keys[i].get())
+      instr3 = wrapper.multiply(instr1, instr2)
+      wrapper.relinearize_inplace(instr3)
+      instr3 = wrapper.multiply_plain(instr2, const_neg1.get())
+      instr4 = wrapper.add_plain(instr3, const_1.get())
 
-    wrapper.end_server_exec()
-    wrapper.server_send("__out", __out)
+      instr5 = wrapper.rotate_rows(-8, instr4)
+      instr6 = wrapper.multiply(instr4, instr5)
+      wrapper.relinearize_inplace(instr6)
+
+      instr7 = wrapper.rotate_rows(-4, instr6)
+      instr8 = wrapper.multiply(instr6, instr7)
+      wrapper.relinearize_inplace(instr8)
+
+      instr9 = wrapper.rotate_rows(-2, instr8)
+      instr10 = wrapper.multiply(instr8, instr9)
+      wrapper.relinearize_inplace(instr10)
+
+      instr11 = wrapper.rotate_rows(-1, instr10)
+      instr12 = wrapper.multiply(instr10, instr11)
+      wrapper.relinearize_inplace(instr12)
+
+      result = wrapper.multiply(v_values[i].get(), instr12)
+      wrapper.relinearize_inplace(result)
+      acc    = wrapper.add(result, __out.get())
+      wrapper.set(__out, [], acc)
+
+      wrapper.end_server_exec()
+      wrapper.server_send("__out", __out)
 ### END GENERATED CODE
 
 init_start_time = time()

@@ -477,18 +477,18 @@ class SEALWrapper:
         x.array = x.array * y.array
 
     def rotate_rows(self, amt: int, x: CiphertextVector):
-        rotated = self.seal["evaluator"].rotate_rows(x.array, amt, self.seal["galois_keys"])
+        rotated = self.seal["evaluator"].rotate_rows(x.array, -amt, self.seal["galois_keys"])
         return CiphertextVector(x.size, rotated)
 
     def rotate_rows_inplace(self, amt: int, x: CiphertextVector):
-        self.seal["evaluator"].rotate_rows_inplace(x.array, amt, self.seal["galois_keys"])
+        self.seal["evaluator"].rotate_rows_inplace(x.array, -amt, self.seal["galois_keys"])
 
     def rotate_rows_native(self, amt: int, x: NativeVector):
-        rotated = x.array[[(i-amt) % self.size for i in range(self.size)]]
+        rotated = x.array[[(i+amt) % self.size for i in range(self.size)]]
         return NativeVector(x.size, rotated)
 
     def rotate_rows_native_inplace(self, amt: int, x: NativeVector):
-        x.array = x.array[[(i-amt) % self.size for i in range(self.size)]]
+        x.array = x.array[[(i+amt) % self.size for i in range(self.size)]]
 
     def relinearize_inplace(self, x: CiphertextVector):
         self.seal["evaluator"].relinearize_inplace(x.array, self.seal["relin_keys"])
@@ -500,7 +500,7 @@ class SEALWrapper:
 ### START GENERATED CODE
 def client_pre(wrapper):
     wrapper.client_input("B")
-    v_B_1 = wrapper.build_vector("B", None, [0, 0], [FilledDim(1, 16, 1, 0, 0, 0, 0), EmptyDim(16, 0, 0, 0), FilledDim(0, 16, 1, 0, 0, 0, 0)])
+    v_B_1 = wrapper.build_vector("B", None, [0, 0], [FilledDim(0, 16, 1, 0, 0, 0, 0), FilledDim(1, 16, 1, 0, 0, 0, 0), EmptyDim(16, 0, 0, 0)])
     wrapper.client_send("v_B_1", v_B_1)
 
 def client_post(wrapper):
@@ -510,53 +510,36 @@ def client_post(wrapper):
 def server(wrapper):
     wrapper.server_input("A1")
     wrapper.server_input("A2")
-    v_A2_1 = wrapper.build_vector("A2", None, [0, 0], [EmptyDim(16, 0, 0, 0), FilledDim(1, 16, 1, 0, 0, 0, 0), FilledDim(0, 16, 1, 0, 0, 0, 0)])
-    v_A1_1 = wrapper.build_vector("A1", None, [0, 0], [EmptyDim(16, 0, 0, 0), FilledDim(0, 16, 1, 0, 0, 0, 0), FilledDim(1, 16, 1, 0, 0, 0, 0)])
+    v_A2_1 = wrapper.build_vector("A2", None, [0, 0], [FilledDim(0, 16, 1, 0, 0, 0, 0), EmptyDim(16, 0, 0, 0), FilledDim(1, 16, 1, 0, 0, 0, 0)])
+    v_A1_1 = wrapper.build_vector("A1", None, [0, 0], [FilledDim(1, 16, 1, 0, 0, 0, 0), EmptyDim(16, 0, 0, 0), FilledDim(0, 16, 1, 0, 0, 0, 0)])
     v_B_1 = wrapper.server_recv("v_B_1")
     const_neg1 = wrapper.const(-1)
-    mask_1 = wrapper.mask([(16, 0, 15), (16, 0, 15), (16, 0, 0)])
     wrapper.start_server_exec()
     wrapper.encode(v_A1_1, [])
     wrapper.encode(v_A2_1, [])
-    wrapper.encode(mask_1, [])
     wrapper.encode(const_neg1, [])
     res = wrapper.ciphertext_array([], 0)
     instr2 = wrapper.multiply_plain(v_B_1.get(), v_A1_1.get())
-    instr3 = wrapper.rotate_rows(-8, instr2)
+    instr3 = wrapper.rotate_rows(-2048, instr2)
     wrapper.add_inplace(instr2, instr3)
-    instr5 = wrapper.rotate_rows(-4, instr2)
+    instr5 = wrapper.rotate_rows(-1024, instr2)
     wrapper.add_inplace(instr2, instr5)
-    instr7 = wrapper.rotate_rows(-2, instr2)
+    instr7 = wrapper.rotate_rows(-512, instr2)
     wrapper.add_inplace(instr2, instr7)
-    instr9 = wrapper.rotate_rows(-1, instr2)
+    instr9 = wrapper.rotate_rows(-256, instr2)
     wrapper.add_inplace(instr2, instr9)
     wrapper.set(res, [], instr2)
-    ct2 = wrapper.ciphertext_array([1], 0)
-    wrapper.set(ct2, [0], res.get())
-    __circ_1 = wrapper.ciphertext_array([1], 0)
-    for i in range(1):
-        instr13 = wrapper.multiply_plain(ct2.get([i]), mask_1.get())
-        instr14 = wrapper.rotate_rows(1, instr13)
-        wrapper.add_inplace(instr13, instr14)
-        instr16 = wrapper.rotate_rows(2, instr13)
-        wrapper.add_inplace(instr13, instr16)
-        instr18 = wrapper.rotate_rows(4, instr13)
-        wrapper.add_inplace(instr13, instr18)
-        instr20 = wrapper.rotate_rows(8, instr13)
-        wrapper.add_inplace(instr13, instr20)
-        wrapper.set(__circ_1, [i], instr13)
-    
     __out = wrapper.ciphertext_array([], 0)
-    instr24 = wrapper.multiply_plain(__circ_1.get([0]), v_A2_1.get())
-    instr25 = wrapper.rotate_rows(-128, instr24)
-    wrapper.add_inplace(instr24, instr25)
-    instr27 = wrapper.rotate_rows(-64, instr24)
-    wrapper.add_inplace(instr24, instr27)
-    instr29 = wrapper.rotate_rows(-32, instr24)
-    wrapper.add_inplace(instr24, instr29)
-    instr31 = wrapper.rotate_rows(-16, instr24)
-    wrapper.add_inplace(instr24, instr31)
-    wrapper.set(__out, [], instr24)
+    instr13 = wrapper.multiply_plain(res.get(), v_A2_1.get())
+    instr14 = wrapper.rotate_rows(-8, instr13)
+    wrapper.add_inplace(instr13, instr14)
+    instr16 = wrapper.rotate_rows(-4, instr13)
+    wrapper.add_inplace(instr13, instr16)
+    instr18 = wrapper.rotate_rows(-2, instr13)
+    wrapper.add_inplace(instr13, instr18)
+    instr20 = wrapper.rotate_rows(-1, instr13)
+    wrapper.add_inplace(instr13, instr20)
+    wrapper.set(__out, [], instr13)
     wrapper.end_server_exec()
     wrapper.server_send("__out", __out)
 

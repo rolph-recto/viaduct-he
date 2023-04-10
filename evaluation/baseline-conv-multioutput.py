@@ -520,7 +520,7 @@ def client_post(wrapper):
 def server(wrapper):
     wrapper.server_input("filter")
     
-    v_filter = wrapper.plaintext_array([h,w], 0)
+    v_filter = wrapper.plaintext_array([num_f], 0)
     for i in range(num_f):
         cur_filter = \
             wrapper.encode_vec(
@@ -557,7 +557,7 @@ def server(wrapper):
                 instr8 = wrapper.rotate_rows(-4, instr7)
                 instr9 = wrapper.add(instr8, instr7)
 
-                wrapper.set(__out, [y,x], instr9)
+                wrapper.set(__out, [i,y,x], instr9)
 
     wrapper.end_server_exec()
     wrapper.server_send("__out", __out)

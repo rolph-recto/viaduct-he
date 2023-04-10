@@ -710,7 +710,8 @@ impl VectorInfo {
                     // and parent's contents intersect with it, mask OOB right in derived
                     let mask_hi_opt =
                         if oob_right2_hi != oob_right2_lo && oob_right2_intersect {
-                            Some(dim_size - pad_right2 - oob_right2 - 1)
+                            // Some(dim_size - pad_right2 - oob_right2 - 1)
+                            Some(dim_size - pad_right2 - oob_right2)
 
                         } else {
                             None

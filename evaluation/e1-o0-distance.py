@@ -575,7 +575,6 @@ def server(wrapper):
     v_tests_64 = wrapper.build_vector("tests", Roll(1,0), [0, 2], [FilledDim(0, 64, 1, 0, 0, 0, 0)])
     v_point_1 = wrapper.server_recv("v_point_1")
     const_neg1 = wrapper.const(-1)
-    wrapper.start_server_exec()
     wrapper.encode(v_tests_49, [])
     wrapper.encode(v_tests_2, [])
     wrapper.encode(v_tests_17, [])
@@ -706,6 +705,8 @@ def server(wrapper):
     wrapper.set(pt1, [61], v_tests_21.get())
     wrapper.set(pt1, [62], v_tests_50.get())
     wrapper.set(pt1, [63], v_tests_14.get())
+
+    wrapper.start_server_exec()
     __out = wrapper.ciphertext_array([], 0)
     __reduce_1 = wrapper.ciphertext_array([], 0)
     for i1 in range(64):

@@ -352,7 +352,7 @@ class SEALWrapper:
                     dst_coord[i] += coord
                     if i in stride_map:
                         (src_dim, stride) = stride_map[i]
-                        src_coord[src_dim] += (coord * stride)
+                        src_coord[src_dim] += coord * stride
 
                 dst_coord_tup = tuple(dst_coord)
                 src_coord_tup = tuple(src_coord)
@@ -484,11 +484,11 @@ class SEALWrapper:
         self.seal["evaluator"].rotate_rows_inplace(x.array, -amt, self.seal["galois_keys"])
 
     def rotate_rows_native(self, amt: int, x: NativeVector):
-        rotated = x.array[[(i+amt) % self.size for i in range(self.size)]]
+        rotated = x.array[[(i-amt) % self.size for i in range(self.size)]]
         return NativeVector(x.size, rotated)
 
     def rotate_rows_native_inplace(self, amt: int, x: NativeVector):
-        x.array = x.array[[(i+amt) % self.size for i in range(self.size)]]
+        x.array = x.array[[(i-amt) % self.size for i in range(self.size)]]
 
     def relinearize_inplace(self, x: CiphertextVector):
         self.seal["evaluator"].relinearize_inplace(x.array, self.seal["relin_keys"])
@@ -499,49 +499,29 @@ class SEALWrapper:
 
 ### START GENERATED CODE
 def client_pre(wrapper):
-    wrapper.client_input("img")
-    v_img_1 = wrapper.build_vector("img", None, [0, 0], [FilledDim(0, 3, 1, 0, 1, 0, 0), FilledDim(0, 30, 1, 0, 2, 0, 0), FilledDim(1, 32, 1, 0, 0, 0, 0)])
-    wrapper.client_send("v_img_1", v_img_1)
+    wrapper.client_input("input2")
+    v_input2 = wrapper.build_vector("input2", None, [0], [FilledDim(0, 8, 1)])
+    wrapper.client_send("v_input2", v_input2)
 
 def client_post(wrapper):
-    __out = wrapper.client_recv("__out")
-    wrapper.client_output(__out)
+    pass
 
 def server(wrapper):
-    wrapper.server_input("filter")
-    v_filter_1 = wrapper.build_vector("filter", None, [0, 0], [FilledDim(0, 3, 1, 0, 1, 0, 0), EmptyDim(30, 0, 0, 2), EmptyDim(30, 0, 0, 2)])
-    v_filter_2 = wrapper.build_vector("filter", None, [0, 1], [FilledDim(0, 3, 1, 0, 1, 0, 0), EmptyDim(30, 0, 0, 2), EmptyDim(30, 0, 0, 2)])
-    v_filter_3 = wrapper.build_vector("filter", None, [0, 2], [FilledDim(0, 3, 1, 0, 1, 0, 0), EmptyDim(30, 0, 0, 2), EmptyDim(30, 0, 0, 2)])
-    v_img_1 = wrapper.server_recv("v_img_1")
-    const_neg1 = wrapper.const(-1)
-    mask_1 = wrapper.mask([(4, 0, 3), (32, 0, 30), (32, 0, 30)])
-    wrapper.start_server_exec()
-    wrapper.encode(v_filter_1, [])
-    wrapper.encode(v_filter_2, [])
-    wrapper.encode(v_filter_3, [])
-    wrapper.encode(mask_1, [])
-    wrapper.encode(const_neg1, [])
-    pt2 = wrapper.plaintext_array([3], 0)
-    wrapper.set(pt2, [0], v_filter_1.get())
-    wrapper.set(pt2, [1], v_filter_2.get())
-    wrapper.set(pt2, [2], v_filter_3.get())
-    __out = wrapper.ciphertext_array([], 0)
-    __reduce_1 = wrapper.ciphertext_array([], 0)
-    for i3 in range(3):
-        instr1 = wrapper.rotate_rows((0 + (-1 * i3)), v_img_1.get())
-        wrapper.multiply_plain_inplace(instr1, mask_1.get())
-        wrapper.multiply_plain_inplace(instr1, pt2.get([i3]))
-        wrapper.add_inplace(instr1, __reduce_1.get())
-        wrapper.set(__reduce_1, [], instr1)
-    
-    instr8 = wrapper.rotate_rows(-2048, __reduce_1.get())
-    wrapper.add_inplace(instr8, __reduce_1.get())
-    instr10 = wrapper.rotate_rows(-1024, instr8)
-    wrapper.add_inplace(instr8, instr10)
-    wrapper.set(__out, [], instr8)
-    wrapper.end_server_exec()
-    wrapper.server_send("__out", __out)
+    wrapper.server_input("input")
+    v_input = wrapper.build_vector("input", None, [0], [FilledDim(0, 8, 1)]).get()
 
+    rotneg_input = wrapper.rotate_rows_native(-1, v_input)
+    rotpos_input = wrapper.rotate_rows_native(1, v_input)
+    print("rotate -1", rotneg_input.array[:8])
+    print("rotate 1", rotpos_input.array[:8])
+
+    v_input2 = wrapper.server_recv("v_input2").get()
+    rotneg_input2 = wrapper.rotate_rows(-1, v_input2)
+    rotpos_input2 = wrapper.rotate_rows(1, v_input2)
+
+    wrapper.set_party("client")
+    wrapper.client_output(rotneg_input2)
+    wrapper.client_output(rotpos_input2)
 ### END GENERATED CODE
 
 init_start_time = time()

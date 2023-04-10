@@ -11,6 +11,7 @@ import time
 import io
 import statistics
 import math
+import json
 
 compile_benchmarks = {
     "distance": [
@@ -39,15 +40,15 @@ compile_benchmarks = {
 #     "set-union-16": ["baseline"],
 # }
 
-exec_benchmarks = {
-    "conv": ["e1-o0"],
-    "conv-multioutput": ["e1-o0"],
-    "distance": ["e1-o0"],
-    "retrieval-256": ["e1-o0"],
-    "retrieval-1024": ["e1-o0"],
-    "matmul-2": ["e1-o0"],
-    "set-union-16": ["e1-o0"],
-}
+# exec_benchmarks = {
+#     "conv": ["e1-o0"],
+#     "conv-multioutput": ["e1-o0"],
+#     "distance": ["e1-o0"],
+#     "retrieval-256": ["e1-o0"],
+#     "retrieval-1024": ["e1-o0"],
+#     "matmul-2": ["e1-o0"],
+#     "set-union-16": ["e1-o0"],
+# }
 
 def get_trials(out_path, from_dir, to_dir):
     out_dir = Path(out_path)
@@ -195,6 +196,10 @@ def collect_compile(args):
 def bench_exec(args):
     print("benchmarking execution time")
 
+    cfg_path = Path(args.cfg_file)
+    with open(cfg_path) as cfg_file:
+      exec_benchmarks = json.loads(cfg_file.read())
+
     in_dir = Path(args.in_path)
 
     timestamps = []
@@ -247,9 +252,20 @@ def bench_exec(args):
 
     print("created trial directories from {} to {}".format(timestamps[0], timestamps[-1]))
 
+    with open(args.exp_file, "w") as exp_file:
+        out_dirs = [str(Path(args.out_path, timestamp)) for timestamp in timestamps]
+        exp_data = {
+            "benchmarks": exec_benchmarks,
+            "trials": out_dirs
+        }
+        exp_file.write(json.dumps(exp_data, indent=4))
 
 def collect_exec(args):
-    trials = get_trials(args.out_path, args.from_dir, args.to_dir)
+    with open(args.exp_file) as exp_file:
+        exp_data = json.loads(exp_file.read())
+
+    exec_benchmarks = exp_data["benchmarks"]
+    trials = exp_data["trials"]
     n = len(trials)
     if n == 0:
         print("no trials found in that time interval")
@@ -333,6 +349,15 @@ def argument_parser():
     # benchmark execution data
     bench_exec_parser = subparsers.add_parser("bench-exec", help="benchmark execution time")
     bench_exec_parser.set_defaults(func=bench_exec)
+
+    bench_exec_parser.add_argument(
+        "-c", "--config", dest="cfg_file", type=str, required=True,
+        help="configuration of benchmarks to execute")
+
+    bench_exec_parser.add_argument(
+        "-e", "--experiment", dest="exp_file", type=str, required=True,
+        help="name of file to dump experiment metadata")
+
     bench_exec_parser.add_argument(
         "-t", "--trials", dest="trials", type=int, default=1,
         help="number of times to run each benchmark")
@@ -350,16 +375,8 @@ def argument_parser():
     collect_exec_parser.set_defaults(func=collect_exec)
 
     collect_exec_parser.add_argument(
-        "-f" "--from", dest="from_dir", type=str,
-        help="timestamp of start folder")
-
-    collect_exec_parser.add_argument(
-        "-t" "--to", dest="to_dir", type=str,
-        help="timestamp of end folder")
-
-    collect_exec_parser.add_argument(
-        "-o", "--outpath", dest="out_path", type=str, default="bench-exec",
-        help="base path to retrieve trial information")
+        "-e" "--exp", dest="exp_file", type=str,
+        help="name of experiment file")
 
     return parser
 

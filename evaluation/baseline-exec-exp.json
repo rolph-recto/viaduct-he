@@ -1,0 +1,32 @@
+{
+    "benchmarks": {
+        "conv": [
+            "baseline"
+        ],
+        "conv-multioutput": [
+            "baseline"
+        ],
+        "distance": [
+            "baseline"
+        ],
+        "retrieval-256": [
+            "baseline"
+        ],
+        "retrieval-1024": [
+            "baseline"
+        ],
+        "matmul-2": [
+            "baseline"
+        ],
+        "set-union-16": [
+            "baseline"
+        ]
+    },
+    "trials": [
+        "bench-exec/1681102436",
+        "bench-exec/1681103388",
+        "bench-exec/1681104340",
+        "bench-exec/1681105291",
+        "bench-exec/1681106243"
+    ]
+}

@@ -27,6 +27,16 @@ change DB size to 16 to fit 8192
 4. double matmul (matmul-2) (from CHET)
 vec-size = 4096
 
+e1-o0
+val v_B_1: C = vector(B[0, 0]<{1:16::1}, {0:16::1}, {16}>)
+val v_A1_1: N = vector(A1[0, 0]<{16}, {1:16::1}, {0:16::1}>)
+val v_A2_1: N = vector(A2[0, 0]<{16}, {0:16::1}, {1:16::1}>)
+
+e2-o0
+val v_B_1: C = vector(B[0, 0]<{0:16::1}, {16}, {1:16::1}>)
+val v_A1_1: N = vector(A1[0, 0]<{1:16::1}, {0:16::1}, {16}>)
+val v_A2_1: N = vector(A2[0, 0]<{0:16::1}, {1:16::1}, {16}>)
+
 5. hamming distance (distance)
 compare a user test point with a set of test points
 vec-size: 2048
