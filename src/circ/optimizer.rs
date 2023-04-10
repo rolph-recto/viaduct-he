@@ -760,7 +760,7 @@ impl Optimizer {
 
 #[cfg(test)]
 mod tests {
-    use super::{*, dijkstra_extractor::DijkstraExtractor, cost::{HECostFunction, HELatencyModel}};
+    use super::{*, dijkstra_extractor::DijkstraExtractor, cost::{HECostFunction}};
     use crate::{circ::{*, plaintext_hoisting::PlaintextHoisting, optimizer::cost::{HELpCostFunction, HEOptimizerContext}}, program::lowering::CircuitLowering};
 
     fn run_optimizer(
@@ -841,7 +841,7 @@ mod tests {
 
         let cost_func =
             HECostFunction {
-                latency: HELatencyModel::default(),
+                latency: CostFeatures::default_weights(4096),
                 egraph: &runner.egraph,
             };
 
@@ -857,7 +857,7 @@ mod tests {
         let mut lp_extractor =
             LpExtractor::new(
                 &runner.egraph, 
-                HELpCostFunction { latency: HELatencyModel::default() },
+                HELpCostFunction { latency: CostFeatures::default_weights(4096) },
             );
 
         let lp_solution = lp_extractor.solve(root);
