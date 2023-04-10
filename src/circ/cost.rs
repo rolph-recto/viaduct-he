@@ -36,9 +36,9 @@ impl CostFeatures {
     // basically just turns off all plaintext weights
     pub fn default_weights() -> Self {
         CostFeatures {
-            input_ciphertexts: 1,
+            input_ciphertexts: 2,
             input_plaintexts: 0,
-            output_ciphertexts: 1,
+            output_ciphertexts: 2,
             ct_rotations: 1,
             pt_rotations: 1,
             ct_ct_add: 1,

@@ -27,7 +27,7 @@ impl MaterializerFactory for DefaultMaterializerFactory {
     fn create<'a>(&self) -> Materializer<'a> {
         let amats: Vec<Box<dyn InputArrayMaterializer + 'a>> =
             vec![
-                // Box::new(RollArrayMaterializer::new()),
+                Box::new(RollArrayMaterializer::new()),
                 Box::new(DefaultArrayMaterializer::new()),
             ];
 
