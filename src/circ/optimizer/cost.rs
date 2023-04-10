@@ -1,40 +1,8 @@
 use std::{collections::HashMap, fmt::Display};
 
-use crate::lang::DimName;
+use crate::{lang::DimName, circ::cost::CostFeatures};
 
 use super::*;
-
-pub struct HELatencyModel {
-    pub add_cipher: usize,
-    pub add_cipherplain: usize,
-    pub add_native: usize,
-    pub sub_cipher: usize,
-    pub sub_cipherplain: usize,
-    pub sub_native: usize,
-    pub mul_cipher: usize,
-    pub mul_cipherplain: usize,
-    pub mul_native: usize,
-    pub rot_cipher: usize,
-    pub rot_native: usize,
-}
-
-impl Default for HELatencyModel {
-    fn default() -> Self {
-        Self {
-            add_cipher: 20,
-            add_cipherplain: 5,
-            add_native: 1,
-            sub_cipher: 20,
-            sub_cipherplain: 5,
-            sub_native: 1,
-            mul_cipher: 30,
-            mul_cipherplain: 5,
-            mul_native: 1,
-            rot_cipher: 40,
-            rot_native: 1,
-        }
-    }
-}
 
 #[derive(Clone, Default, Debug, Eq)]
 pub(crate) struct HECost {
@@ -85,7 +53,7 @@ pub struct HEOptimizerContext {
 }
 
 pub(crate) struct HECostFunction<'a> {
-    pub latency: HELatencyModel,
+    pub latency: CostFeatures,
     pub egraph: &'a EGraph<HEOptCircuit, HEAnalysis>,
 }
 
@@ -126,26 +94,26 @@ impl<'a> CostFunction<HEOptCircuit> for HECostFunction<'a> {
                     match (type1, type2) {
                         (HEOptNodeType::Cipher, HEOptNodeType::Cipher) =>
                             match enode {
-                                HEOptCircuit::Add(_) => self.latency.add_cipher,
-                                HEOptCircuit::Sub(_) => self.latency.sub_cipher,
-                                HEOptCircuit::Mul(_) => self.latency.mul_cipher,
+                                HEOptCircuit::Add(_) => self.latency.ct_ct_add,
+                                HEOptCircuit::Sub(_) => self.latency.ct_ct_sub,
+                                HEOptCircuit::Mul(_) => self.latency.ct_ct_mul,
                                 _ => unreachable!()
                             }
 
                         (HEOptNodeType::Cipher, HEOptNodeType::Plain) |
                         (HEOptNodeType::Plain, HEOptNodeType::Cipher) => 
                             match enode {
-                                HEOptCircuit::Add(_) => self.latency.add_cipherplain,
-                                HEOptCircuit::Sub(_) => self.latency.sub_cipherplain,
-                                HEOptCircuit::Mul(_) => self.latency.mul_cipherplain,
+                                HEOptCircuit::Add(_) => self.latency.ct_pt_add,
+                                HEOptCircuit::Sub(_) => self.latency.ct_pt_sub,
+                                HEOptCircuit::Mul(_) => self.latency.ct_pt_mul,
                                 _ => unreachable!()
                             }
 
                         (HEOptNodeType::Plain, HEOptNodeType::Plain) =>
                             match enode {
-                                HEOptCircuit::Add(_) => self.latency.add_native,
-                                HEOptCircuit::Sub(_) => self.latency.sub_native,
-                                HEOptCircuit::Mul(_) => self.latency.mul_native,
+                                HEOptCircuit::Add(_) => self.latency.pt_pt_add,
+                                HEOptCircuit::Sub(_) => self.latency.pt_pt_sub,
+                                HEOptCircuit::Mul(_) => self.latency.pt_pt_mul,
                                 _ => unreachable!()
                             }
                     };
@@ -177,8 +145,8 @@ impl<'a> CostFunction<HEOptCircuit> for HECostFunction<'a> {
                 let body_type = &self.egraph[*body_id].data.node_type;
                 let node_latency = 
                     match body_type {
-                        HEOptNodeType::Cipher => self.latency.rot_cipher,
-                        HEOptNodeType::Plain => self.latency.rot_native,
+                        HEOptNodeType::Cipher => self.latency.ct_rotations,
+                        HEOptNodeType::Plain => self.latency.pt_rotations,
                     };
 
                 (body_cost.muldepth, body_cost.latency + node_latency, body_cost.multiplicity)
@@ -214,11 +182,11 @@ impl<'a> CostFunction<HEOptCircuit> for HECostFunction<'a> {
                         HEOptCircuit::SumVectors(_) => {
                             match body_data.node_type {
                                 HEOptNodeType::Cipher => {
-                                    self.latency.add_cipher * extent
+                                    self.latency.ct_ct_add * extent
                                 },
 
                                 HEOptNodeType::Plain => {
-                                    self.latency.add_native * extent
+                                    self.latency.pt_pt_add * extent
                                 }
                             }
                         },
@@ -226,11 +194,11 @@ impl<'a> CostFunction<HEOptCircuit> for HECostFunction<'a> {
                         HEOptCircuit::ProductVectors(_) => {
                             match body_data.node_type {
                                 HEOptNodeType::Cipher => {
-                                    self.latency.mul_cipher * extent
+                                    self.latency.ct_ct_mul * extent
                                 },
 
                                 HEOptNodeType::Plain => {
-                                    self.latency.mul_native * extent
+                                    self.latency.pt_pt_mul * extent
                                 }
                             }
                         }
@@ -262,7 +230,7 @@ impl<'a> CostFunction<HEOptCircuit> for HECostFunction<'a> {
 }
 
 pub struct HELpCostFunction {
-    pub latency: HELatencyModel,
+    pub latency: CostFeatures,
 }
 
 impl LpCostFunction<HEOptCircuit, HEAnalysis> for HELpCostFunction {
@@ -276,16 +244,16 @@ impl LpCostFunction<HEOptCircuit, HEAnalysis> for HELpCostFunction {
                 let type2 = &egraph[*id2].data.node_type;
                 match (type1, type2) {
                     (HEOptNodeType::Cipher, HEOptNodeType::Cipher) => {
-                        self.latency.add_cipher as f64
+                        self.latency.ct_ct_add as f64
                     },
 
                     (HEOptNodeType::Cipher, HEOptNodeType::Plain) |
                     (HEOptNodeType::Plain, HEOptNodeType::Cipher) => {
-                        self.latency.add_cipherplain as f64
+                        self.latency.ct_pt_add as f64
                     },
 
                     (HEOptNodeType::Plain, HEOptNodeType::Plain) => {
-                        self.latency.add_native as f64
+                        self.latency.pt_pt_add as f64
                     }
                 } 
             }
@@ -295,16 +263,16 @@ impl LpCostFunction<HEOptCircuit, HEAnalysis> for HELpCostFunction {
                 let type2 = &egraph[*id2].data.node_type;
                 match (type1, type2) {
                     (HEOptNodeType::Cipher, HEOptNodeType::Cipher) => {
-                        self.latency.sub_cipher as f64
+                        self.latency.ct_ct_sub as f64
                     },
 
                     (HEOptNodeType::Cipher, HEOptNodeType::Plain) |
                     (HEOptNodeType::Plain, HEOptNodeType::Cipher) => {
-                        self.latency.sub_cipherplain as f64
+                        self.latency.ct_pt_sub as f64
                     },
 
                     (HEOptNodeType::Plain, HEOptNodeType::Plain) => {
-                        self.latency.sub_native as f64
+                        self.latency.pt_pt_sub as f64
                     },
                 } 
             }
@@ -314,16 +282,16 @@ impl LpCostFunction<HEOptCircuit, HEAnalysis> for HELpCostFunction {
                 let type2 = &egraph[*id2].data.node_type;
                 match (type1, type2) {
                     (HEOptNodeType::Cipher, HEOptNodeType::Cipher) => {
-                        self.latency.mul_cipher as f64
+                        self.latency.ct_ct_mul as f64
                     },
 
                     (HEOptNodeType::Cipher, HEOptNodeType::Plain) |
                     (HEOptNodeType::Plain, HEOptNodeType::Cipher) => {
-                        self.latency.mul_cipherplain as f64
+                        self.latency.ct_pt_mul as f64
                     },
 
                     (HEOptNodeType::Plain, HEOptNodeType::Plain) => {
-                        self.latency.mul_native as f64
+                        self.latency.pt_pt_mul as f64
                     },
                 } 
             },
@@ -331,8 +299,8 @@ impl LpCostFunction<HEOptCircuit, HEAnalysis> for HELpCostFunction {
             HEOptCircuit::Rot([_, body_id]) => {
                 let body_type = &egraph[*body_id].data.node_type;
                 match body_type {
-                    HEOptNodeType::Cipher => self.latency.rot_cipher as f64,
-                    HEOptNodeType::Plain => self.latency.rot_native as f64,
+                    HEOptNodeType::Cipher => self.latency.ct_rotations as f64,
+                    HEOptNodeType::Plain => self.latency.pt_rotations as f64,
                 }
             },
 

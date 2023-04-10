@@ -10,8 +10,8 @@ use std::{
 use crate::circ::{
     VarName,
     optimizer::{
-        cost::{HEOptimizerContext, HECostFunction, HELatencyModel, HELpCostFunction},
-    }
+        cost::{HEOptimizerContext, HECostFunction, HELpCostFunction},
+    }, cost::CostFeatures
 };
 
 mod greedy_extractor;
@@ -674,6 +674,7 @@ impl Optimizer {
         context: HEOptimizerContext,
         timeout: usize,
         extractor_type: ExtractorType,
+        vec_size: usize,
     ) -> (Vec<RecExpr<HEOptCircuit>>, Vec<egg::Id>) {
         // if timeout is 0, add 
         if timeout == 0 {
@@ -714,7 +715,7 @@ impl Optimizer {
                 let extractor = Extractor::new(
                     egraph,
                     HECostFunction {
-                        latency: HELatencyModel::default(),
+                        latency: CostFeatures::default_weights(vec_size),
                         egraph,
                     },
                 );
@@ -741,7 +742,7 @@ impl Optimizer {
                     LpExtractor::new(
                         egraph,
                         HELpCostFunction {
-                            latency: HELatencyModel::default()
+                            latency: CostFeatures::default_weights(vec_size)
                         }
                     );
 

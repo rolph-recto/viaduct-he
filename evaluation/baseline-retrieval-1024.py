@@ -460,18 +460,18 @@ class SEALWrapper:
         x.array = x.array * y.array
 
     def rotate_rows(self, amt: int, x: CiphertextVector):
-        rotated = self.seal["evaluator"].rotate_rows(x.array, amt, self.seal["galois_keys"])
+        rotated = self.seal["evaluator"].rotate_rows(x.array, -amt, self.seal["galois_keys"])
         return CiphertextVector(x.size, rotated)
 
     def rotate_rows_inplace(self, amt: int, x: CiphertextVector):
-        self.seal["evaluator"].rotate_rows_inplace(x.array, amt, self.seal["galois_keys"])
+        self.seal["evaluator"].rotate_rows_inplace(x.array, -amt, self.seal["galois_keys"])
 
     def rotate_rows_native(self, amt: int, x: NativeVector):
-        rotated = x.array[[(i-amt) % self.size for i in range(self.size)]]
+        rotated = x.array[[(i+amt) % self.size for i in range(self.size)]]
         return NativeVector(x.size, rotated)
 
     def rotate_rows_native_inplace(self, amt: int, x: NativeVector):
-        x.array = x.array[[(i-amt) % self.size for i in range(self.size)]]
+        x.array = x.array[[(i+amt) % self.size for i in range(self.size)]]
 
     def relinearize_inplace(self, x: CiphertextVector):
         self.seal["evaluator"].relinearize_inplace(x.array, self.seal["relin_keys"])

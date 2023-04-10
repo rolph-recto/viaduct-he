@@ -1,0 +1,18 @@
+input a_id: [128, 7] from client
+input a_data: [128] from client
+input b_id: [128, 7] from client
+input b_data: [128] from client
+let a_sum = sum(a_data) in
+let b_sum =
+	sum(for j: 128 {
+		b_data[j] *
+		product(for i: 128 {
+			1 - 
+			product(for k: 7 {
+				1 -
+				((a_id[i][k] - b_id[j][k]) * (a_id[i][k] - b_id[j][k]))
+			})
+		})
+	})
+in
+a_sum + b_sum

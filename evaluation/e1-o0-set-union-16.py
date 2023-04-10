@@ -477,18 +477,18 @@ class SEALWrapper:
         x.array = x.array * y.array
 
     def rotate_rows(self, amt: int, x: CiphertextVector):
-        rotated = self.seal["evaluator"].rotate_rows(x.array, amt, self.seal["galois_keys"])
+        rotated = self.seal["evaluator"].rotate_rows(x.array, -amt, self.seal["galois_keys"])
         return CiphertextVector(x.size, rotated)
 
     def rotate_rows_inplace(self, amt: int, x: CiphertextVector):
-        self.seal["evaluator"].rotate_rows_inplace(x.array, amt, self.seal["galois_keys"])
+        self.seal["evaluator"].rotate_rows_inplace(x.array, -amt, self.seal["galois_keys"])
 
     def rotate_rows_native(self, amt: int, x: NativeVector):
-        rotated = x.array[[(i-amt) % self.size for i in range(self.size)]]
+        rotated = x.array[[(i+amt) % self.size for i in range(self.size)]]
         return NativeVector(x.size, rotated)
 
     def rotate_rows_native_inplace(self, amt: int, x: NativeVector):
-        x.array = x.array[[(i-amt) % self.size for i in range(self.size)]]
+        x.array = x.array[[(i+amt) % self.size for i in range(self.size)]]
 
     def relinearize_inplace(self, x: CiphertextVector):
         self.seal["evaluator"].relinearize_inplace(x.array, self.seal["relin_keys"])
@@ -499,13 +499,13 @@ class SEALWrapper:
 
 ### START GENERATED CODE
 def client_pre(wrapper):
+    wrapper.client_input("b_data")
     wrapper.client_input("a_id")
     wrapper.client_input("a_data")
     wrapper.client_input("b_id")
-    wrapper.client_input("b_data")
-    v_a_id_1 = wrapper.build_vector("a_id", None, [0, 0], [FilledDim(0, 16, 1, 0, 0, 0, 0), FilledDim(1, 4, 1, 0, 0, 0, 0), EmptyDim(16, 0, 0, 0)])
+    v_a_id_1 = wrapper.build_vector("a_id", None, [0, 0], [FilledDim(1, 4, 1, 0, 0, 0, 0), FilledDim(0, 16, 1, 0, 0, 0, 0), EmptyDim(16, 0, 0, 0)])
     wrapper.client_send("v_a_id_1", v_a_id_1)
-    v_b_id_1 = wrapper.build_vector("b_id", None, [0, 0], [EmptyDim(16, 0, 0, 0), FilledDim(1, 4, 1, 0, 0, 0, 0), FilledDim(0, 16, 1, 0, 0, 0, 0)])
+    v_b_id_1 = wrapper.build_vector("b_id", None, [0, 0], [FilledDim(1, 4, 1, 0, 0, 0, 0), EmptyDim(16, 0, 0, 0), FilledDim(0, 16, 1, 0, 0, 0, 0)])
     wrapper.client_send("v_b_id_1", v_b_id_1)
     v_b_data_1 = wrapper.build_vector("b_data", None, [0], [FilledDim(0, 16, 1, 0, 0, 0, 0)])
     wrapper.client_send("v_b_data_1", v_b_data_1)
@@ -542,24 +542,24 @@ def server(wrapper):
     wrapper.relinearize_inplace(instr13)
     wrapper.multiply_plain_inplace(instr13, const_neg1.get())
     wrapper.add_plain_inplace(instr13, const_1.get())
-    instr17 = wrapper.rotate_rows(-32, instr13)
+    instr17 = wrapper.rotate_rows(-512, instr13)
     wrapper.multiply_inplace(instr13, instr17)
     wrapper.relinearize_inplace(instr13)
-    instr19 = wrapper.rotate_rows(-16, instr13)
+    instr19 = wrapper.rotate_rows(-256, instr13)
     wrapper.multiply_inplace(instr13, instr19)
     wrapper.relinearize_inplace(instr13)
     wrapper.multiply_plain_inplace(instr13, const_neg1.get())
     wrapper.add_plain_inplace(instr13, const_1.get())
-    instr23 = wrapper.rotate_rows(-512, instr13)
+    instr23 = wrapper.rotate_rows(-128, instr13)
     wrapper.multiply_inplace(instr13, instr23)
     wrapper.relinearize_inplace(instr13)
-    instr25 = wrapper.rotate_rows(-256, instr13)
+    instr25 = wrapper.rotate_rows(-64, instr13)
     wrapper.multiply_inplace(instr13, instr25)
     wrapper.relinearize_inplace(instr13)
-    instr27 = wrapper.rotate_rows(-128, instr13)
+    instr27 = wrapper.rotate_rows(-32, instr13)
     wrapper.multiply_inplace(instr13, instr27)
     wrapper.relinearize_inplace(instr13)
-    instr29 = wrapper.rotate_rows(-64, instr13)
+    instr29 = wrapper.rotate_rows(-16, instr13)
     wrapper.multiply_inplace(instr13, instr29)
     wrapper.relinearize_inplace(instr13)
     wrapper.multiply_inplace(instr13, v_b_data_1.get())

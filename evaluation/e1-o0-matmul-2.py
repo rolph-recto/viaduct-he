@@ -508,8 +508,8 @@ def client_post(wrapper):
     wrapper.client_output(__out)
 
 def server(wrapper):
-    wrapper.server_input("A1")
     wrapper.server_input("A2")
+    wrapper.server_input("A1")
     v_A2_1 = wrapper.build_vector("A2", None, [0, 0], [FilledDim(0, 16, 1, 0, 0, 0, 0), EmptyDim(16, 0, 0, 0), FilledDim(1, 16, 1, 0, 0, 0, 0)])
     v_A1_1 = wrapper.build_vector("A1", None, [0, 0], [FilledDim(1, 16, 1, 0, 0, 0, 0), EmptyDim(16, 0, 0, 0), FilledDim(0, 16, 1, 0, 0, 0, 0)])
     v_B_1 = wrapper.server_recv("v_B_1")

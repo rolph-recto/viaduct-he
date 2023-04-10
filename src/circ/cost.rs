@@ -34,24 +34,86 @@ pub struct CostFeatures {
 impl CostFeatures {
     // return a default weighting on features
     // basically just turns off all plaintext weights
-    pub fn default_weights() -> Self {
-        CostFeatures {
-            input_ciphertexts: 2,
-            input_plaintexts: 0,
-            output_ciphertexts: 2,
-            ct_rotations: 1,
-            pt_rotations: 1,
-            ct_ct_add: 1,
-            ct_pt_add: 1,
-            pt_pt_add: 0,
-            ct_ct_mul: 1,
-            ct_pt_mul: 1,
-            pt_pt_mul: 0,
-            ct_ct_sub: 1,
-            ct_pt_sub: 1,
-            pt_pt_sub: 0,
-            ct_ct_muldepth: 1,
-            ct_pt_muldepth: 1
+    pub fn default_weights(vec_size: usize) -> Self {
+        if vec_size == 4096 {
+            CostFeatures {
+                input_ciphertexts: 12,
+                input_plaintexts: 0,
+                output_ciphertexts: 12,
+                pt_rotations: 1,
+                pt_pt_add: 0,
+                pt_pt_mul: 0,
+                pt_pt_sub: 0,
+                ct_rotations: 12,
+                ct_ct_add: 1,
+                ct_pt_add: 1,
+                ct_ct_mul: 12,
+                ct_pt_mul: 2,
+                ct_ct_sub: 1,
+                ct_pt_sub: 1,
+                ct_ct_muldepth: 12,
+                ct_pt_muldepth: 1
+            }
+
+        } else if vec_size == 8192 {
+            CostFeatures {
+                input_ciphertexts: 60,
+                input_plaintexts: 0,
+                output_ciphertexts: 60,
+                pt_rotations: 1,
+                pt_pt_add: 0,
+                pt_pt_mul: 0,
+                pt_pt_sub: 0,
+                ct_rotations: 60,
+                ct_ct_add: 1,
+                ct_pt_add: 1,
+                ct_ct_mul: 60,
+                ct_pt_mul: 8,
+                ct_ct_sub: 1,
+                ct_pt_sub: 1,
+                ct_ct_muldepth: 60,
+                ct_pt_muldepth: 1
+            }
+            
+        } else if vec_size == 16384 {
+            CostFeatures {
+                input_ciphertexts: 450,
+                input_plaintexts: 0,
+                output_ciphertexts: 450,
+                pt_rotations: 1,
+                pt_pt_add: 0,
+                pt_pt_mul: 0,
+                pt_pt_sub: 0,
+                ct_rotations: 450,
+                ct_ct_add: 2,
+                ct_pt_add: 2,
+                ct_ct_mul: 250,
+                ct_pt_mul: 35,
+                ct_ct_sub: 2,
+                ct_pt_sub: 2,
+                ct_ct_muldepth: 450,
+                ct_pt_muldepth: 1
+            }
+
+        } else {
+            CostFeatures {
+                input_ciphertexts: 1,
+                input_plaintexts: 0,
+                output_ciphertexts: 1,
+                ct_rotations: 10,
+                pt_rotations: 1,
+                ct_ct_add: 1,
+                ct_pt_add: 1,
+                pt_pt_add: 0,
+                ct_ct_mul: 10,
+                ct_pt_mul: 1,
+                pt_pt_mul: 0,
+                ct_ct_sub: 1,
+                ct_pt_sub: 1,
+                pt_pt_sub: 0,
+                ct_ct_muldepth: 10,
+                ct_pt_muldepth: 1
+            }
         }
     }
 

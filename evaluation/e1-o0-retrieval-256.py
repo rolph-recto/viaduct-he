@@ -477,18 +477,18 @@ class SEALWrapper:
         x.array = x.array * y.array
 
     def rotate_rows(self, amt: int, x: CiphertextVector):
-        rotated = self.seal["evaluator"].rotate_rows(x.array, amt, self.seal["galois_keys"])
+        rotated = self.seal["evaluator"].rotate_rows(x.array, -amt, self.seal["galois_keys"])
         return CiphertextVector(x.size, rotated)
 
     def rotate_rows_inplace(self, amt: int, x: CiphertextVector):
-        self.seal["evaluator"].rotate_rows_inplace(x.array, amt, self.seal["galois_keys"])
+        self.seal["evaluator"].rotate_rows_inplace(x.array, -amt, self.seal["galois_keys"])
 
     def rotate_rows_native(self, amt: int, x: NativeVector):
-        rotated = x.array[[(i-amt) % self.size for i in range(self.size)]]
+        rotated = x.array[[(i+amt) % self.size for i in range(self.size)]]
         return NativeVector(x.size, rotated)
 
     def rotate_rows_native_inplace(self, amt: int, x: NativeVector):
-        x.array = x.array[[(i-amt) % self.size for i in range(self.size)]]
+        x.array = x.array[[(i+amt) % self.size for i in range(self.size)]]
 
     def relinearize_inplace(self, x: CiphertextVector):
         self.seal["evaluator"].relinearize_inplace(x.array, self.seal["relin_keys"])
@@ -500,23 +500,23 @@ class SEALWrapper:
 ### START GENERATED CODE
 def client_pre(wrapper):
     wrapper.client_input("query")
-    wrapper.client_input("values")
     wrapper.client_input("keys")
+    wrapper.client_input("values")
+    v_query_1 = wrapper.build_vector("query", None, [0], [FilledDim(0, 8, 1, 0, 0, 0, 0), EmptyDim(256, 0, 0, 0)])
+    wrapper.client_send("v_query_1", v_query_1)
     v_keys_1 = wrapper.build_vector("keys", None, [0, 0], [FilledDim(1, 8, 1, 0, 0, 0, 0), FilledDim(0, 256, 1, 0, 0, 0, 0)])
     wrapper.client_send("v_keys_1", v_keys_1)
     v_values_1 = wrapper.build_vector("values", None, [0], [FilledDim(0, 256, 1, 0, 0, 0, 0)])
     wrapper.client_send("v_values_1", v_values_1)
-    v_query_1 = wrapper.build_vector("query", None, [0], [FilledDim(0, 8, 1, 0, 0, 0, 0), EmptyDim(256, 0, 0, 0)])
-    wrapper.client_send("v_query_1", v_query_1)
 
 def client_post(wrapper):
     __out = wrapper.client_recv("__out")
     wrapper.client_output(__out)
 
 def server(wrapper):
+    v_query_1 = wrapper.server_recv("v_query_1")
     v_keys_1 = wrapper.server_recv("v_keys_1")
     v_values_1 = wrapper.server_recv("v_values_1")
-    v_query_1 = wrapper.server_recv("v_query_1")
     const_1 = wrapper.const(1)
     const_neg1 = wrapper.const(-1)
     wrapper.start_server_exec()
