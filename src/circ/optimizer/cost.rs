@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Display};
 
-use crate::{lang::DimName, circ::cost::CostFeatures};
+use crate::{lang::DimName, circ::cost::CostFeatures, program::lowering::ReductionTree};
 
 use super::*;
 
@@ -210,7 +210,11 @@ impl<'a> CostFunction<HEOptCircuit> for HECostFunction<'a> {
                         HEOptCircuit::SumVectors(_) => body_cost.muldepth,
                         HEOptCircuit::ProductVectors(_) => {
                             match body_data.node_type {
-                                HEOptNodeType::Cipher => body_cost.muldepth + extent - 1,
+                                HEOptNodeType::Cipher => {
+                                    let tree_depth =
+                                        ReductionTree::gen_tree_of_size(extent).depth();
+                                    body_cost.muldepth + tree_depth
+                                }
                                 HEOptNodeType::Plain => body_cost.muldepth,
                             }
                         },

@@ -1,6 +1,71 @@
-use std::collections::{HashMap, HashSet};
+use std::{collections::{HashMap, HashSet}, cmp};
+
+use log::debug;
 
 use crate::{circ::*, lang::*, program::*, util::NameGenerator};
+
+// an expression tree of 
+// this allows for a *balanced* tree that implements reductions,
+// which is important especially for products to minimize noise growth
+#[derive(Clone, Debug)]
+pub(crate) enum ReductionTree {
+    Leaf(usize),
+    Node(Box<ReductionTree>, Box<ReductionTree>),
+}
+
+impl ReductionTree {
+    pub(crate) fn depth(&self) -> usize {
+        match self {
+            ReductionTree::Leaf(_) => 0,
+            ReductionTree::Node(node1, node2) => {
+                let depth1 = node1.depth();
+                let depth2 = node2.depth();
+                cmp::max(depth1, depth2) + 1
+            }
+        }
+    }
+
+    pub(crate) fn gen_tree_of_size(size: usize) -> ReductionTree {
+        Self::gen_balanced_tree(
+            (0..size)
+            .map(|i| ReductionTree::Leaf(i))
+            .collect()
+        ).pop().unwrap()
+    }
+
+    pub(crate) fn gen_balanced_tree(mut list: Vec<ReductionTree>) -> Vec<ReductionTree> {
+        use ReductionTree::*;
+
+        if list.len() == 1 {
+            list
+
+        } else if list.len() == 2 {
+            let node1 = list.pop().unwrap();
+            let node2 = list.pop().unwrap();
+            vec![Node(Box::new(node1), Box::new(node2))]
+
+        // if length is even, reduce each adjacent pairs together
+        } else if list.len() % 2 == 0 {
+            let mut new_list: Vec<ReductionTree> = Vec::new();
+            for i in 0..(list.len() / 2){
+                let node1 = list.pop().unwrap();
+                let node2 = list.pop().unwrap();
+                new_list.push(Node(Box::new(node1), Box::new(node2)))
+            }
+
+            Self::gen_balanced_tree(new_list)
+
+        // if length is odd, hold out last node and generate a tree for all other nodes;
+        // the rest of the nodes is guaranteed to be an even number
+        } else {
+            let last = list.pop().unwrap();
+            let mut rest_list = Self::gen_balanced_tree(list);
+            rest_list.push(last);
+            Self::gen_balanced_tree(rest_list)
+        }
+    }
+}
+
 
 /// pass that lowers ParamCircuitProgram into HEProgram
 pub struct CircuitLowering {
@@ -476,6 +541,70 @@ impl CircuitLowering {
         statements
     }
 
+    // compute a reduction by a balanced tree of operations
+    fn balanced_tree_reduction(
+        &mut self,
+        tree: ReductionTree,
+        array: &ArrayName,
+        op: Operator,
+        op_type: HEType,
+        stmts: &mut Vec<HEStatement>,
+        ref_map: &mut HashMap<usize, (HERef, HEType)>,
+    ) -> HERef {
+        match tree {
+            ReductionTree::Leaf(index) => {
+                HERef::Array(array.clone(), vec![HEIndex::Literal(index as isize)])
+            },
+
+            ReductionTree::Node(node1, node2) => {
+                let ref1 =
+                    self.balanced_tree_reduction(
+                        *node1,
+                        array,
+                        op,
+                        op_type,
+                        stmts,
+                        ref_map
+                    );
+
+                let ref2 = 
+                    self.balanced_tree_reduction(
+                        *node2,
+                        array,
+                        op,
+                        op_type,
+                        stmts,
+                        ref_map
+                    );
+
+                let id = self.fresh_instr_id();
+
+                let instr_type = match op_type {
+                    HEType::Native => HEInstructionType::Native,
+                    HEType::Plaintext => unreachable!(),
+                    HEType::Ciphertext => HEInstructionType::CipherCipher,
+                };
+
+                let instr = match op {
+                    Operator::Add => {
+                        HEInstruction::Add(instr_type, id, ref1, ref2)
+                    },
+
+                    Operator::Mul => {
+                        HEInstruction::Mul(instr_type, id, ref1, ref2)
+                    },
+
+                    Operator::Sub => unreachable!(),
+                };
+
+                stmts.push(HEStatement::Instruction(instr));
+                let instr_ref = HERef::Instruction(id);
+                ref_map.insert(id, (instr_ref.clone(), op_type));
+                instr_ref
+            }
+        }
+    }
+
     pub fn gen_circuit_expr_instrs(
         &mut self,
         expr_id: CircuitId,
@@ -704,26 +833,8 @@ impl CircuitLowering {
 
                 let reduce_id = self.fresh_instr_id();
 
-                let reduce_type = HEInstructionType::CipherCipher;
-
-                let reduce_stmt = match op {
-                    Operator::Add => {
-                        HEInstruction::Add(reduce_type, reduce_id, reduce_var_ref.clone(), body_operand)
-                    }
-
-                    Operator::Sub => unreachable!(),
-
-                    Operator::Mul => {
-                        HEInstruction::Mul(reduce_type, reduce_id, reduce_var_ref.clone(), body_operand)
-                    }
-                };
-
-                body_stmts.push(HEStatement::Instruction(reduce_stmt));
-                body_stmts.push(HEStatement::AssignVar(
-                    reduce_var.clone(),
-                    vec![],
-                    HEOperand::Ref(HERef::Instruction(reduce_id)),
-                ));
+                let reduce_type = HEType::Ciphertext;
+                let reduce_instr_type = HEInstructionType::CipherCipher;
 
                 let default =
                     match op {
@@ -732,15 +843,72 @@ impl CircuitLowering {
                         Operator::Mul => 1,
                     };
 
-                stmts.extend([
-                    HEStatement::DeclareVar(reduce_var.clone(), HEType::Ciphertext, vec![], default),
-                    HEStatement::ForNode(dim.clone(), *extent, body_stmts),
-                ]);
+                if *extent < 4 {
+                    let reduce_stmt = match op {
+                        Operator::Add => {
+                            HEInstruction::Add(reduce_instr_type, reduce_id, reduce_var_ref.clone(), body_operand)
+                        }
 
-                let instr_id = self.fresh_instr_id();
-                ref_map.insert(instr_id, (reduce_var_ref, HEType::Ciphertext));
-                self.circuit_instr_map.insert(expr_id, instr_id);
-                instr_id
+                        Operator::Sub => unreachable!(),
+
+                        Operator::Mul => {
+                            HEInstruction::Mul(reduce_instr_type, reduce_id, reduce_var_ref.clone(), body_operand)
+                        }
+                    };
+
+                    body_stmts.push(HEStatement::Instruction(reduce_stmt));
+                    body_stmts.push(HEStatement::AssignVar(
+                        reduce_var.clone(),
+                        vec![],
+                        HEOperand::Ref(HERef::Instruction(reduce_id)),
+                    ));
+
+                    stmts.extend([
+                        HEStatement::DeclareVar(reduce_var.clone(), HEType::Ciphertext, vec![], default),
+                        HEStatement::ForNode(dim.clone(), *extent, body_stmts),
+                    ]);
+
+                    let instr_id = self.fresh_instr_id();
+                    ref_map.insert(instr_id, (reduce_var_ref, HEType::Ciphertext));
+                    self.circuit_instr_map.insert(expr_id, instr_id);
+                    instr_id
+
+                } else {
+                    body_stmts.push(HEStatement::AssignVar(
+                        reduce_var.clone(),
+                        vec![HEIndex::Var(dim.clone())],
+                        HEOperand::Ref(body_operand),
+                    ));
+
+                    stmts.extend([
+                        HEStatement::DeclareVar(
+                            reduce_var.clone(),
+                            reduce_type,
+                            vec![*extent],
+                            default
+                        ),
+                        HEStatement::ForNode(dim.clone(), *extent, body_stmts),
+                    ]);
+
+                    let tree = ReductionTree::gen_tree_of_size(*extent);
+                    let reduce_ref =
+                        self.balanced_tree_reduction(
+                            tree,
+                            &reduce_var,
+                            *op,
+                            HEType::Ciphertext,
+                            stmts,
+                            ref_map
+                        );
+
+                    let reduce_id = match reduce_ref {
+                        HERef::Instruction(id) => id,
+                        HERef::Array(_, _) => unreachable!()
+                    };
+
+                    self.circuit_instr_map.insert(expr_id, reduce_id);
+                    reduce_id
+                }
             }
         }
     }
@@ -864,6 +1032,8 @@ impl CircuitLowering {
                 instr_id
             }
 
+            // unlike for HE circuit reductions, no need to make this a balanced tree
+            // (there is no noise growth to contain for native operations!)
             ParamCircuitExpr::ReduceDim(dim, extent, op, body) => {
                 let mut body_indices = indices.clone();
                 body_indices.push((dim.clone(), *extent));
@@ -892,13 +1062,23 @@ impl CircuitLowering {
 
                 let reduce_stmt = match op {
                     Operator::Add => {
-                        HEInstruction::Add(reduce_type, reduce_id, reduce_var_ref.clone(), body_operand)
+                        HEInstruction::Add(
+                            reduce_type,
+                            reduce_id,
+                            reduce_var_ref.clone(),
+                            body_operand
+                        )
                     },
 
                     Operator::Sub => unreachable!(),
 
                     Operator::Mul => {
-                        HEInstruction::Mul(reduce_type, reduce_id, reduce_var_ref.clone(), body_operand)
+                        HEInstruction::Mul(
+                            reduce_type,
+                            reduce_id,
+                            reduce_var_ref.clone(),
+                            body_operand
+                        )
                     },
                 };
 
@@ -917,7 +1097,12 @@ impl CircuitLowering {
                     };
 
                 stmts.extend([
-                    HEStatement::DeclareVar(reduce_var.clone(), HEType::Native, vec![], default),
+                    HEStatement::DeclareVar(
+                        reduce_var.clone(),
+                        HEType::Native,
+                        vec![],
+                        default
+                    ),
                     HEStatement::ForNode(dim.clone(), *extent, body_stmts),
                 ]);
 
@@ -1225,5 +1410,26 @@ mod tests {
         let circuit_program2 = PlaintextHoisting::new().run(circuit_program);
 
         test_lowering(circuit_program2);
+    }
+
+    #[test]
+    fn test_reduction_tree1() {
+        use ReductionTree::*;
+        let res = ReductionTree::gen_balanced_tree(vec![Leaf(1), Leaf(2), Leaf(3)]);
+        println!("{:?}", res);
+    }
+
+    #[test]
+    fn test_reduction_tree2() {
+        use ReductionTree::*;
+        let res = ReductionTree::gen_balanced_tree(vec![Leaf(1), Leaf(2), Leaf(3), Leaf(4)]);
+        println!("{:?}", res);
+    }
+
+    #[test]
+    fn test_reduction_tree3() {
+        use ReductionTree::*;
+        let res = ReductionTree::gen_balanced_tree(vec![Leaf(1), Leaf(2), Leaf(3), Leaf(4), Leaf(5), Leaf(6), Leaf(7)]);
+        println!("{:?}", res);
     }
 }

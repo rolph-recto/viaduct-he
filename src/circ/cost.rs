@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     circ::{ParamCircuitExpr, ParamCircuitProgram, VectorType},
-    lang::Operator,
+    lang::Operator, program::lowering::ReductionTree,
 };
 
 use super::{CircuitId, CircuitObjectRegistry};
@@ -410,7 +410,7 @@ impl CostEstimator {
 
                     (Operator::Mul, VectorType::Ciphertext) => {
                         cost.ct_ct_mul += extent - 1;
-                        cost.ct_ct_muldepth += extent - 1;
+                        cost.ct_ct_muldepth += ReductionTree::gen_tree_of_size(*extent).depth();
                     },
 
                     (Operator::Mul, VectorType::Plaintext) => {
