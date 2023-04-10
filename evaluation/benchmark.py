@@ -31,7 +31,13 @@ compile_benchmarks = {
 
 # benchmarks = ["retrieval-256", "distance"]
 exec_benchmarks = {
-    "distance": ["baseline"]
+    "conv": ["baseline"],
+    "conv-multioutput": ["baseline"],
+    "distance": ["baseline"],
+    "retrieval-256": ["baseline"],
+    "retrieval-1024": ["baseline"],
+    "matmul-2": ["baseline"],
+    "set-union-16": ["baseline"],
 }
 
 def get_trials(out_path, from_dir, to_dir):
@@ -180,11 +186,16 @@ def collect_compile(args):
 def bench_exec(args):
     print("benchmarking execution time")
 
+    in_dir = Path(args.in_path)
+
     timestamps = []
     benchmarks = sorted(exec_benchmarks.keys())
     for trial in range(args.trials):
         timestamp = str(int(time.time()))
         timestamps.append(timestamp)
+
+        out_dir = Path(args.out_path, timestamp)
+        out_dir.mkdir(parents=True, exist_ok=True)
 
         print(f"starting trial {trial+1} at {out_dir}")
 
@@ -287,7 +298,7 @@ def argument_parser():
         help="number of times to compile each benchmark")
 
     bench_compile_parser.add_argument(
-        "-i", "--inpath", dest="in_path", type=str, default="benchmarks",
+        "-i", "--inpath", dest="in_path", type=str, default="",
         help="base path to retrieve benchmarks")
 
     bench_compile_parser.add_argument(
@@ -322,7 +333,7 @@ def argument_parser():
         help="base path to store trial information")
 
     bench_exec_parser.add_argument(
-        "-i", "--inpath", dest="in_path", type=str, default="benchmarks",
+        "-i", "--inpath", dest="in_path", type=str, default="",
         help="base path to retrieve benchmarks")
 
     # collect execution data

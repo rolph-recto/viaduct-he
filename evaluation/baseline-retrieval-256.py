@@ -3,6 +3,7 @@ import itertools
 import json
 import numpy as np
 from time import time
+from typing import *
 
 from seal import *
 
@@ -126,7 +127,7 @@ class NativeVector(AbstractVector):
 
 
 class AbstractArray:
-    def __init__(self, size: int, extents: list[int], default):
+    def __init__(self, size: int, extents: List[int], default):
         if len(extents) == 0:
             self.single = default
 
@@ -136,7 +137,7 @@ class AbstractArray:
             for coord in coords:
                 self.map[coord] = default
 
-    def set(self, coord: list[int], val):
+    def set(self, coord: List[int], val):
         if len(coord) == 0:
             self.single = val
 
@@ -163,7 +164,7 @@ class AbstractArray:
 
 
 class CiphertextArray(AbstractArray):
-    def __init__(self, size: int, extents: list[int], default: CiphertextVector):
+    def __init__(self, size: int, extents: List[int], default: CiphertextVector):
         super().__init__(size, extents, default)
 
     def create_vector(self, size: int):
@@ -171,7 +172,7 @@ class CiphertextArray(AbstractArray):
 
 
 class PlaintextArray(AbstractArray):
-    def __init__(self, size: int, extents: list[int], default: PlaintextVector):
+    def __init__(self, size: int, extents: List[int], default: PlaintextVector):
         super().__init__(size, extents, default)
 
     def create_vector(self, size: int):
@@ -179,7 +180,7 @@ class PlaintextArray(AbstractArray):
 
 
 class NativeArray(AbstractArray):
-    def __init__(self, size: int, extents: list[int], default: NativeVector):
+    def __init__(self, size: int, extents: List[int], default: NativeVector):
         super().__init__(size, extents, default)
 
     def create_vector(self, size: int):
@@ -314,7 +315,7 @@ class SEALWrapper:
         else:
             return arrays[(name, preprocess_str)]
 
-    def native_array(self, extents: list[list[int]]):
+    def native_array(self, extents: List[List[int]]):
         return NativeArray(self.size, extents, self.make_native_zeros())
 
     def ciphertext_array(self, extents):
@@ -323,7 +324,7 @@ class SEALWrapper:
     def plaintext_array(self, extents):
         return PlaintextArray(self.size, extents, self.make_pt_zeros())
 
-    def build_vector(self, name: str, preprocess: ArrayPreprocessing, src_offset: list[int], dims: list[VectorDimContent]) -> NativeArray:
+    def build_vector(self, name: str, preprocess: ArrayPreprocessing, src_offset: List[int], dims: List[VectorDimContent]) -> NativeArray:
         array = self.get_array(name, preprocess)
         if len(dims) == 0:
             npvec = np.zeros((self.size,))
@@ -379,7 +380,7 @@ class SEALWrapper:
     def const(self, const: int):
         return self.vec_to_array(NativeVector(self.size, np.array(self.size * [const])))
 
-    def mask(self, mask: list[(int, int, int)]):
+    def mask(self, mask: List[Tuple[int, int, int]]):
         raise NotImplemented
 
     def set(self, arr, coord, val):
@@ -391,7 +392,7 @@ class SEALWrapper:
         encoded = self.seal["batch_encoder"].encode(np.tile(vec.array, 2))
         return PlaintextVector(vec.size, encoded)
 
-    def encode(self, arr: NativeArray, coord: list[int]):
+    def encode(self, arr: NativeArray, coord: List[int]):
         arr.set(coord, self.encode_vec(arr.get(coord)))
 
     def encrypt(self, x: PlaintextVector):
