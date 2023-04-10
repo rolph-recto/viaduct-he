@@ -3,6 +3,7 @@ import itertools
 import json
 import numpy as np
 from time import time
+from typing import *
 
 from seal import *
 
@@ -18,13 +19,13 @@ class Roll(ArrayPreprocessing):
 
     def apply(self, arr):
         slices = []
-        for ind in range(arr.shape[self.dim_i]):
-            i_slice = np.take(arr, ind, axis=self.dim_i)
-            roll_dim = self.dim_j if self.dim_j < self.dim_i else self.dim_j - 1
-            perm_i_slice = np.roll(i_slice, -ind, axis=roll_dim)
-            slices.append(perm_i_slice)
+        for ind in range(arr.shape[self.dim_j]):
+            j_slice = np.take(arr, ind, axis=self.dim_j)
+            roll_dim = self.dim_i if self.dim_i < self.dim_j else self.dim_i - 1
+            perm_j_slice = np.roll(j_slice, -ind, axis=roll_dim)
+            slices.append(perm_j_slice)
 
-        return np.stack(slices, axis=self.dim_i)
+        return np.stack(slices, axis=self.dim_j)
 
     def __str__(self):
         return "Roll({},{})".format(self.dim_i, self.dim_j)
@@ -126,7 +127,7 @@ class NativeVector(AbstractVector):
 
 
 class AbstractArray:
-    def __init__(self, size: int, extents: list[int], default):
+    def __init__(self, size: int, extents: List[int], default):
         if len(extents) == 0:
             self.single = default
 
@@ -136,7 +137,7 @@ class AbstractArray:
             for coord in coords:
                 self.map[coord] = default
 
-    def set(self, coord: list[int], val):
+    def set(self, coord: List[int], val):
         if len(coord) == 0:
             self.single = val
 
@@ -154,7 +155,7 @@ class AbstractArray:
         pass
 
     def show(self):
-        if self.single is not None:
+        if hasattr(self, "single"):
             print(self.single)
 
         else:
@@ -163,7 +164,7 @@ class AbstractArray:
 
 
 class CiphertextArray(AbstractArray):
-    def __init__(self, size: int, extents: list[int], default: CiphertextVector):
+    def __init__(self, size: int, extents: List[int], default: CiphertextVector):
         super().__init__(size, extents, default)
 
     def create_vector(self, size: int):
@@ -171,7 +172,7 @@ class CiphertextArray(AbstractArray):
 
 
 class PlaintextArray(AbstractArray):
-    def __init__(self, size: int, extents: list[int], default: PlaintextVector):
+    def __init__(self, size: int, extents: List[int], default: PlaintextVector):
         super().__init__(size, extents, default)
 
     def create_vector(self, size: int):
@@ -179,7 +180,7 @@ class PlaintextArray(AbstractArray):
 
 
 class NativeArray(AbstractArray):
-    def __init__(self, size: int, extents: list[int], default: NativeVector):
+    def __init__(self, size: int, extents: List[int], default: NativeVector):
         super().__init__(size, extents, default)
 
     def create_vector(self, size: int):
@@ -239,11 +240,11 @@ class SEALWrapper:
         assert(self.party == "client")
 
         if isinstance(arr, CiphertextArray):
-            if arr.single is not None:
+            if hasattr(arr, "single"):
                 self.output_ciphertext_vector(arr.single)
 
             else:
-                for coord, val in self.map.items():
+                for coord, val in arr.map.items():
                     print("coord ", coord)
                     self.output_ciphertext_vector(val)
 
@@ -312,20 +313,19 @@ class SEALWrapper:
         else:
             return arrays[(name, preprocess_str)]
 
-    def native_array(self, extents: list[list[int]], default=0):
-        return NativeArray(self.size, extents, self.make_native_full())
+    def native_array(self, extents: List[List[int]], default=0):
+        return NativeArray(self.size, extents, self.make_native_full(default))
 
     def ciphertext_array(self, extents, default=0):
         return CiphertextArray(self.size, extents, self.make_ct_full(default))
 
     def plaintext_array(self, extents, default=0):
-        return PlaintextArray(self.size, extents, self.make_pt_zeros())
+        return PlaintextArray(self.size, extents, self.make_pt_full(default))
 
-    def build_vector(self, name: str, preprocess: ArrayPreprocessing, src_offset: list[int], dims: list[VectorDimContent]) -> NativeArray:
+    def build_vector(self, name: str, preprocess: ArrayPreprocessing, src_offset: List[int], dims: List[VectorDimContent]) -> NativeArray:
         array = self.get_array(name, preprocess)
         if len(dims) == 0:
-            npvec = np.zeros((self.size,))
-            npvec[0] = array[tuple(src_offset)]
+            npvec = np.full(self.size, array[tuple(src_offset)])
             vec = NativeVector(self.size, npvec)
             return self.vec_to_array(vec)
 
@@ -377,8 +377,28 @@ class SEALWrapper:
     def const(self, const: int):
         return self.vec_to_array(NativeVector(self.size, np.array(self.size * [const])))
 
-    def mask(self, mask: list[(int, int, int)]):
-        raise NotImplemented
+    def mask(self, mask_vec: List[Tuple[int, int, int]]):
+        mask_size = 1
+        mask_acc = None
+        clip = lambda val, zero, lo, hi, i: val if lo <= i and i <= hi else zero
+        while len(mask_vec) > 0:
+            extent, lo, hi = mask_vec.pop()
+            mask_size = mask_size * extent
+            if mask_acc is None:
+                lst = [clip(1,0,lo,hi,i) for i in range(extent)]
+                mask_acc = np.array(lst)
+
+            else:
+                lst = [clip(mask_acc,np.zeros(mask_acc.shape),lo,hi,i) for i in range(extent)]
+                mask_acc = np.stack(lst)
+
+        mask_flat = mask_acc.reshape(mask_size)
+        repeats = int(self.size / mask_size)
+        if self.size % mask_size != 0:
+            repeats += 1
+
+        mask_final = np.tile(mask_flat, repeats)[:self.size]
+        return self.vec_to_array(NativeVector(self.size, mask_final))
 
     def set(self, arr, coord, val):
         arr.set(coord, val)
@@ -389,7 +409,7 @@ class SEALWrapper:
         encoded = self.seal["batch_encoder"].encode(np.tile(vec.array, 2))
         return PlaintextVector(vec.size, encoded)
 
-    def encode(self, arr: NativeArray, coord: list[int]):
+    def encode(self, arr: NativeArray, coord: List[int]):
         arr.set(coord, self.encode_vec(arr.get(coord)))
 
     def encrypt(self, x: PlaintextVector):
@@ -482,14 +502,14 @@ def client_pre(wrapper):
     wrapper.client_input("values")
     wrapper.client_input("query")
     wrapper.client_input("keys")
-    v_keys_1 = wrapper.build_vector("keys", None, [0, 0], [FilledDim(1, 5, 2, 0, 3, 0, 0), FilledDim(0, 1024, 1, 0, 0, 0, 0)])
-    wrapper.client_send("v_keys_1", v_keys_1)
-    v_keys_2 = wrapper.build_vector("keys", None, [0, 1], [FilledDim(1, 5, 2, 0, 3, 0, 0), FilledDim(0, 1024, 1, 0, 0, 0, 0)])
-    wrapper.client_send("v_keys_2", v_keys_2)
-    v_query_1 = wrapper.build_vector("query", None, [1], [FilledDim(0, 5, 2, 0, 3, 0, 0), EmptyDim(1024, 0, 0, 0)])
+    v_query_1 = wrapper.build_vector("query", None, [0], [FilledDim(0, 5, 2, 0, 3, 0, 0), EmptyDim(1024, 0, 0, 0)])
     wrapper.client_send("v_query_1", v_query_1)
-    v_query_2 = wrapper.build_vector("query", None, [0], [FilledDim(0, 5, 2, 0, 3, 0, 0), EmptyDim(1024, 0, 0, 0)])
+    v_query_2 = wrapper.build_vector("query", None, [1], [FilledDim(0, 5, 2, 0, 3, 0, 0), EmptyDim(1024, 0, 0, 0)])
     wrapper.client_send("v_query_2", v_query_2)
+    v_keys_1 = wrapper.build_vector("keys", None, [0, 1], [FilledDim(1, 5, 2, 0, 3, 0, 0), FilledDim(0, 1024, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_keys_1", v_keys_1)
+    v_keys_2 = wrapper.build_vector("keys", None, [0, 0], [FilledDim(1, 5, 2, 0, 3, 0, 0), FilledDim(0, 1024, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_keys_2", v_keys_2)
     v_values_1 = wrapper.build_vector("values", None, [0], [FilledDim(0, 1024, 1, 0, 0, 0, 0)])
     wrapper.client_send("v_values_1", v_values_1)
 
@@ -498,26 +518,26 @@ def client_post(wrapper):
     wrapper.client_output(__out)
 
 def server(wrapper):
-    v_keys_1 = wrapper.server_recv("v_keys_1")
-    v_keys_2 = wrapper.server_recv("v_keys_2")
     v_query_1 = wrapper.server_recv("v_query_1")
     v_query_2 = wrapper.server_recv("v_query_2")
+    v_keys_1 = wrapper.server_recv("v_keys_1")
+    v_keys_2 = wrapper.server_recv("v_keys_2")
     v_values_1 = wrapper.server_recv("v_values_1")
     const_1 = wrapper.const(1)
     const_neg1 = wrapper.const(-1)
     wrapper.start_server_exec()
     wrapper.encode(const_1, [])
     wrapper.encode(const_neg1, [])
-    ct2 = wrapper.ciphertext_array([2])
-    wrapper.set(ct2, [0], v_keys_1.get())
-    wrapper.set(ct2, [1], v_keys_2.get())
-    ct1 = wrapper.ciphertext_array([2])
-    wrapper.set(ct1, [0], v_query_2.get())
-    wrapper.set(ct1, [1], v_query_1.get())
-    mask = wrapper.ciphertext_array([])
+    ct2 = wrapper.ciphertext_array([2], 0)
+    wrapper.set(ct2, [0], v_keys_2.get())
+    wrapper.set(ct2, [1], v_keys_1.get())
+    ct1 = wrapper.ciphertext_array([2], 0)
+    wrapper.set(ct1, [0], v_query_1.get())
+    wrapper.set(ct1, [1], v_query_2.get())
+    mask = wrapper.ciphertext_array([], 0)
     __reduce_1 = wrapper.ciphertext_array([], 1)
-    for i9i in range(2):
-        instr3 = wrapper.subtract(ct1.get([i9i]), ct2.get([i9i]))
+    for i0i in range(2):
+        instr3 = wrapper.subtract(ct1.get([i0i]), ct2.get([i0i]))
         wrapper.multiply_inplace(instr3, instr3)
         wrapper.relinearize_inplace(instr3)
         wrapper.multiply_plain_inplace(instr3, const_neg1.get())
@@ -536,7 +556,7 @@ def server(wrapper):
     wrapper.multiply_inplace(instr9, instr13)
     wrapper.relinearize_inplace(instr9)
     wrapper.set(mask, [], instr9)
-    __out = wrapper.ciphertext_array([])
+    __out = wrapper.ciphertext_array([], 0)
     instr17 = wrapper.multiply(v_values_1.get(), mask.get())
     wrapper.relinearize_inplace(instr17)
     instr18 = wrapper.rotate_rows(-512, instr17)
@@ -562,6 +582,7 @@ def server(wrapper):
     wrapper.set(__out, [], instr17)
     wrapper.end_server_exec()
     wrapper.server_send("__out", __out)
+
 ### END GENERATED CODE
 
 init_start_time = time()

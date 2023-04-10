@@ -1,0 +1,18 @@
+input a_id: [32, 5] from client
+input a_data: [32] from client
+input b_id: [32, 5] from client
+input b_data: [32] from client
+let a_sum = sum(a_data) in
+let b_sum =
+	sum(for j: 32 {
+		b_data[j] *
+		product(for i: 32 {
+			1 - 
+			product(for k: 5 {
+				1 -
+				((a_id[i][k] - b_id[j][k]) * (a_id[i][k] - b_id[j][k]))
+			})
+		})
+	})
+in
+a_sum + b_sum

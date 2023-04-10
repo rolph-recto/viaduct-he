@@ -29,15 +29,24 @@ compile_benchmarks = {
     ]
 }
 
-# benchmarks = ["retrieval-256", "distance"]
+# exec_benchmarks = {
+#     "conv": ["baseline"],
+#     "conv-multioutput": ["baseline"],
+#     "distance": ["baseline"],
+#     "retrieval-256": ["baseline"],
+#     "retrieval-1024": ["baseline"],
+#     "matmul-2": ["baseline"],
+#     "set-union-16": ["baseline"],
+# }
+
 exec_benchmarks = {
-    "conv": ["baseline"],
-    "conv-multioutput": ["baseline"],
-    "distance": ["baseline"],
-    "retrieval-256": ["baseline"],
-    "retrieval-1024": ["baseline"],
-    "matmul-2": ["baseline"],
-    "set-union-16": ["baseline"],
+    "conv": ["e1-o0"],
+    "conv-multioutput": ["e1-o0"],
+    "distance": ["e1-o0"],
+    "retrieval-256": ["e1-o0"],
+    "retrieval-1024": ["e1-o0"],
+    "matmul-2": ["e1-o0"],
+    "set-union-16": ["e1-o0"],
 }
 
 def get_trials(out_path, from_dir, to_dir):
