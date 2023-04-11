@@ -499,13 +499,13 @@ class SEALWrapper:
 
 ### START GENERATED CODE
 def client_pre(wrapper):
+    wrapper.client_input("values")
     wrapper.client_input("query")
     wrapper.client_input("keys")
-    wrapper.client_input("values")
-    v_values_1 = wrapper.build_vector("values", None, [0], [FilledDim(0, 256, 1, 0, 0, 0, 0)])
-    wrapper.client_send("v_values_1", v_values_1)
     v_query_1 = wrapper.build_vector("query", None, [0], [FilledDim(0, 8, 1, 0, 0, 0, 0), EmptyDim(256, 0, 0, 0)])
     wrapper.client_send("v_query_1", v_query_1)
+    v_values_1 = wrapper.build_vector("values", None, [0], [FilledDim(0, 256, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_values_1", v_values_1)
     v_keys_1 = wrapper.build_vector("keys", None, [0, 0], [FilledDim(1, 8, 1, 0, 0, 0, 0), FilledDim(0, 256, 1, 0, 0, 0, 0)])
     wrapper.client_send("v_keys_1", v_keys_1)
 
@@ -514,8 +514,8 @@ def client_post(wrapper):
     wrapper.client_output(__out)
 
 def server(wrapper):
-    v_values_1 = wrapper.server_recv("v_values_1")
     v_query_1 = wrapper.server_recv("v_query_1")
+    v_values_1 = wrapper.server_recv("v_values_1")
     v_keys_1 = wrapper.server_recv("v_keys_1")
     const_1 = wrapper.const(1)
     const_neg1 = wrapper.const(-1)

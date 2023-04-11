@@ -1,0 +1,74 @@
+{
+    "benchmarks": {
+        "conv-siso": [
+            {
+                "name": "e1-o0",
+                "backend": "pyseal",
+                "size": 4096,
+                "epochs": 1,
+                "opt_duration": 0
+            }
+        ],
+        "conv-simo": [
+            {
+                "name": "e1-o0",
+                "backend": "pyseal",
+                "size": 4096,
+                "epochs": 1,
+                "opt_duration": 0
+            }
+        ],
+        "distance": [
+            {
+                "name": "e1-o0",
+                "backend": "pyseal",
+                "size": 2048,
+                "epochs": 1,
+                "opt_duration": 0
+            }
+        ],
+        "retrieval-256": [
+            {
+                "name": "e1-o0",
+                "backend": "pyseal",
+                "size": 8192,
+                "epochs": 1,
+                "opt_duration": 0
+            }
+        ],
+        "retrieval-1024": [
+            {
+                "name": "e1-o0",
+                "backend": "pyseal",
+                "size": 8192,
+                "epochs": 1,
+                "opt_duration": 0
+            }
+        ],
+        "matmul-2": [
+            {
+                "name": "e1-o0",
+                "backend": "pyseal",
+                "size": 4096,
+                "epochs": 1,
+                "opt_duration": 0
+            }
+        ],
+        "set-union-16": [
+            {
+                "name": "e1-o0",
+                "backend": "pyseal",
+                "size": 8192,
+                "epochs": 1,
+                "opt_duration": 0
+            }
+        ]
+    },
+    "trials": [
+        "bench-compile/1681175123",
+        "bench-compile/1681175134",
+        "bench-compile/1681175146",
+        "bench-compile/1681175157",
+        "bench-compile/1681175170"
+    ]
+}

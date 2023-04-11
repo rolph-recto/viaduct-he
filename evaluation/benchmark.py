@@ -216,6 +216,61 @@ def collect_compile(args):
             })
 
     print(csv_out.getvalue())
+
+
+def diff_compile(args):
+    with open(args.exp_file) as exp_file:
+        exp_data = json.loads(exp_file.read())
+
+    compile_benchmarks = exp_data["benchmarks"]
+    trials = exp_data["trials"]
+    n = len(trials)
+    if n < 2:
+        print("need at least two trials to diff")
+        return
+
+    csv_out = io.StringIO()
+    fields = [
+        "bench","cfg","trials",
+        "scheduling","scheduling_sterror","scheduling_error_pct",
+        "optimization","optimization_sterror","optimization_error_pct",
+        "total","total_sterror","total_error_pct",
+    ]
+    writer = csv.DictWriter(csv_out, fieldnames=fields)
+    writer.writeheader()
+    benchmarks = sorted(compile_benchmarks.keys())
+    for bench in benchmarks:
+        for cfg in compile_benchmarks[bench]:
+            cfg_name = cfg["name"]
+            scheduling_times = []
+            optimization_times = []
+            total_times = []
+
+            first = None
+            rest = []
+            for trial in trials:
+                cfg_bench = Path(trial, f"{cfg_name}-{bench}.txt")
+                if not cfg_bench.is_file():
+                    raise Exception(f"expected output file {cfg_bench} does not exist")
+
+                if first is None:
+                    first = cfg_bench
+
+                else:
+                    rest.append(cfg_bench)
+
+            for trial in rest:
+                cmd = f"diff {first} {trial}"
+                diff_proc = subprocess.run(
+                    cmd.split(),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    encoding="utf-8"
+                )
+
+                print(cmd)
+                print(diff_proc.stdout)
             
 
 def bench_exec(args):
@@ -363,11 +418,19 @@ def argument_parser():
         "-o", "--outpath", dest="out_path", type=str, default="bench-compile",
         help="base path to store trial information")
 
-    # collect execution data
+    # collect compilation data
     collect_compile_parser = subparsers.add_parser("collect-compile", help="collect compilation data")
     collect_compile_parser.set_defaults(func=collect_compile)
 
     collect_compile_parser.add_argument(
+        "-e" "--exp", dest="exp_file", type=str,
+        help="name of experiment file")
+
+    # diff compilation data between trials
+    diff_compile_parser = subparsers.add_parser("diff-compile", help="diff compilation data")
+    diff_compile_parser.set_defaults(func=diff_compile)
+
+    diff_compile_parser.add_argument(
         "-e" "--exp", dest="exp_file", type=str,
         help="name of experiment file")
 

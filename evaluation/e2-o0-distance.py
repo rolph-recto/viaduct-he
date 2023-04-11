@@ -500,9 +500,9 @@ class SEALWrapper:
 ### START GENERATED CODE
 def client_pre(wrapper):
     wrapper.client_input("point")
-    v_point_1 = wrapper.build_vector("point", None, [0], [EmptyDim(64, 0, 0, 0), FilledDim(0, 32, 2, 0, 0, 0, 0)])
+    v_point_1 = wrapper.build_vector("point", None, [32], [EmptyDim(64, 0, 0, 0), FilledDim(0, 32, 1, 0, 0, 0, 0)])
     wrapper.client_send("v_point_1", v_point_1)
-    v_point_2 = wrapper.build_vector("point", None, [1], [EmptyDim(64, 0, 0, 0), FilledDim(0, 32, 2, 0, 0, 0, 0)])
+    v_point_2 = wrapper.build_vector("point", None, [0], [EmptyDim(64, 0, 0, 0), FilledDim(0, 32, 1, 0, 0, 0, 0)])
     wrapper.client_send("v_point_2", v_point_2)
 
 def client_post(wrapper):
@@ -511,25 +511,25 @@ def client_post(wrapper):
 
 def server(wrapper):
     wrapper.server_input("tests")
-    v_tests_1 = wrapper.build_vector("tests", None, [0, 0], [FilledDim(0, 64, 1, 0, 0, 0, 0), FilledDim(1, 32, 2, 0, 0, 0, 0)])
-    v_tests_2 = wrapper.build_vector("tests", None, [0, 1], [FilledDim(0, 64, 1, 0, 0, 0, 0), FilledDim(1, 32, 2, 0, 0, 0, 0)])
+    v_tests_1 = wrapper.build_vector("tests", None, [0, 32], [FilledDim(0, 64, 1, 0, 0, 0, 0), FilledDim(1, 32, 1, 0, 0, 0, 0)])
+    v_tests_2 = wrapper.build_vector("tests", None, [0, 0], [FilledDim(0, 64, 1, 0, 0, 0, 0), FilledDim(1, 32, 1, 0, 0, 0, 0)])
     v_point_1 = wrapper.server_recv("v_point_1")
     v_point_2 = wrapper.server_recv("v_point_2")
     const_neg1 = wrapper.const(-1)
     wrapper.start_server_exec()
-    wrapper.encode(v_tests_1, [])
     wrapper.encode(v_tests_2, [])
+    wrapper.encode(v_tests_1, [])
     wrapper.encode(const_neg1, [])
     ct1 = wrapper.ciphertext_array([2], 0)
-    wrapper.set(ct1, [0], v_point_1.get())
-    wrapper.set(ct1, [1], v_point_2.get())
+    wrapper.set(ct1, [0], v_point_2.get())
+    wrapper.set(ct1, [1], v_point_1.get())
     pt1 = wrapper.plaintext_array([2], 0)
-    wrapper.set(pt1, [0], v_tests_1.get())
-    wrapper.set(pt1, [1], v_tests_2.get())
+    wrapper.set(pt1, [0], v_tests_2.get())
+    wrapper.set(pt1, [1], v_tests_1.get())
     __out = wrapper.ciphertext_array([], 0)
     __reduce_1 = wrapper.ciphertext_array([], 0)
-    for i5i in range(2):
-        instr2 = wrapper.subtract_plain(ct1.get([i5i]), pt1.get([i5i]))
+    for i5o in range(2):
+        instr2 = wrapper.subtract_plain(ct1.get([i5o]), pt1.get([i5o]))
         wrapper.multiply_inplace(instr2, instr2)
         wrapper.relinearize_inplace(instr2)
         wrapper.add_inplace(instr2, __reduce_1.get())

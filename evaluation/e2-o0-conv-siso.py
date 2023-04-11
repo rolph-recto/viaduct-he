@@ -500,7 +500,7 @@ class SEALWrapper:
 ### START GENERATED CODE
 def client_pre(wrapper):
     wrapper.client_input("img")
-    v_img_1 = wrapper.build_vector("img", None, [0, 0], [FilledDim(1, 32, 1, 0, 0, 0, 0), FilledDim(0, 30, 1, 0, 2, 0, 0), FilledDim(0, 3, 1, 0, 1, 0, 0)])
+    v_img_1 = wrapper.build_vector("img", None, [0, 0], [FilledDim(1, 32, 1, 0, 0, 0, 0), FilledDim(0, 3, 1, 0, 1, 0, 0), FilledDim(0, 30, 1, 0, 2, 0, 0)])
     wrapper.client_send("v_img_1", v_img_1)
 
 def client_post(wrapper):
@@ -509,34 +509,34 @@ def client_post(wrapper):
 
 def server(wrapper):
     wrapper.server_input("filter")
-    v_filter_1 = wrapper.build_vector("filter", None, [0, 2], [EmptyDim(30, 0, 0, 2), EmptyDim(30, 0, 0, 2), FilledDim(0, 3, 1, 0, 1, 0, 0)])
-    v_filter_2 = wrapper.build_vector("filter", None, [0, 0], [EmptyDim(30, 0, 0, 2), EmptyDim(30, 0, 0, 2), FilledDim(0, 3, 1, 0, 1, 0, 0)])
-    v_filter_3 = wrapper.build_vector("filter", None, [0, 1], [EmptyDim(30, 0, 0, 2), EmptyDim(30, 0, 0, 2), FilledDim(0, 3, 1, 0, 1, 0, 0)])
+    v_filter_1 = wrapper.build_vector("filter", None, [0, 0], [EmptyDim(30, 0, 0, 2), FilledDim(0, 3, 1, 0, 1, 0, 0), EmptyDim(30, 0, 0, 2)])
+    v_filter_2 = wrapper.build_vector("filter", None, [0, 1], [EmptyDim(30, 0, 0, 2), FilledDim(0, 3, 1, 0, 1, 0, 0), EmptyDim(30, 0, 0, 2)])
+    v_filter_3 = wrapper.build_vector("filter", None, [0, 2], [EmptyDim(30, 0, 0, 2), FilledDim(0, 3, 1, 0, 1, 0, 0), EmptyDim(30, 0, 0, 2)])
     v_img_1 = wrapper.server_recv("v_img_1")
     const_neg1 = wrapper.const(-1)
-    mask_1 = wrapper.mask([(32, 0, 30), (32, 0, 30), (4, 0, 3)])
+    mask_1 = wrapper.mask([(32, 0, 30), (4, 0, 3), (32, 0, 30)])
     wrapper.start_server_exec()
+    wrapper.encode(v_filter_3, [])
     wrapper.encode(v_filter_1, [])
     wrapper.encode(v_filter_2, [])
-    wrapper.encode(v_filter_3, [])
     wrapper.encode(mask_1, [])
     wrapper.encode(const_neg1, [])
     pt2 = wrapper.plaintext_array([3], 0)
-    wrapper.set(pt2, [0], v_filter_2.get())
-    wrapper.set(pt2, [1], v_filter_3.get())
-    wrapper.set(pt2, [2], v_filter_1.get())
+    wrapper.set(pt2, [0], v_filter_1.get())
+    wrapper.set(pt2, [1], v_filter_2.get())
+    wrapper.set(pt2, [2], v_filter_3.get())
     __out = wrapper.ciphertext_array([], 0)
     __reduce_1 = wrapper.ciphertext_array([], 0)
-    for i0 in range(3):
-        instr1 = wrapper.rotate_rows((0 + (-128 * i0)), v_img_1.get())
+    for i1 in range(3):
+        instr1 = wrapper.rotate_rows((0 + (-128 * i1)), v_img_1.get())
         wrapper.multiply_plain_inplace(instr1, mask_1.get())
-        wrapper.multiply_plain_inplace(instr1, pt2.get([i0]))
+        wrapper.multiply_plain_inplace(instr1, pt2.get([i1]))
         wrapper.add_inplace(instr1, __reduce_1.get())
         wrapper.set(__reduce_1, [], instr1)
     
-    instr8 = wrapper.rotate_rows(-2, __reduce_1.get())
+    instr8 = wrapper.rotate_rows(-64, __reduce_1.get())
     wrapper.add_inplace(instr8, __reduce_1.get())
-    instr10 = wrapper.rotate_rows(-1, instr8)
+    instr10 = wrapper.rotate_rows(-32, instr8)
     wrapper.add_inplace(instr8, instr10)
     wrapper.set(__out, [], instr8)
     wrapper.end_server_exec()

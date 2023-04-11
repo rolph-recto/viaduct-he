@@ -42,6 +42,7 @@ pub struct Materializer<'a> {
     expr_circuit_map: HashMap<ArrayName, CircuitId>,
     expr_schedule_map: HashMap<ArrayName, ExprScheduleType>,
     expr_array_type_map: HashMap<ArrayName, ArrayType>,
+    site_materializer_map: HashMap<IndexingId, String>,
     name_generator: NameGenerator,
 }
 
@@ -53,6 +54,7 @@ impl<'a> Materializer<'a> {
             expr_circuit_map: HashMap::new(),
             expr_schedule_map: HashMap::new(),
             expr_array_type_map: HashMap::new(),
+            site_materializer_map: HashMap::new(),
             name_generator: NameGenerator::new(),
         }
     }
@@ -318,17 +320,27 @@ impl<'a> Materializer<'a> {
                         &program.input_map[&transform.array];
 
                     let mut processed = false;
-                    for amat in self.array_materializers.iter_mut() {
+                    'amats: for amat in self.array_materializers.iter_mut() {
                         if amat.can_materialize(*array_type, array_shape, schedule, transform) {
-                            amat.register(
+                            let register_success = amat.register(
                                 *array_type,
                                 array_shape,
                                 schedule,
                                 transform,
                             );
 
-                            processed = true;
-                            break
+                            if register_success {
+                                processed = true;
+                                self.site_materializer_map.insert(
+                                    indexing_id.clone(),
+                                    amat.name().to_string()
+                                );
+
+                                break
+
+                            } else {
+                                continue 'amats
+                            }
                         }
                     }
 
@@ -612,6 +624,7 @@ impl<'a> Materializer<'a> {
                         .get(&transform.array)
                         .unwrap()
                         .clone();
+
                     let array_type = *self.expr_array_type_map.get(&transform.array).unwrap();
                     match ref_schedule_type {
                         ExprScheduleType::Any => {
@@ -674,8 +687,11 @@ impl<'a> Materializer<'a> {
                     let (array_shape, array_type) =
                         &program.input_map[&transform.array];
 
+                    let materializer_name =
+                        self.site_materializer_map.get(indexing_id).unwrap();
+
                     for amat in self.array_materializers.iter_mut() {
-                        if amat.can_materialize(*array_type, array_shape, schedule, transform) {
+                        if amat.name() == materializer_name {
                             let expr_id = amat.materialize(
                                 *array_type,
                                 array_shape,

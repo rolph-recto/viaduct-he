@@ -1,0 +1,32 @@
+{
+    "benchmarks": {
+        "conv-siso": [
+            "e2-o0"
+        ],
+        "conv-simo": [
+            "e2-o0"
+        ],
+        "distance": [
+            "e2-o0"
+        ],
+        "retrieval-256": [
+            "e2-o0"
+        ],
+        "retrieval-1024": [
+            "e2-o0"
+        ],
+        "matmul-2": [
+            "e2-o0"
+        ],
+        "set-union-16": [
+            "e2-o0"
+        ]
+    },
+    "trials": [
+        "bench-exec/1681227386",
+        "bench-exec/1681227404",
+        "bench-exec/1681227421",
+        "bench-exec/1681227439",
+        "bench-exec/1681227457"
+    ]
+}

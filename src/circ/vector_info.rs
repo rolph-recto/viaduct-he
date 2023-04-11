@@ -131,6 +131,31 @@ impl VectorDimContent {
             } => pad_left + (*extent) + pad_right,
         }
     }
+
+    pub fn defined(&self) -> usize {
+        match self {
+            VectorDimContent::FilledDim {
+                dim, extent, stride,
+                oob_left, oob_right,
+                pad_left, pad_right
+            } => {
+                *extent
+            },
+
+            VectorDimContent::EmptyDim {
+                extent,
+                pad_left, pad_right, oob_right
+            } => {
+                *extent
+            },
+
+            VectorDimContent::ReducedDim {
+                extent, pad_left, pad_right
+            } => {
+                *extent
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -187,6 +212,11 @@ impl VectorInfo {
                 _ => false,
             }
         })
+    }
+
+    /// does the vector have a dimension that is completely out of bounds?
+    pub fn has_oob_dim(&self) -> bool {
+        self.dims.iter().any(|dim| dim.defined() == 0)
     }
 
     fn process_schedule_dim(
@@ -267,7 +297,8 @@ impl VectorInfo {
                 extent: transform_extent,
             } => {
                 let mut oob_right: usize = 0;
-                while transform_dim_offset + (dim.stride * (dim.extent - 1 - oob_right))
+                while oob_right < dim.extent &&
+                    transform_dim_offset + (dim.stride * (dim.extent - 1 - oob_right))
                     >= *transform_extent
                 {
                     oob_right += 1;
@@ -750,7 +781,8 @@ impl VectorInfo {
                             None
 
                         } else {
-                            Some((pad_left2, dim_size - pad_right2 - oob_right2 -1))
+                            // Some((pad_left2, dim_size - pad_right2 - oob_right2 -1))
+                            Some((pad_left2, dim_size - pad_right2 - oob_right2))
                         };
                     mask_dim_info.push_front((dim_size, dim_mask));
                 },
@@ -771,7 +803,8 @@ impl VectorInfo {
                             None
 
                         } else {
-                            Some((pad_left2, dim_size - pad_right2 - oob_right2 -1))
+                            // Some((pad_left2, dim_size - pad_right2 - oob_right2 -1))
+                            Some((pad_left2, dim_size - pad_right2 - oob_right2))
                         };
 
                     mask_dim_info.push_front((dim_size, dim_mask));
@@ -848,11 +881,18 @@ impl VectorInfo {
 
                     let joined_offset = min(self_offset, other_offset);
 
-                    let self_max_index =
-                        *self_offset_map.get(*dim1) + (((extent1 - 1) * stride1) as isize);
+                    let self_max_index = if *extent1 > 0 {
+                        *self_offset_map.get(*dim1) + (((extent1 - 1) * stride1) as isize)
+                    } else {
+                        *self_offset_map.get(*dim1)
+                    };
 
-                    let other_max_index = 
-                        *other_offset_map.get(*dim1) + (((extent2 - 1) * stride1) as isize);
+                    let other_max_index = if *extent2 > 0 {
+                        *other_offset_map.get(*dim1) + (((extent2 - 1) * stride1) as isize)
+                    } else {
+                        *other_offset_map.get(*dim1)
+                    };
+
                     let max_index = max(self_max_index, other_max_index);
 
                     let joined_extent: usize =
@@ -977,11 +1017,17 @@ impl VectorInfo {
                     oob_left: _, oob_right: _,
                     pad_left: _, pad_right: _ }) =>
                 {
-                    let self_max_index =
-                        *self.offset_map.get(*dim) + (((extent1 - 1) * stride) as isize);
+                    let self_max_index = if *extent1 > 0 {
+                        *self.offset_map.get(*dim) + (((extent1 - 1) * stride) as isize)
+                    } else {
+                        *self.offset_map.get(*dim)
+                    };
 
-                    let other_max_index = 
-                        *other.offset_map.get(*dim) + (((extent2 - 1) * stride) as isize);
+                    let other_max_index = if *extent2 > 0 {
+                        *other.offset_map.get(*dim) + (((extent2 - 1) * stride) as isize)
+                    } else {
+                        *other.offset_map.get(*dim)
+                    };
 
                     let max_index = max(self_max_index, other_max_index);
                     let joined_offset = *joined_offset_map.get(*dim);

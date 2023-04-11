@@ -73,7 +73,7 @@ impl VectorDeriver {
         schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
         coord_system: &IndexCoordinateSystem,
-    ) {
+    ) -> bool {
         let indexed_offset_map_sym = schedule.get_indexed_offset_map(transform);
         let transform_offset_map_sym = schedule.get_transform_offset_map(transform);
 
@@ -87,7 +87,12 @@ impl VectorDeriver {
                 &transform_offset_map_sym,
             );
 
+            if vector.has_oob_dim() {
+                return false
+            }
+            
             self.register_vector(vector.clone());
+            true
 
         // if there are no vectorized dims, then you can't derive vectors
         } else if schedule.vectorized_dims.len() > 0 {
@@ -106,13 +111,18 @@ impl VectorDeriver {
                     &transform_offset_map_sym,
                 );
 
-                // debug!("registered {} index_map {:?} indexed_offset {} transform_offset {}",
-                //     vector, index_map, indexed_offset_map_sym, transform_offset_map_sym);
+                if vector.has_oob_dim() {
+                    return false
+                }
 
                 self.register_vector(vector.clone());
             }
 
-            debug!("registration ({}ms)", time_registration.elapsed().as_millis())
+            debug!("registration ({}ms)", time_registration.elapsed().as_millis());
+            true
+
+        } else {
+            true
         }
     }
 

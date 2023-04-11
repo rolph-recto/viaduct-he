@@ -25,7 +25,7 @@ pub trait InputArrayMaterializer<'a> {
         array_shape: &Shape,
         schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
-    );
+    ) -> bool;
 
     fn materialize(
         &mut self,
@@ -53,7 +53,7 @@ impl<'a> InputArrayMaterializer<'a> for DummyArrayMaterializer {
         Box::new(Self {})
     }
 
-    fn name(&self) -> &str { "dummy array materializer" }
+    fn name(&self) -> &str { "dummy" }
 
     // the dummy materializer can only materialize arrays w/o client preprocessing
     fn can_materialize(
@@ -72,7 +72,7 @@ impl<'a> InputArrayMaterializer<'a> for DummyArrayMaterializer {
         _array_shape: &Shape,
         _schedule: &IndexingSiteSchedule,
         _transform: &ArrayTransform,
-    ) {}
+    ) -> bool { true }
 
     fn materialize(
         &mut self,
@@ -262,7 +262,7 @@ impl<'a> InputArrayMaterializer<'a> for DefaultArrayMaterializer {
         Box::new(DefaultArrayMaterializer::new())
     }
 
-    fn name(&self) -> &str { "default array materializer" }
+    fn name(&self) -> &str { "default" }
 
     /// the default materializer can only apply when there is no client preprocessing
     fn can_materialize(
@@ -281,13 +281,13 @@ impl<'a> InputArrayMaterializer<'a> for DefaultArrayMaterializer {
         array_shape: &Shape,
         schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
-    ) {
+    ) -> bool {
         self.deriver.register_vectors(
             array_shape,
             schedule,
             transform,
             &IndexCoordinateSystem::new(schedule.exploded_dims.iter()),
-        );
+        )
     }
 
     fn materialize(
@@ -554,7 +554,7 @@ impl<'a> InputArrayMaterializer<'a> for RollArrayMaterializer {
         Box::new(RollArrayMaterializer::new())
     }
 
-    fn name(&self) -> &str { "roll array materializer" }
+    fn name(&self) -> &str { "roll" }
 
     fn can_materialize(
         &self,
@@ -603,7 +603,7 @@ impl<'a> InputArrayMaterializer<'a> for RollArrayMaterializer {
         array_shape: &Shape,
         schedule: &IndexingSiteSchedule,
         transform: &ArrayTransform,
-    ) {
+    ) -> bool {
         let mat_type =
             self.roll_materialization_type(
                 schedule.preprocessing.unwrap(),
@@ -632,7 +632,7 @@ impl<'a> InputArrayMaterializer<'a> for RollArrayMaterializer {
             &new_schedule,
             transform,
             &IndexCoordinateSystem::new(schedule.exploded_dims.iter()),
-        );
+        )
     }
 
     fn materialize(
