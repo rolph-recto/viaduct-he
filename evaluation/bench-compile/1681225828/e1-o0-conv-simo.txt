@@ -1,0 +1,94 @@
+[2023-04-11T15:10:28Z INFO  he_vectorizer] parsing: 0ms
+[2023-04-11T15:10:28Z INFO  he_vectorizer] elaboration: 0ms
+[2023-04-11T15:10:29Z INFO  he_vectorizer::scheduling::scheduler] running scheduler with iter limit: None
+[2023-04-11T15:10:29Z INFO  he_vectorizer::scheduling::scheduler] starting scheduler epoch 1
+[2023-04-11T15:10:33Z INFO  he_vectorizer::scheduling::scheduler] iteration 1
+[2023-04-11T15:10:33Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 5
+[2023-04-11T15:10:33Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 5
+[2023-04-11T15:10:37Z INFO  he_vectorizer::scheduling::scheduler] iteration 2
+[2023-04-11T15:10:37Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 23
+[2023-04-11T15:10:37Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 21
+[2023-04-11T15:10:37Z INFO  he_vectorizer::scheduling::scheduler] iteration 3
+[2023-04-11T15:10:37Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 67
+[2023-04-11T15:10:37Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 64
+[2023-04-11T15:10:38Z INFO  he_vectorizer::scheduling::scheduler] iteration 4
+[2023-04-11T15:10:38Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 138
+[2023-04-11T15:10:38Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 56
+[2023-04-11T15:10:38Z INFO  he_vectorizer::scheduling::scheduler] iteration 5
+[2023-04-11T15:10:38Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 136
+[2023-04-11T15:10:38Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 0
+[2023-04-11T15:10:38Z INFO  he_vectorizer::scheduling::scheduler] iteration 6
+[2023-04-11T15:10:38Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 0
+[2023-04-11T15:10:38Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 0
+[2023-04-11T15:10:38Z INFO  he_vectorizer::scheduling::scheduler] inline scheduler 1 total visited schedules: 370
+[2023-04-11T15:10:38Z INFO  he_vectorizer] scheduling: 9073ms
+[2023-04-11T15:10:38Z INFO  he_vectorizer] circuit generation: 0ms
+[2023-04-11T15:10:38Z INFO  he_vectorizer] circuit optimization: 0ms
+[2023-04-11T15:10:38Z INFO  he_vectorizer] plaintext hoisting: 0ms
+[2023-04-11T15:10:38Z INFO  he_vectorizer] circuit lowering: 0ms
+[2023-04-11T15:10:38Z INFO  he_vectorizer] using pyseal backend for code generation
+[2023-04-11T15:10:38Z INFO  he_vectorizer] printed generated code to stdout
+def client_pre(wrapper):
+    wrapper.client_input("img")
+    v_img_1 = wrapper.build_vector("img", None, [0, 0], [FilledDim(0, 32, 1, 0, 0, 0, 0), EmptyDim(4, 0, 0, 0), FilledDim(1, 32, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_img_1", v_img_1)
+
+def client_post(wrapper):
+    __out = wrapper.client_recv("__out")
+    wrapper.client_output(__out)
+
+def server(wrapper):
+    wrapper.server_input("filter")
+    v_filter_1 = wrapper.build_vector("filter", None, [0, 0, 2], [EmptyDim(30, 0, 0, 2), FilledDim(0, 4, 1, 0, 0, 0, 0), EmptyDim(30, 0, 0, 2)])
+    v_filter_2 = wrapper.build_vector("filter", None, [0, 2, 0], [EmptyDim(30, 0, 0, 2), FilledDim(0, 4, 1, 0, 0, 0, 0), EmptyDim(30, 0, 0, 2)])
+    v_filter_3 = wrapper.build_vector("filter", None, [0, 0, 1], [EmptyDim(30, 0, 0, 2), FilledDim(0, 4, 1, 0, 0, 0, 0), EmptyDim(30, 0, 0, 2)])
+    v_filter_4 = wrapper.build_vector("filter", None, [0, 1, 1], [EmptyDim(30, 0, 0, 2), FilledDim(0, 4, 1, 0, 0, 0, 0), EmptyDim(30, 0, 0, 2)])
+    v_filter_5 = wrapper.build_vector("filter", None, [0, 1, 0], [EmptyDim(30, 0, 0, 2), FilledDim(0, 4, 1, 0, 0, 0, 0), EmptyDim(30, 0, 0, 2)])
+    v_filter_6 = wrapper.build_vector("filter", None, [0, 0, 0], [EmptyDim(30, 0, 0, 2), FilledDim(0, 4, 1, 0, 0, 0, 0), EmptyDim(30, 0, 0, 2)])
+    v_filter_7 = wrapper.build_vector("filter", None, [0, 2, 2], [EmptyDim(30, 0, 0, 2), FilledDim(0, 4, 1, 0, 0, 0, 0), EmptyDim(30, 0, 0, 2)])
+    v_filter_8 = wrapper.build_vector("filter", None, [0, 2, 1], [EmptyDim(30, 0, 0, 2), FilledDim(0, 4, 1, 0, 0, 0, 0), EmptyDim(30, 0, 0, 2)])
+    v_filter_9 = wrapper.build_vector("filter", None, [0, 1, 2], [EmptyDim(30, 0, 0, 2), FilledDim(0, 4, 1, 0, 0, 0, 0), EmptyDim(30, 0, 0, 2)])
+    v_img_1 = wrapper.server_recv("v_img_1")
+    const_neg1 = wrapper.const(-1)
+    mask_1 = wrapper.mask([(32, 0, 30), (4, 0, 3), (32, 0, 30)])
+    wrapper.start_server_exec()
+    wrapper.encode(v_filter_1, [])
+    wrapper.encode(v_filter_5, [])
+    wrapper.encode(v_filter_9, [])
+    wrapper.encode(v_filter_8, [])
+    wrapper.encode(v_filter_2, [])
+    wrapper.encode(v_filter_3, [])
+    wrapper.encode(v_filter_4, [])
+    wrapper.encode(v_filter_7, [])
+    wrapper.encode(v_filter_6, [])
+    wrapper.encode(mask_1, [])
+    wrapper.encode(const_neg1, [])
+    pt2 = wrapper.plaintext_array([3, 3], 0)
+    wrapper.set(pt2, [0, 0], v_filter_6.get())
+    wrapper.set(pt2, [0, 1], v_filter_5.get())
+    wrapper.set(pt2, [0, 2], v_filter_2.get())
+    wrapper.set(pt2, [1, 0], v_filter_3.get())
+    wrapper.set(pt2, [1, 1], v_filter_4.get())
+    wrapper.set(pt2, [1, 2], v_filter_8.get())
+    wrapper.set(pt2, [2, 0], v_filter_1.get())
+    wrapper.set(pt2, [2, 1], v_filter_9.get())
+    wrapper.set(pt2, [2, 2], v_filter_7.get())
+    __out = wrapper.ciphertext_array([], 0)
+    __reduce_2 = wrapper.ciphertext_array([], 0)
+    for i2 in range(3):
+        __reduce_1 = wrapper.ciphertext_array([], 0)
+        for i8 in range(3):
+            instr1 = wrapper.rotate_rows(((0 + (-1 * i8)) + (-128 * i2)), v_img_1.get())
+            wrapper.multiply_plain_inplace(instr1, mask_1.get())
+            wrapper.multiply_plain_inplace(instr1, pt2.get([i8, i2]))
+            wrapper.add_inplace(instr1, __reduce_1.get())
+            wrapper.set(__reduce_1, [], instr1)
+        
+        instr8 = wrapper.add(__reduce_2.get(), __reduce_1.get())
+        wrapper.set(__reduce_2, [], instr8)
+    
+    wrapper.set(__out, [], __reduce_2.get())
+    wrapper.end_server_exec()
+    wrapper.server_send("__out", __out)
+[2023-04-11T15:10:38Z INFO  he_vectorizer] code generation: 0ms
+[2023-04-11T15:10:38Z INFO  he_vectorizer] total compile time: 9075ms

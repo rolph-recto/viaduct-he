@@ -1,0 +1,2702 @@
+init duration: 270.1568603515625ms
+coord  (0, 0)
+output:  [9 9 9 ... 9 9 9]
+noise budget:  123
+coord  (0, 1)
+output:  [18 18 18 ... 18 18 18]
+noise budget:  124
+coord  (0, 2)
+output:  [27 27 27 ... 27 27 27]
+noise budget:  124
+coord  (0, 3)
+output:  [36 36 36 ... 36 36 36]
+noise budget:  124
+coord  (0, 4)
+output:  [45 45 45 ... 45 45 45]
+noise budget:  122
+coord  (0, 5)
+output:  [54 54 54 ... 54 54 54]
+noise budget:  123
+coord  (0, 6)
+output:  [63 63 63 ... 63 63 63]
+noise budget:  123
+coord  (0, 7)
+output:  [72 72 72 ... 72 72 72]
+noise budget:  123
+coord  (0, 8)
+output:  [81 81 81 ... 81 81 81]
+noise budget:  124
+coord  (0, 9)
+output:  [90 90 90 ... 90 90 90]
+noise budget:  124
+coord  (0, 10)
+output:  [99 99 99 ... 99 99 99]
+noise budget:  124
+coord  (0, 11)
+output:  [108 108 108 ... 108 108 108]
+noise budget:  124
+coord  (0, 12)
+output:  [117 117 117 ... 117 117 117]
+noise budget:  123
+coord  (0, 13)
+output:  [126 126 126 ... 126 126 126]
+noise budget:  123
+coord  (0, 14)
+output:  [135 135 135 ... 135 135 135]
+noise budget:  124
+coord  (0, 15)
+output:  [144 144 144 ... 144 144 144]
+noise budget:  124
+coord  (0, 16)
+output:  [153 153 153 ... 153 153 153]
+noise budget:  123
+coord  (0, 17)
+output:  [162 162 162 ... 162 162 162]
+noise budget:  123
+coord  (0, 18)
+output:  [171 171 171 ... 171 171 171]
+noise budget:  124
+coord  (0, 19)
+output:  [180 180 180 ... 180 180 180]
+noise budget:  124
+coord  (0, 20)
+output:  [189 189 189 ... 189 189 189]
+noise budget:  123
+coord  (0, 21)
+output:  [198 198 198 ... 198 198 198]
+noise budget:  123
+coord  (0, 22)
+output:  [207 207 207 ... 207 207 207]
+noise budget:  123
+coord  (0, 23)
+output:  [216 216 216 ... 216 216 216]
+noise budget:  123
+coord  (0, 24)
+output:  [225 225 225 ... 225 225 225]
+noise budget:  123
+coord  (0, 25)
+output:  [234 234 234 ... 234 234 234]
+noise budget:  123
+coord  (0, 26)
+output:  [243 243 243 ... 243 243 243]
+noise budget:  123
+coord  (0, 27)
+output:  [252 252 252 ... 252 252 252]
+noise budget:  124
+coord  (0, 28)
+output:  [261 261 261 ... 261 261 261]
+noise budget:  123
+coord  (0, 29)
+output:  [270 270 270 ... 270 270 270]
+noise budget:  123
+coord  (1, 0)
+output:  [9 9 9 ... 9 9 9]
+noise budget:  124
+coord  (1, 1)
+output:  [18 18 18 ... 18 18 18]
+noise budget:  123
+coord  (1, 2)
+output:  [27 27 27 ... 27 27 27]
+noise budget:  123
+coord  (1, 3)
+output:  [36 36 36 ... 36 36 36]
+noise budget:  123
+coord  (1, 4)
+output:  [45 45 45 ... 45 45 45]
+noise budget:  124
+coord  (1, 5)
+output:  [54 54 54 ... 54 54 54]
+noise budget:  124
+coord  (1, 6)
+output:  [63 63 63 ... 63 63 63]
+noise budget:  124
+coord  (1, 7)
+output:  [72 72 72 ... 72 72 72]
+noise budget:  123
+coord  (1, 8)
+output:  [81 81 81 ... 81 81 81]
+noise budget:  124
+coord  (1, 9)
+output:  [90 90 90 ... 90 90 90]
+noise budget:  123
+coord  (1, 10)
+output:  [99 99 99 ... 99 99 99]
+noise budget:  124
+coord  (1, 11)
+output:  [108 108 108 ... 108 108 108]
+noise budget:  124
+coord  (1, 12)
+output:  [117 117 117 ... 117 117 117]
+noise budget:  123
+coord  (1, 13)
+output:  [126 126 126 ... 126 126 126]
+noise budget:  123
+coord  (1, 14)
+output:  [135 135 135 ... 135 135 135]
+noise budget:  123
+coord  (1, 15)
+output:  [144 144 144 ... 144 144 144]
+noise budget:  122
+coord  (1, 16)
+output:  [153 153 153 ... 153 153 153]
+noise budget:  124
+coord  (1, 17)
+output:  [162 162 162 ... 162 162 162]
+noise budget:  124
+coord  (1, 18)
+output:  [171 171 171 ... 171 171 171]
+noise budget:  123
+coord  (1, 19)
+output:  [180 180 180 ... 180 180 180]
+noise budget:  122
+coord  (1, 20)
+output:  [189 189 189 ... 189 189 189]
+noise budget:  124
+coord  (1, 21)
+output:  [198 198 198 ... 198 198 198]
+noise budget:  123
+coord  (1, 22)
+output:  [207 207 207 ... 207 207 207]
+noise budget:  122
+coord  (1, 23)
+output:  [216 216 216 ... 216 216 216]
+noise budget:  123
+coord  (1, 24)
+output:  [225 225 225 ... 225 225 225]
+noise budget:  124
+coord  (1, 25)
+output:  [234 234 234 ... 234 234 234]
+noise budget:  123
+coord  (1, 26)
+output:  [243 243 243 ... 243 243 243]
+noise budget:  124
+coord  (1, 27)
+output:  [252 252 252 ... 252 252 252]
+noise budget:  124
+coord  (1, 28)
+output:  [261 261 261 ... 261 261 261]
+noise budget:  123
+coord  (1, 29)
+output:  [270 270 270 ... 270 270 270]
+noise budget:  123
+coord  (2, 0)
+output:  [9 9 9 ... 9 9 9]
+noise budget:  123
+coord  (2, 1)
+output:  [18 18 18 ... 18 18 18]
+noise budget:  123
+coord  (2, 2)
+output:  [27 27 27 ... 27 27 27]
+noise budget:  123
+coord  (2, 3)
+output:  [36 36 36 ... 36 36 36]
+noise budget:  123
+coord  (2, 4)
+output:  [45 45 45 ... 45 45 45]
+noise budget:  123
+coord  (2, 5)
+output:  [54 54 54 ... 54 54 54]
+noise budget:  123
+coord  (2, 6)
+output:  [63 63 63 ... 63 63 63]
+noise budget:  124
+coord  (2, 7)
+output:  [72 72 72 ... 72 72 72]
+noise budget:  123
+coord  (2, 8)
+output:  [81 81 81 ... 81 81 81]
+noise budget:  124
+coord  (2, 9)
+output:  [90 90 90 ... 90 90 90]
+noise budget:  124
+coord  (2, 10)
+output:  [99 99 99 ... 99 99 99]
+noise budget:  123
+coord  (2, 11)
+output:  [108 108 108 ... 108 108 108]
+noise budget:  124
+coord  (2, 12)
+output:  [117 117 117 ... 117 117 117]
+noise budget:  123
+coord  (2, 13)
+output:  [126 126 126 ... 126 126 126]
+noise budget:  123
+coord  (2, 14)
+output:  [135 135 135 ... 135 135 135]
+noise budget:  123
+coord  (2, 15)
+output:  [144 144 144 ... 144 144 144]
+noise budget:  124
+coord  (2, 16)
+output:  [153 153 153 ... 153 153 153]
+noise budget:  123
+coord  (2, 17)
+output:  [162 162 162 ... 162 162 162]
+noise budget:  122
+coord  (2, 18)
+output:  [171 171 171 ... 171 171 171]
+noise budget:  124
+coord  (2, 19)
+output:  [180 180 180 ... 180 180 180]
+noise budget:  123
+coord  (2, 20)
+output:  [189 189 189 ... 189 189 189]
+noise budget:  123
+coord  (2, 21)
+output:  [198 198 198 ... 198 198 198]
+noise budget:  124
+coord  (2, 22)
+output:  [207 207 207 ... 207 207 207]
+noise budget:  123
+coord  (2, 23)
+output:  [216 216 216 ... 216 216 216]
+noise budget:  124
+coord  (2, 24)
+output:  [225 225 225 ... 225 225 225]
+noise budget:  124
+coord  (2, 25)
+output:  [234 234 234 ... 234 234 234]
+noise budget:  123
+coord  (2, 26)
+output:  [243 243 243 ... 243 243 243]
+noise budget:  124
+coord  (2, 27)
+output:  [252 252 252 ... 252 252 252]
+noise budget:  123
+coord  (2, 28)
+output:  [261 261 261 ... 261 261 261]
+noise budget:  124
+coord  (2, 29)
+output:  [270 270 270 ... 270 270 270]
+noise budget:  124
+coord  (3, 0)
+output:  [9 9 9 ... 9 9 9]
+noise budget:  123
+coord  (3, 1)
+output:  [18 18 18 ... 18 18 18]
+noise budget:  123
+coord  (3, 2)
+output:  [27 27 27 ... 27 27 27]
+noise budget:  123
+coord  (3, 3)
+output:  [36 36 36 ... 36 36 36]
+noise budget:  124
+coord  (3, 4)
+output:  [45 45 45 ... 45 45 45]
+noise budget:  123
+coord  (3, 5)
+output:  [54 54 54 ... 54 54 54]
+noise budget:  122
+coord  (3, 6)
+output:  [63 63 63 ... 63 63 63]
+noise budget:  123
+coord  (3, 7)
+output:  [72 72 72 ... 72 72 72]
+noise budget:  124
+coord  (3, 8)
+output:  [81 81 81 ... 81 81 81]
+noise budget:  123
+coord  (3, 9)
+output:  [90 90 90 ... 90 90 90]
+noise budget:  124
+coord  (3, 10)
+output:  [99 99 99 ... 99 99 99]
+noise budget:  123
+coord  (3, 11)
+output:  [108 108 108 ... 108 108 108]
+noise budget:  124
+coord  (3, 12)
+output:  [117 117 117 ... 117 117 117]
+noise budget:  122
+coord  (3, 13)
+output:  [126 126 126 ... 126 126 126]
+noise budget:  123
+coord  (3, 14)
+output:  [135 135 135 ... 135 135 135]
+noise budget:  124
+coord  (3, 15)
+output:  [144 144 144 ... 144 144 144]
+noise budget:  123
+coord  (3, 16)
+output:  [153 153 153 ... 153 153 153]
+noise budget:  124
+coord  (3, 17)
+output:  [162 162 162 ... 162 162 162]
+noise budget:  123
+coord  (3, 18)
+output:  [171 171 171 ... 171 171 171]
+noise budget:  123
+coord  (3, 19)
+output:  [180 180 180 ... 180 180 180]
+noise budget:  123
+coord  (3, 20)
+output:  [189 189 189 ... 189 189 189]
+noise budget:  123
+coord  (3, 21)
+output:  [198 198 198 ... 198 198 198]
+noise budget:  124
+coord  (3, 22)
+output:  [207 207 207 ... 207 207 207]
+noise budget:  123
+coord  (3, 23)
+output:  [216 216 216 ... 216 216 216]
+noise budget:  123
+coord  (3, 24)
+output:  [225 225 225 ... 225 225 225]
+noise budget:  124
+coord  (3, 25)
+output:  [234 234 234 ... 234 234 234]
+noise budget:  123
+coord  (3, 26)
+output:  [243 243 243 ... 243 243 243]
+noise budget:  123
+coord  (3, 27)
+output:  [252 252 252 ... 252 252 252]
+noise budget:  123
+coord  (3, 28)
+output:  [261 261 261 ... 261 261 261]
+noise budget:  123
+coord  (3, 29)
+output:  [270 270 270 ... 270 270 270]
+noise budget:  123
+coord  (4, 0)
+output:  [9 9 9 ... 9 9 9]
+noise budget:  123
+coord  (4, 1)
+output:  [18 18 18 ... 18 18 18]
+noise budget:  123
+coord  (4, 2)
+output:  [27 27 27 ... 27 27 27]
+noise budget:  123
+coord  (4, 3)
+output:  [36 36 36 ... 36 36 36]
+noise budget:  123
+coord  (4, 4)
+output:  [45 45 45 ... 45 45 45]
+noise budget:  123
+coord  (4, 5)
+output:  [54 54 54 ... 54 54 54]
+noise budget:  123
+coord  (4, 6)
+output:  [63 63 63 ... 63 63 63]
+noise budget:  124
+coord  (4, 7)
+output:  [72 72 72 ... 72 72 72]
+noise budget:  123
+coord  (4, 8)
+output:  [81 81 81 ... 81 81 81]
+noise budget:  123
+coord  (4, 9)
+output:  [90 90 90 ... 90 90 90]
+noise budget:  123
+coord  (4, 10)
+output:  [99 99 99 ... 99 99 99]
+noise budget:  123
+coord  (4, 11)
+output:  [108 108 108 ... 108 108 108]
+noise budget:  123
+coord  (4, 12)
+output:  [117 117 117 ... 117 117 117]
+noise budget:  124
+coord  (4, 13)
+output:  [126 126 126 ... 126 126 126]
+noise budget:  123
+coord  (4, 14)
+output:  [135 135 135 ... 135 135 135]
+noise budget:  123
+coord  (4, 15)
+output:  [144 144 144 ... 144 144 144]
+noise budget:  123
+coord  (4, 16)
+output:  [153 153 153 ... 153 153 153]
+noise budget:  124
+coord  (4, 17)
+output:  [162 162 162 ... 162 162 162]
+noise budget:  123
+coord  (4, 18)
+output:  [171 171 171 ... 171 171 171]
+noise budget:  123
+coord  (4, 19)
+output:  [180 180 180 ... 180 180 180]
+noise budget:  123
+coord  (4, 20)
+output:  [189 189 189 ... 189 189 189]
+noise budget:  123
+coord  (4, 21)
+output:  [198 198 198 ... 198 198 198]
+noise budget:  124
+coord  (4, 22)
+output:  [207 207 207 ... 207 207 207]
+noise budget:  123
+coord  (4, 23)
+output:  [216 216 216 ... 216 216 216]
+noise budget:  123
+coord  (4, 24)
+output:  [225 225 225 ... 225 225 225]
+noise budget:  123
+coord  (4, 25)
+output:  [234 234 234 ... 234 234 234]
+noise budget:  123
+coord  (4, 26)
+output:  [243 243 243 ... 243 243 243]
+noise budget:  123
+coord  (4, 27)
+output:  [252 252 252 ... 252 252 252]
+noise budget:  123
+coord  (4, 28)
+output:  [261 261 261 ... 261 261 261]
+noise budget:  124
+coord  (4, 29)
+output:  [270 270 270 ... 270 270 270]
+noise budget:  124
+coord  (5, 0)
+output:  [9 9 9 ... 9 9 9]
+noise budget:  123
+coord  (5, 1)
+output:  [18 18 18 ... 18 18 18]
+noise budget:  123
+coord  (5, 2)
+output:  [27 27 27 ... 27 27 27]
+noise budget:  123
+coord  (5, 3)
+output:  [36 36 36 ... 36 36 36]
+noise budget:  124
+coord  (5, 4)
+output:  [45 45 45 ... 45 45 45]
+noise budget:  122
+coord  (5, 5)
+output:  [54 54 54 ... 54 54 54]
+noise budget:  124
+coord  (5, 6)
+output:  [63 63 63 ... 63 63 63]
+noise budget:  123
+coord  (5, 7)
+output:  [72 72 72 ... 72 72 72]
+noise budget:  124
+coord  (5, 8)
+output:  [81 81 81 ... 81 81 81]
+noise budget:  123
+coord  (5, 9)
+output:  [90 90 90 ... 90 90 90]
+noise budget:  123
+coord  (5, 10)
+output:  [99 99 99 ... 99 99 99]
+noise budget:  123
+coord  (5, 11)
+output:  [108 108 108 ... 108 108 108]
+noise budget:  123
+coord  (5, 12)
+output:  [117 117 117 ... 117 117 117]
+noise budget:  123
+coord  (5, 13)
+output:  [126 126 126 ... 126 126 126]
+noise budget:  123
+coord  (5, 14)
+output:  [135 135 135 ... 135 135 135]
+noise budget:  123
+coord  (5, 15)
+output:  [144 144 144 ... 144 144 144]
+noise budget:  124
+coord  (5, 16)
+output:  [153 153 153 ... 153 153 153]
+noise budget:  123
+coord  (5, 17)
+output:  [162 162 162 ... 162 162 162]
+noise budget:  123
+coord  (5, 18)
+output:  [171 171 171 ... 171 171 171]
+noise budget:  124
+coord  (5, 19)
+output:  [180 180 180 ... 180 180 180]
+noise budget:  123
+coord  (5, 20)
+output:  [189 189 189 ... 189 189 189]
+noise budget:  123
+coord  (5, 21)
+output:  [198 198 198 ... 198 198 198]
+noise budget:  124
+coord  (5, 22)
+output:  [207 207 207 ... 207 207 207]
+noise budget:  123
+coord  (5, 23)
+output:  [216 216 216 ... 216 216 216]
+noise budget:  124
+coord  (5, 24)
+output:  [225 225 225 ... 225 225 225]
+noise budget:  124
+coord  (5, 25)
+output:  [234 234 234 ... 234 234 234]
+noise budget:  123
+coord  (5, 26)
+output:  [243 243 243 ... 243 243 243]
+noise budget:  123
+coord  (5, 27)
+output:  [252 252 252 ... 252 252 252]
+noise budget:  124
+coord  (5, 28)
+output:  [261 261 261 ... 261 261 261]
+noise budget:  123
+coord  (5, 29)
+output:  [270 270 270 ... 270 270 270]
+noise budget:  123
+coord  (6, 0)
+output:  [9 9 9 ... 9 9 9]
+noise budget:  123
+coord  (6, 1)
+output:  [18 18 18 ... 18 18 18]
+noise budget:  123
+coord  (6, 2)
+output:  [27 27 27 ... 27 27 27]
+noise budget:  123
+coord  (6, 3)
+output:  [36 36 36 ... 36 36 36]
+noise budget:  123
+coord  (6, 4)
+output:  [45 45 45 ... 45 45 45]
+noise budget:  122
+coord  (6, 5)
+output:  [54 54 54 ... 54 54 54]
+noise budget:  123
+coord  (6, 6)
+output:  [63 63 63 ... 63 63 63]
+noise budget:  123
+coord  (6, 7)
+output:  [72 72 72 ... 72 72 72]
+noise budget:  124
+coord  (6, 8)
+output:  [81 81 81 ... 81 81 81]
+noise budget:  123
+coord  (6, 9)
+output:  [90 90 90 ... 90 90 90]
+noise budget:  122
+coord  (6, 10)
+output:  [99 99 99 ... 99 99 99]
+noise budget:  124
+coord  (6, 11)
+output:  [108 108 108 ... 108 108 108]
+noise budget:  123
+coord  (6, 12)
+output:  [117 117 117 ... 117 117 117]
+noise budget:  124
+coord  (6, 13)
+output:  [126 126 126 ... 126 126 126]
+noise budget:  124
+coord  (6, 14)
+output:  [135 135 135 ... 135 135 135]
+noise budget:  123
+coord  (6, 15)
+output:  [144 144 144 ... 144 144 144]
+noise budget:  124
+coord  (6, 16)
+output:  [153 153 153 ... 153 153 153]
+noise budget:  124
+coord  (6, 17)
+output:  [162 162 162 ... 162 162 162]
+noise budget:  123
+coord  (6, 18)
+output:  [171 171 171 ... 171 171 171]
+noise budget:  123
+coord  (6, 19)
+output:  [180 180 180 ... 180 180 180]
+noise budget:  123
+coord  (6, 20)
+output:  [189 189 189 ... 189 189 189]
+noise budget:  124
+coord  (6, 21)
+output:  [198 198 198 ... 198 198 198]
+noise budget:  123
+coord  (6, 22)
+output:  [207 207 207 ... 207 207 207]
+noise budget:  124
+coord  (6, 23)
+output:  [216 216 216 ... 216 216 216]
+noise budget:  123
+coord  (6, 24)
+output:  [225 225 225 ... 225 225 225]
+noise budget:  123
+coord  (6, 25)
+output:  [234 234 234 ... 234 234 234]
+noise budget:  123
+coord  (6, 26)
+output:  [243 243 243 ... 243 243 243]
+noise budget:  123
+coord  (6, 27)
+output:  [252 252 252 ... 252 252 252]
+noise budget:  123
+coord  (6, 28)
+output:  [261 261 261 ... 261 261 261]
+noise budget:  123
+coord  (6, 29)
+output:  [270 270 270 ... 270 270 270]
+noise budget:  124
+coord  (7, 0)
+output:  [9 9 9 ... 9 9 9]
+noise budget:  123
+coord  (7, 1)
+output:  [18 18 18 ... 18 18 18]
+noise budget:  123
+coord  (7, 2)
+output:  [27 27 27 ... 27 27 27]
+noise budget:  123
+coord  (7, 3)
+output:  [36 36 36 ... 36 36 36]
+noise budget:  123
+coord  (7, 4)
+output:  [45 45 45 ... 45 45 45]
+noise budget:  124
+coord  (7, 5)
+output:  [54 54 54 ... 54 54 54]
+noise budget:  123
+coord  (7, 6)
+output:  [63 63 63 ... 63 63 63]
+noise budget:  123
+coord  (7, 7)
+output:  [72 72 72 ... 72 72 72]
+noise budget:  124
+coord  (7, 8)
+output:  [81 81 81 ... 81 81 81]
+noise budget:  124
+coord  (7, 9)
+output:  [90 90 90 ... 90 90 90]
+noise budget:  123
+coord  (7, 10)
+output:  [99 99 99 ... 99 99 99]
+noise budget:  124
+coord  (7, 11)
+output:  [108 108 108 ... 108 108 108]
+noise budget:  123
+coord  (7, 12)
+output:  [117 117 117 ... 117 117 117]
+noise budget:  123
+coord  (7, 13)
+output:  [126 126 126 ... 126 126 126]
+noise budget:  123
+coord  (7, 14)
+output:  [135 135 135 ... 135 135 135]
+noise budget:  123
+coord  (7, 15)
+output:  [144 144 144 ... 144 144 144]
+noise budget:  123
+coord  (7, 16)
+output:  [153 153 153 ... 153 153 153]
+noise budget:  123
+coord  (7, 17)
+output:  [162 162 162 ... 162 162 162]
+noise budget:  124
+coord  (7, 18)
+output:  [171 171 171 ... 171 171 171]
+noise budget:  123
+coord  (7, 19)
+output:  [180 180 180 ... 180 180 180]
+noise budget:  124
+coord  (7, 20)
+output:  [189 189 189 ... 189 189 189]
+noise budget:  124
+coord  (7, 21)
+output:  [198 198 198 ... 198 198 198]
+noise budget:  124
+coord  (7, 22)
+output:  [207 207 207 ... 207 207 207]
+noise budget:  123
+coord  (7, 23)
+output:  [216 216 216 ... 216 216 216]
+noise budget:  124
+coord  (7, 24)
+output:  [225 225 225 ... 225 225 225]
+noise budget:  123
+coord  (7, 25)
+output:  [234 234 234 ... 234 234 234]
+noise budget:  123
+coord  (7, 26)
+output:  [243 243 243 ... 243 243 243]
+noise budget:  123
+coord  (7, 27)
+output:  [252 252 252 ... 252 252 252]
+noise budget:  123
+coord  (7, 28)
+output:  [261 261 261 ... 261 261 261]
+noise budget:  123
+coord  (7, 29)
+output:  [270 270 270 ... 270 270 270]
+noise budget:  124
+coord  (8, 0)
+output:  [9 9 9 ... 9 9 9]
+noise budget:  123
+coord  (8, 1)
+output:  [18 18 18 ... 18 18 18]
+noise budget:  124
+coord  (8, 2)
+output:  [27 27 27 ... 27 27 27]
+noise budget:  124
+coord  (8, 3)
+output:  [36 36 36 ... 36 36 36]
+noise budget:  123
+coord  (8, 4)
+output:  [45 45 45 ... 45 45 45]
+noise budget:  122
+coord  (8, 5)
+output:  [54 54 54 ... 54 54 54]
+noise budget:  122
+coord  (8, 6)
+output:  [63 63 63 ... 63 63 63]
+noise budget:  123
+coord  (8, 7)
+output:  [72 72 72 ... 72 72 72]
+noise budget:  123
+coord  (8, 8)
+output:  [81 81 81 ... 81 81 81]
+noise budget:  123
+coord  (8, 9)
+output:  [90 90 90 ... 90 90 90]
+noise budget:  123
+coord  (8, 10)
+output:  [99 99 99 ... 99 99 99]
+noise budget:  123
+coord  (8, 11)
+output:  [108 108 108 ... 108 108 108]
+noise budget:  123
+coord  (8, 12)
+output:  [117 117 117 ... 117 117 117]
+noise budget:  124
+coord  (8, 13)
+output:  [126 126 126 ... 126 126 126]
+noise budget:  123
+coord  (8, 14)
+output:  [135 135 135 ... 135 135 135]
+noise budget:  124
+coord  (8, 15)
+output:  [144 144 144 ... 144 144 144]
+noise budget:  124
+coord  (8, 16)
+output:  [153 153 153 ... 153 153 153]
+noise budget:  122
+coord  (8, 17)
+output:  [162 162 162 ... 162 162 162]
+noise budget:  124
+coord  (8, 18)
+output:  [171 171 171 ... 171 171 171]
+noise budget:  123
+coord  (8, 19)
+output:  [180 180 180 ... 180 180 180]
+noise budget:  124
+coord  (8, 20)
+output:  [189 189 189 ... 189 189 189]
+noise budget:  124
+coord  (8, 21)
+output:  [198 198 198 ... 198 198 198]
+noise budget:  123
+coord  (8, 22)
+output:  [207 207 207 ... 207 207 207]
+noise budget:  123
+coord  (8, 23)
+output:  [216 216 216 ... 216 216 216]
+noise budget:  124
+coord  (8, 24)
+output:  [225 225 225 ... 225 225 225]
+noise budget:  123
+coord  (8, 25)
+output:  [234 234 234 ... 234 234 234]
+noise budget:  123
+coord  (8, 26)
+output:  [243 243 243 ... 243 243 243]
+noise budget:  124
+coord  (8, 27)
+output:  [252 252 252 ... 252 252 252]
+noise budget:  124
+coord  (8, 28)
+output:  [261 261 261 ... 261 261 261]
+noise budget:  124
+coord  (8, 29)
+output:  [270 270 270 ... 270 270 270]
+noise budget:  123
+coord  (9, 0)
+output:  [9 9 9 ... 9 9 9]
+noise budget:  123
+coord  (9, 1)
+output:  [18 18 18 ... 18 18 18]
+noise budget:  124
+coord  (9, 2)
+output:  [27 27 27 ... 27 27 27]
+noise budget:  123
+coord  (9, 3)
+output:  [36 36 36 ... 36 36 36]
+noise budget:  123
+coord  (9, 4)
+output:  [45 45 45 ... 45 45 45]
+noise budget:  124
+coord  (9, 5)
+output:  [54 54 54 ... 54 54 54]
+noise budget:  123
+coord  (9, 6)
+output:  [63 63 63 ... 63 63 63]
+noise budget:  124
+coord  (9, 7)
+output:  [72 72 72 ... 72 72 72]
+noise budget:  124
+coord  (9, 8)
+output:  [81 81 81 ... 81 81 81]
+noise budget:  123
+coord  (9, 9)
+output:  [90 90 90 ... 90 90 90]
+noise budget:  124
+coord  (9, 10)
+output:  [99 99 99 ... 99 99 99]
+noise budget:  124
+coord  (9, 11)
+output:  [108 108 108 ... 108 108 108]
+noise budget:  123
+coord  (9, 12)
+output:  [117 117 117 ... 117 117 117]
+noise budget:  124
+coord  (9, 13)
+output:  [126 126 126 ... 126 126 126]
+noise budget:  123
+coord  (9, 14)
+output:  [135 135 135 ... 135 135 135]
+noise budget:  123
+coord  (9, 15)
+output:  [144 144 144 ... 144 144 144]
+noise budget:  123
+coord  (9, 16)
+output:  [153 153 153 ... 153 153 153]
+noise budget:  124
+coord  (9, 17)
+output:  [162 162 162 ... 162 162 162]
+noise budget:  123
+coord  (9, 18)
+output:  [171 171 171 ... 171 171 171]
+noise budget:  123
+coord  (9, 19)
+output:  [180 180 180 ... 180 180 180]
+noise budget:  124
+coord  (9, 20)
+output:  [189 189 189 ... 189 189 189]
+noise budget:  124
+coord  (9, 21)
+output:  [198 198 198 ... 198 198 198]
+noise budget:  122
+coord  (9, 22)
+output:  [207 207 207 ... 207 207 207]
+noise budget:  123
+coord  (9, 23)
+output:  [216 216 216 ... 216 216 216]
+noise budget:  123
+coord  (9, 24)
+output:  [225 225 225 ... 225 225 225]
+noise budget:  123
+coord  (9, 25)
+output:  [234 234 234 ... 234 234 234]
+noise budget:  123
+coord  (9, 26)
+output:  [243 243 243 ... 243 243 243]
+noise budget:  123
+coord  (9, 27)
+output:  [252 252 252 ... 252 252 252]
+noise budget:  123
+coord  (9, 28)
+output:  [261 261 261 ... 261 261 261]
+noise budget:  123
+coord  (9, 29)
+output:  [270 270 270 ... 270 270 270]
+noise budget:  124
+coord  (10, 0)
+output:  [9 9 9 ... 9 9 9]
+noise budget:  122
+coord  (10, 1)
+output:  [18 18 18 ... 18 18 18]
+noise budget:  123
+coord  (10, 2)
+output:  [27 27 27 ... 27 27 27]
+noise budget:  124
+coord  (10, 3)
+output:  [36 36 36 ... 36 36 36]
+noise budget:  123
+coord  (10, 4)
+output:  [45 45 45 ... 45 45 45]
+noise budget:  122
+coord  (10, 5)
+output:  [54 54 54 ... 54 54 54]
+noise budget:  123
+coord  (10, 6)
+output:  [63 63 63 ... 63 63 63]
+noise budget:  123
+coord  (10, 7)
+output:  [72 72 72 ... 72 72 72]
+noise budget:  123
+coord  (10, 8)
+output:  [81 81 81 ... 81 81 81]
+noise budget:  123
+coord  (10, 9)
+output:  [90 90 90 ... 90 90 90]
+noise budget:  124
+coord  (10, 10)
+output:  [99 99 99 ... 99 99 99]
+noise budget:  124
+coord  (10, 11)
+output:  [108 108 108 ... 108 108 108]
+noise budget:  123
+coord  (10, 12)
+output:  [117 117 117 ... 117 117 117]
+noise budget:  123
+coord  (10, 13)
+output:  [126 126 126 ... 126 126 126]
+noise budget:  124
+coord  (10, 14)
+output:  [135 135 135 ... 135 135 135]
+noise budget:  123
+coord  (10, 15)
+output:  [144 144 144 ... 144 144 144]
+noise budget:  124
+coord  (10, 16)
+output:  [153 153 153 ... 153 153 153]
+noise budget:  123
+coord  (10, 17)
+output:  [162 162 162 ... 162 162 162]
+noise budget:  124
+coord  (10, 18)
+output:  [171 171 171 ... 171 171 171]
+noise budget:  123
+coord  (10, 19)
+output:  [180 180 180 ... 180 180 180]
+noise budget:  123
+coord  (10, 20)
+output:  [189 189 189 ... 189 189 189]
+noise budget:  124
+coord  (10, 21)
+output:  [198 198 198 ... 198 198 198]
+noise budget:  122
+coord  (10, 22)
+output:  [207 207 207 ... 207 207 207]
+noise budget:  123
+coord  (10, 23)
+output:  [216 216 216 ... 216 216 216]
+noise budget:  123
+coord  (10, 24)
+output:  [225 225 225 ... 225 225 225]
+noise budget:  123
+coord  (10, 25)
+output:  [234 234 234 ... 234 234 234]
+noise budget:  123
+coord  (10, 26)
+output:  [243 243 243 ... 243 243 243]
+noise budget:  124
+coord  (10, 27)
+output:  [252 252 252 ... 252 252 252]
+noise budget:  123
+coord  (10, 28)
+output:  [261 261 261 ... 261 261 261]
+noise budget:  123
+coord  (10, 29)
+output:  [270 270 270 ... 270 270 270]
+noise budget:  123
+coord  (11, 0)
+output:  [9 9 9 ... 9 9 9]
+noise budget:  124
+coord  (11, 1)
+output:  [18 18 18 ... 18 18 18]
+noise budget:  123
+coord  (11, 2)
+output:  [27 27 27 ... 27 27 27]
+noise budget:  123
+coord  (11, 3)
+output:  [36 36 36 ... 36 36 36]
+noise budget:  123
+coord  (11, 4)
+output:  [45 45 45 ... 45 45 45]
+noise budget:  123
+coord  (11, 5)
+output:  [54 54 54 ... 54 54 54]
+noise budget:  124
+coord  (11, 6)
+output:  [63 63 63 ... 63 63 63]
+noise budget:  124
+coord  (11, 7)
+output:  [72 72 72 ... 72 72 72]
+noise budget:  124
+coord  (11, 8)
+output:  [81 81 81 ... 81 81 81]
+noise budget:  123
+coord  (11, 9)
+output:  [90 90 90 ... 90 90 90]
+noise budget:  122
+coord  (11, 10)
+output:  [99 99 99 ... 99 99 99]
+noise budget:  124
+coord  (11, 11)
+output:  [108 108 108 ... 108 108 108]
+noise budget:  123
+coord  (11, 12)
+output:  [117 117 117 ... 117 117 117]
+noise budget:  124
+coord  (11, 13)
+output:  [126 126 126 ... 126 126 126]
+noise budget:  123
+coord  (11, 14)
+output:  [135 135 135 ... 135 135 135]
+noise budget:  123
+coord  (11, 15)
+output:  [144 144 144 ... 144 144 144]
+noise budget:  123
+coord  (11, 16)
+output:  [153 153 153 ... 153 153 153]
+noise budget:  123
+coord  (11, 17)
+output:  [162 162 162 ... 162 162 162]
+noise budget:  122
+coord  (11, 18)
+output:  [171 171 171 ... 171 171 171]
+noise budget:  122
+coord  (11, 19)
+output:  [180 180 180 ... 180 180 180]
+noise budget:  122
+coord  (11, 20)
+output:  [189 189 189 ... 189 189 189]
+noise budget:  123
+coord  (11, 21)
+output:  [198 198 198 ... 198 198 198]
+noise budget:  124
+coord  (11, 22)
+output:  [207 207 207 ... 207 207 207]
+noise budget:  123
+coord  (11, 23)
+output:  [216 216 216 ... 216 216 216]
+noise budget:  124
+coord  (11, 24)
+output:  [225 225 225 ... 225 225 225]
+noise budget:  123
+coord  (11, 25)
+output:  [234 234 234 ... 234 234 234]
+noise budget:  123
+coord  (11, 26)
+output:  [243 243 243 ... 243 243 243]
+noise budget:  123
+coord  (11, 27)
+output:  [252 252 252 ... 252 252 252]
+noise budget:  123
+coord  (11, 28)
+output:  [261 261 261 ... 261 261 261]
+noise budget:  123
+coord  (11, 29)
+output:  [270 270 270 ... 270 270 270]
+noise budget:  123
+coord  (12, 0)
+output:  [9 9 9 ... 9 9 9]
+noise budget:  123
+coord  (12, 1)
+output:  [18 18 18 ... 18 18 18]
+noise budget:  123
+coord  (12, 2)
+output:  [27 27 27 ... 27 27 27]
+noise budget:  123
+coord  (12, 3)
+output:  [36 36 36 ... 36 36 36]
+noise budget:  123
+coord  (12, 4)
+output:  [45 45 45 ... 45 45 45]
+noise budget:  123
+coord  (12, 5)
+output:  [54 54 54 ... 54 54 54]
+noise budget:  122
+coord  (12, 6)
+output:  [63 63 63 ... 63 63 63]
+noise budget:  123
+coord  (12, 7)
+output:  [72 72 72 ... 72 72 72]
+noise budget:  124
+coord  (12, 8)
+output:  [81 81 81 ... 81 81 81]
+noise budget:  123
+coord  (12, 9)
+output:  [90 90 90 ... 90 90 90]
+noise budget:  124
+coord  (12, 10)
+output:  [99 99 99 ... 99 99 99]
+noise budget:  123
+coord  (12, 11)
+output:  [108 108 108 ... 108 108 108]
+noise budget:  122
+coord  (12, 12)
+output:  [117 117 117 ... 117 117 117]
+noise budget:  124
+coord  (12, 13)
+output:  [126 126 126 ... 126 126 126]
+noise budget:  123
+coord  (12, 14)
+output:  [135 135 135 ... 135 135 135]
+noise budget:  123
+coord  (12, 15)
+output:  [144 144 144 ... 144 144 144]
+noise budget:  124
+coord  (12, 16)
+output:  [153 153 153 ... 153 153 153]
+noise budget:  123
+coord  (12, 17)
+output:  [162 162 162 ... 162 162 162]
+noise budget:  123
+coord  (12, 18)
+output:  [171 171 171 ... 171 171 171]
+noise budget:  123
+coord  (12, 19)
+output:  [180 180 180 ... 180 180 180]
+noise budget:  124
+coord  (12, 20)
+output:  [189 189 189 ... 189 189 189]
+noise budget:  123
+coord  (12, 21)
+output:  [198 198 198 ... 198 198 198]
+noise budget:  124
+coord  (12, 22)
+output:  [207 207 207 ... 207 207 207]
+noise budget:  123
+coord  (12, 23)
+output:  [216 216 216 ... 216 216 216]
+noise budget:  124
+coord  (12, 24)
+output:  [225 225 225 ... 225 225 225]
+noise budget:  123
+coord  (12, 25)
+output:  [234 234 234 ... 234 234 234]
+noise budget:  123
+coord  (12, 26)
+output:  [243 243 243 ... 243 243 243]
+noise budget:  123
+coord  (12, 27)
+output:  [252 252 252 ... 252 252 252]
+noise budget:  123
+coord  (12, 28)
+output:  [261 261 261 ... 261 261 261]
+noise budget:  123
+coord  (12, 29)
+output:  [270 270 270 ... 270 270 270]
+noise budget:  123
+coord  (13, 0)
+output:  [9 9 9 ... 9 9 9]
+noise budget:  124
+coord  (13, 1)
+output:  [18 18 18 ... 18 18 18]
+noise budget:  124
+coord  (13, 2)
+output:  [27 27 27 ... 27 27 27]
+noise budget:  123
+coord  (13, 3)
+output:  [36 36 36 ... 36 36 36]
+noise budget:  123
+coord  (13, 4)
+output:  [45 45 45 ... 45 45 45]
+noise budget:  124
+coord  (13, 5)
+output:  [54 54 54 ... 54 54 54]
+noise budget:  123
+coord  (13, 6)
+output:  [63 63 63 ... 63 63 63]
+noise budget:  123
+coord  (13, 7)
+output:  [72 72 72 ... 72 72 72]
+noise budget:  124
+coord  (13, 8)
+output:  [81 81 81 ... 81 81 81]
+noise budget:  123
+coord  (13, 9)
+output:  [90 90 90 ... 90 90 90]
+noise budget:  123
+coord  (13, 10)
+output:  [99 99 99 ... 99 99 99]
+noise budget:  123
+coord  (13, 11)
+output:  [108 108 108 ... 108 108 108]
+noise budget:  123
+coord  (13, 12)
+output:  [117 117 117 ... 117 117 117]
+noise budget:  124
+coord  (13, 13)
+output:  [126 126 126 ... 126 126 126]
+noise budget:  123
+coord  (13, 14)
+output:  [135 135 135 ... 135 135 135]
+noise budget:  123
+coord  (13, 15)
+output:  [144 144 144 ... 144 144 144]
+noise budget:  123
+coord  (13, 16)
+output:  [153 153 153 ... 153 153 153]
+noise budget:  124
+coord  (13, 17)
+output:  [162 162 162 ... 162 162 162]
+noise budget:  123
+coord  (13, 18)
+output:  [171 171 171 ... 171 171 171]
+noise budget:  123
+coord  (13, 19)
+output:  [180 180 180 ... 180 180 180]
+noise budget:  123
+coord  (13, 20)
+output:  [189 189 189 ... 189 189 189]
+noise budget:  123
+coord  (13, 21)
+output:  [198 198 198 ... 198 198 198]
+noise budget:  122
+coord  (13, 22)
+output:  [207 207 207 ... 207 207 207]
+noise budget:  123
+coord  (13, 23)
+output:  [216 216 216 ... 216 216 216]
+noise budget:  123
+coord  (13, 24)
+output:  [225 225 225 ... 225 225 225]
+noise budget:  123
+coord  (13, 25)
+output:  [234 234 234 ... 234 234 234]
+noise budget:  124
+coord  (13, 26)
+output:  [243 243 243 ... 243 243 243]
+noise budget:  123
+coord  (13, 27)
+output:  [252 252 252 ... 252 252 252]
+noise budget:  123
+coord  (13, 28)
+output:  [261 261 261 ... 261 261 261]
+noise budget:  123
+coord  (13, 29)
+output:  [270 270 270 ... 270 270 270]
+noise budget:  123
+coord  (14, 0)
+output:  [9 9 9 ... 9 9 9]
+noise budget:  124
+coord  (14, 1)
+output:  [18 18 18 ... 18 18 18]
+noise budget:  123
+coord  (14, 2)
+output:  [27 27 27 ... 27 27 27]
+noise budget:  124
+coord  (14, 3)
+output:  [36 36 36 ... 36 36 36]
+noise budget:  123
+coord  (14, 4)
+output:  [45 45 45 ... 45 45 45]
+noise budget:  123
+coord  (14, 5)
+output:  [54 54 54 ... 54 54 54]
+noise budget:  124
+coord  (14, 6)
+output:  [63 63 63 ... 63 63 63]
+noise budget:  123
+coord  (14, 7)
+output:  [72 72 72 ... 72 72 72]
+noise budget:  123
+coord  (14, 8)
+output:  [81 81 81 ... 81 81 81]
+noise budget:  124
+coord  (14, 9)
+output:  [90 90 90 ... 90 90 90]
+noise budget:  123
+coord  (14, 10)
+output:  [99 99 99 ... 99 99 99]
+noise budget:  123
+coord  (14, 11)
+output:  [108 108 108 ... 108 108 108]
+noise budget:  124
+coord  (14, 12)
+output:  [117 117 117 ... 117 117 117]
+noise budget:  124
+coord  (14, 13)
+output:  [126 126 126 ... 126 126 126]
+noise budget:  123
+coord  (14, 14)
+output:  [135 135 135 ... 135 135 135]
+noise budget:  123
+coord  (14, 15)
+output:  [144 144 144 ... 144 144 144]
+noise budget:  124
+coord  (14, 16)
+output:  [153 153 153 ... 153 153 153]
+noise budget:  123
+coord  (14, 17)
+output:  [162 162 162 ... 162 162 162]
+noise budget:  124
+coord  (14, 18)
+output:  [171 171 171 ... 171 171 171]
+noise budget:  124
+coord  (14, 19)
+output:  [180 180 180 ... 180 180 180]
+noise budget:  124
+coord  (14, 20)
+output:  [189 189 189 ... 189 189 189]
+noise budget:  124
+coord  (14, 21)
+output:  [198 198 198 ... 198 198 198]
+noise budget:  124
+coord  (14, 22)
+output:  [207 207 207 ... 207 207 207]
+noise budget:  124
+coord  (14, 23)
+output:  [216 216 216 ... 216 216 216]
+noise budget:  124
+coord  (14, 24)
+output:  [225 225 225 ... 225 225 225]
+noise budget:  124
+coord  (14, 25)
+output:  [234 234 234 ... 234 234 234]
+noise budget:  122
+coord  (14, 26)
+output:  [243 243 243 ... 243 243 243]
+noise budget:  123
+coord  (14, 27)
+output:  [252 252 252 ... 252 252 252]
+noise budget:  123
+coord  (14, 28)
+output:  [261 261 261 ... 261 261 261]
+noise budget:  123
+coord  (14, 29)
+output:  [270 270 270 ... 270 270 270]
+noise budget:  123
+coord  (15, 0)
+output:  [9 9 9 ... 9 9 9]
+noise budget:  123
+coord  (15, 1)
+output:  [18 18 18 ... 18 18 18]
+noise budget:  122
+coord  (15, 2)
+output:  [27 27 27 ... 27 27 27]
+noise budget:  124
+coord  (15, 3)
+output:  [36 36 36 ... 36 36 36]
+noise budget:  122
+coord  (15, 4)
+output:  [45 45 45 ... 45 45 45]
+noise budget:  122
+coord  (15, 5)
+output:  [54 54 54 ... 54 54 54]
+noise budget:  123
+coord  (15, 6)
+output:  [63 63 63 ... 63 63 63]
+noise budget:  124
+coord  (15, 7)
+output:  [72 72 72 ... 72 72 72]
+noise budget:  123
+coord  (15, 8)
+output:  [81 81 81 ... 81 81 81]
+noise budget:  123
+coord  (15, 9)
+output:  [90 90 90 ... 90 90 90]
+noise budget:  124
+coord  (15, 10)
+output:  [99 99 99 ... 99 99 99]
+noise budget:  123
+coord  (15, 11)
+output:  [108 108 108 ... 108 108 108]
+noise budget:  122
+coord  (15, 12)
+output:  [117 117 117 ... 117 117 117]
+noise budget:  123
+coord  (15, 13)
+output:  [126 126 126 ... 126 126 126]
+noise budget:  123
+coord  (15, 14)
+output:  [135 135 135 ... 135 135 135]
+noise budget:  124
+coord  (15, 15)
+output:  [144 144 144 ... 144 144 144]
+noise budget:  123
+coord  (15, 16)
+output:  [153 153 153 ... 153 153 153]
+noise budget:  123
+coord  (15, 17)
+output:  [162 162 162 ... 162 162 162]
+noise budget:  123
+coord  (15, 18)
+output:  [171 171 171 ... 171 171 171]
+noise budget:  123
+coord  (15, 19)
+output:  [180 180 180 ... 180 180 180]
+noise budget:  123
+coord  (15, 20)
+output:  [189 189 189 ... 189 189 189]
+noise budget:  123
+coord  (15, 21)
+output:  [198 198 198 ... 198 198 198]
+noise budget:  123
+coord  (15, 22)
+output:  [207 207 207 ... 207 207 207]
+noise budget:  123
+coord  (15, 23)
+output:  [216 216 216 ... 216 216 216]
+noise budget:  123
+coord  (15, 24)
+output:  [225 225 225 ... 225 225 225]
+noise budget:  122
+coord  (15, 25)
+output:  [234 234 234 ... 234 234 234]
+noise budget:  123
+coord  (15, 26)
+output:  [243 243 243 ... 243 243 243]
+noise budget:  123
+coord  (15, 27)
+output:  [252 252 252 ... 252 252 252]
+noise budget:  124
+coord  (15, 28)
+output:  [261 261 261 ... 261 261 261]
+noise budget:  123
+coord  (15, 29)
+output:  [270 270 270 ... 270 270 270]
+noise budget:  123
+coord  (16, 0)
+output:  [9 9 9 ... 9 9 9]
+noise budget:  123
+coord  (16, 1)
+output:  [18 18 18 ... 18 18 18]
+noise budget:  123
+coord  (16, 2)
+output:  [27 27 27 ... 27 27 27]
+noise budget:  123
+coord  (16, 3)
+output:  [36 36 36 ... 36 36 36]
+noise budget:  124
+coord  (16, 4)
+output:  [45 45 45 ... 45 45 45]
+noise budget:  123
+coord  (16, 5)
+output:  [54 54 54 ... 54 54 54]
+noise budget:  124
+coord  (16, 6)
+output:  [63 63 63 ... 63 63 63]
+noise budget:  124
+coord  (16, 7)
+output:  [72 72 72 ... 72 72 72]
+noise budget:  124
+coord  (16, 8)
+output:  [81 81 81 ... 81 81 81]
+noise budget:  123
+coord  (16, 9)
+output:  [90 90 90 ... 90 90 90]
+noise budget:  124
+coord  (16, 10)
+output:  [99 99 99 ... 99 99 99]
+noise budget:  123
+coord  (16, 11)
+output:  [108 108 108 ... 108 108 108]
+noise budget:  123
+coord  (16, 12)
+output:  [117 117 117 ... 117 117 117]
+noise budget:  123
+coord  (16, 13)
+output:  [126 126 126 ... 126 126 126]
+noise budget:  122
+coord  (16, 14)
+output:  [135 135 135 ... 135 135 135]
+noise budget:  124
+coord  (16, 15)
+output:  [144 144 144 ... 144 144 144]
+noise budget:  124
+coord  (16, 16)
+output:  [153 153 153 ... 153 153 153]
+noise budget:  123
+coord  (16, 17)
+output:  [162 162 162 ... 162 162 162]
+noise budget:  123
+coord  (16, 18)
+output:  [171 171 171 ... 171 171 171]
+noise budget:  123
+coord  (16, 19)
+output:  [180 180 180 ... 180 180 180]
+noise budget:  124
+coord  (16, 20)
+output:  [189 189 189 ... 189 189 189]
+noise budget:  124
+coord  (16, 21)
+output:  [198 198 198 ... 198 198 198]
+noise budget:  124
+coord  (16, 22)
+output:  [207 207 207 ... 207 207 207]
+noise budget:  123
+coord  (16, 23)
+output:  [216 216 216 ... 216 216 216]
+noise budget:  122
+coord  (16, 24)
+output:  [225 225 225 ... 225 225 225]
+noise budget:  124
+coord  (16, 25)
+output:  [234 234 234 ... 234 234 234]
+noise budget:  123
+coord  (16, 26)
+output:  [243 243 243 ... 243 243 243]
+noise budget:  124
+coord  (16, 27)
+output:  [252 252 252 ... 252 252 252]
+noise budget:  124
+coord  (16, 28)
+output:  [261 261 261 ... 261 261 261]
+noise budget:  124
+coord  (16, 29)
+output:  [270 270 270 ... 270 270 270]
+noise budget:  124
+coord  (17, 0)
+output:  [9 9 9 ... 9 9 9]
+noise budget:  124
+coord  (17, 1)
+output:  [18 18 18 ... 18 18 18]
+noise budget:  123
+coord  (17, 2)
+output:  [27 27 27 ... 27 27 27]
+noise budget:  124
+coord  (17, 3)
+output:  [36 36 36 ... 36 36 36]
+noise budget:  123
+coord  (17, 4)
+output:  [45 45 45 ... 45 45 45]
+noise budget:  124
+coord  (17, 5)
+output:  [54 54 54 ... 54 54 54]
+noise budget:  122
+coord  (17, 6)
+output:  [63 63 63 ... 63 63 63]
+noise budget:  123
+coord  (17, 7)
+output:  [72 72 72 ... 72 72 72]
+noise budget:  122
+coord  (17, 8)
+output:  [81 81 81 ... 81 81 81]
+noise budget:  124
+coord  (17, 9)
+output:  [90 90 90 ... 90 90 90]
+noise budget:  123
+coord  (17, 10)
+output:  [99 99 99 ... 99 99 99]
+noise budget:  123
+coord  (17, 11)
+output:  [108 108 108 ... 108 108 108]
+noise budget:  123
+coord  (17, 12)
+output:  [117 117 117 ... 117 117 117]
+noise budget:  124
+coord  (17, 13)
+output:  [126 126 126 ... 126 126 126]
+noise budget:  124
+coord  (17, 14)
+output:  [135 135 135 ... 135 135 135]
+noise budget:  124
+coord  (17, 15)
+output:  [144 144 144 ... 144 144 144]
+noise budget:  123
+coord  (17, 16)
+output:  [153 153 153 ... 153 153 153]
+noise budget:  124
+coord  (17, 17)
+output:  [162 162 162 ... 162 162 162]
+noise budget:  124
+coord  (17, 18)
+output:  [171 171 171 ... 171 171 171]
+noise budget:  123
+coord  (17, 19)
+output:  [180 180 180 ... 180 180 180]
+noise budget:  123
+coord  (17, 20)
+output:  [189 189 189 ... 189 189 189]
+noise budget:  123
+coord  (17, 21)
+output:  [198 198 198 ... 198 198 198]
+noise budget:  124
+coord  (17, 22)
+output:  [207 207 207 ... 207 207 207]
+noise budget:  123
+coord  (17, 23)
+output:  [216 216 216 ... 216 216 216]
+noise budget:  124
+coord  (17, 24)
+output:  [225 225 225 ... 225 225 225]
+noise budget:  123
+coord  (17, 25)
+output:  [234 234 234 ... 234 234 234]
+noise budget:  123
+coord  (17, 26)
+output:  [243 243 243 ... 243 243 243]
+noise budget:  124
+coord  (17, 27)
+output:  [252 252 252 ... 252 252 252]
+noise budget:  124
+coord  (17, 28)
+output:  [261 261 261 ... 261 261 261]
+noise budget:  124
+coord  (17, 29)
+output:  [270 270 270 ... 270 270 270]
+noise budget:  123
+coord  (18, 0)
+output:  [9 9 9 ... 9 9 9]
+noise budget:  124
+coord  (18, 1)
+output:  [18 18 18 ... 18 18 18]
+noise budget:  124
+coord  (18, 2)
+output:  [27 27 27 ... 27 27 27]
+noise budget:  124
+coord  (18, 3)
+output:  [36 36 36 ... 36 36 36]
+noise budget:  123
+coord  (18, 4)
+output:  [45 45 45 ... 45 45 45]
+noise budget:  123
+coord  (18, 5)
+output:  [54 54 54 ... 54 54 54]
+noise budget:  123
+coord  (18, 6)
+output:  [63 63 63 ... 63 63 63]
+noise budget:  123
+coord  (18, 7)
+output:  [72 72 72 ... 72 72 72]
+noise budget:  124
+coord  (18, 8)
+output:  [81 81 81 ... 81 81 81]
+noise budget:  123
+coord  (18, 9)
+output:  [90 90 90 ... 90 90 90]
+noise budget:  123
+coord  (18, 10)
+output:  [99 99 99 ... 99 99 99]
+noise budget:  124
+coord  (18, 11)
+output:  [108 108 108 ... 108 108 108]
+noise budget:  123
+coord  (18, 12)
+output:  [117 117 117 ... 117 117 117]
+noise budget:  124
+coord  (18, 13)
+output:  [126 126 126 ... 126 126 126]
+noise budget:  124
+coord  (18, 14)
+output:  [135 135 135 ... 135 135 135]
+noise budget:  123
+coord  (18, 15)
+output:  [144 144 144 ... 144 144 144]
+noise budget:  123
+coord  (18, 16)
+output:  [153 153 153 ... 153 153 153]
+noise budget:  123
+coord  (18, 17)
+output:  [162 162 162 ... 162 162 162]
+noise budget:  124
+coord  (18, 18)
+output:  [171 171 171 ... 171 171 171]
+noise budget:  123
+coord  (18, 19)
+output:  [180 180 180 ... 180 180 180]
+noise budget:  124
+coord  (18, 20)
+output:  [189 189 189 ... 189 189 189]
+noise budget:  123
+coord  (18, 21)
+output:  [198 198 198 ... 198 198 198]
+noise budget:  123
+coord  (18, 22)
+output:  [207 207 207 ... 207 207 207]
+noise budget:  124
+coord  (18, 23)
+output:  [216 216 216 ... 216 216 216]
+noise budget:  123
+coord  (18, 24)
+output:  [225 225 225 ... 225 225 225]
+noise budget:  124
+coord  (18, 25)
+output:  [234 234 234 ... 234 234 234]
+noise budget:  123
+coord  (18, 26)
+output:  [243 243 243 ... 243 243 243]
+noise budget:  123
+coord  (18, 27)
+output:  [252 252 252 ... 252 252 252]
+noise budget:  124
+coord  (18, 28)
+output:  [261 261 261 ... 261 261 261]
+noise budget:  123
+coord  (18, 29)
+output:  [270 270 270 ... 270 270 270]
+noise budget:  124
+coord  (19, 0)
+output:  [9 9 9 ... 9 9 9]
+noise budget:  123
+coord  (19, 1)
+output:  [18 18 18 ... 18 18 18]
+noise budget:  124
+coord  (19, 2)
+output:  [27 27 27 ... 27 27 27]
+noise budget:  124
+coord  (19, 3)
+output:  [36 36 36 ... 36 36 36]
+noise budget:  123
+coord  (19, 4)
+output:  [45 45 45 ... 45 45 45]
+noise budget:  124
+coord  (19, 5)
+output:  [54 54 54 ... 54 54 54]
+noise budget:  123
+coord  (19, 6)
+output:  [63 63 63 ... 63 63 63]
+noise budget:  124
+coord  (19, 7)
+output:  [72 72 72 ... 72 72 72]
+noise budget:  124
+coord  (19, 8)
+output:  [81 81 81 ... 81 81 81]
+noise budget:  123
+coord  (19, 9)
+output:  [90 90 90 ... 90 90 90]
+noise budget:  124
+coord  (19, 10)
+output:  [99 99 99 ... 99 99 99]
+noise budget:  123
+coord  (19, 11)
+output:  [108 108 108 ... 108 108 108]
+noise budget:  124
+coord  (19, 12)
+output:  [117 117 117 ... 117 117 117]
+noise budget:  123
+coord  (19, 13)
+output:  [126 126 126 ... 126 126 126]
+noise budget:  123
+coord  (19, 14)
+output:  [135 135 135 ... 135 135 135]
+noise budget:  123
+coord  (19, 15)
+output:  [144 144 144 ... 144 144 144]
+noise budget:  123
+coord  (19, 16)
+output:  [153 153 153 ... 153 153 153]
+noise budget:  124
+coord  (19, 17)
+output:  [162 162 162 ... 162 162 162]
+noise budget:  124
+coord  (19, 18)
+output:  [171 171 171 ... 171 171 171]
+noise budget:  123
+coord  (19, 19)
+output:  [180 180 180 ... 180 180 180]
+noise budget:  123
+coord  (19, 20)
+output:  [189 189 189 ... 189 189 189]
+noise budget:  123
+coord  (19, 21)
+output:  [198 198 198 ... 198 198 198]
+noise budget:  123
+coord  (19, 22)
+output:  [207 207 207 ... 207 207 207]
+noise budget:  123
+coord  (19, 23)
+output:  [216 216 216 ... 216 216 216]
+noise budget:  124
+coord  (19, 24)
+output:  [225 225 225 ... 225 225 225]
+noise budget:  123
+coord  (19, 25)
+output:  [234 234 234 ... 234 234 234]
+noise budget:  123
+coord  (19, 26)
+output:  [243 243 243 ... 243 243 243]
+noise budget:  124
+coord  (19, 27)
+output:  [252 252 252 ... 252 252 252]
+noise budget:  123
+coord  (19, 28)
+output:  [261 261 261 ... 261 261 261]
+noise budget:  123
+coord  (19, 29)
+output:  [270 270 270 ... 270 270 270]
+noise budget:  123
+coord  (20, 0)
+output:  [9 9 9 ... 9 9 9]
+noise budget:  124
+coord  (20, 1)
+output:  [18 18 18 ... 18 18 18]
+noise budget:  124
+coord  (20, 2)
+output:  [27 27 27 ... 27 27 27]
+noise budget:  124
+coord  (20, 3)
+output:  [36 36 36 ... 36 36 36]
+noise budget:  123
+coord  (20, 4)
+output:  [45 45 45 ... 45 45 45]
+noise budget:  124
+coord  (20, 5)
+output:  [54 54 54 ... 54 54 54]
+noise budget:  124
+coord  (20, 6)
+output:  [63 63 63 ... 63 63 63]
+noise budget:  123
+coord  (20, 7)
+output:  [72 72 72 ... 72 72 72]
+noise budget:  124
+coord  (20, 8)
+output:  [81 81 81 ... 81 81 81]
+noise budget:  123
+coord  (20, 9)
+output:  [90 90 90 ... 90 90 90]
+noise budget:  124
+coord  (20, 10)
+output:  [99 99 99 ... 99 99 99]
+noise budget:  124
+coord  (20, 11)
+output:  [108 108 108 ... 108 108 108]
+noise budget:  123
+coord  (20, 12)
+output:  [117 117 117 ... 117 117 117]
+noise budget:  123
+coord  (20, 13)
+output:  [126 126 126 ... 126 126 126]
+noise budget:  122
+coord  (20, 14)
+output:  [135 135 135 ... 135 135 135]
+noise budget:  124
+coord  (20, 15)
+output:  [144 144 144 ... 144 144 144]
+noise budget:  123
+coord  (20, 16)
+output:  [153 153 153 ... 153 153 153]
+noise budget:  124
+coord  (20, 17)
+output:  [162 162 162 ... 162 162 162]
+noise budget:  124
+coord  (20, 18)
+output:  [171 171 171 ... 171 171 171]
+noise budget:  123
+coord  (20, 19)
+output:  [180 180 180 ... 180 180 180]
+noise budget:  123
+coord  (20, 20)
+output:  [189 189 189 ... 189 189 189]
+noise budget:  123
+coord  (20, 21)
+output:  [198 198 198 ... 198 198 198]
+noise budget:  124
+coord  (20, 22)
+output:  [207 207 207 ... 207 207 207]
+noise budget:  123
+coord  (20, 23)
+output:  [216 216 216 ... 216 216 216]
+noise budget:  124
+coord  (20, 24)
+output:  [225 225 225 ... 225 225 225]
+noise budget:  123
+coord  (20, 25)
+output:  [234 234 234 ... 234 234 234]
+noise budget:  123
+coord  (20, 26)
+output:  [243 243 243 ... 243 243 243]
+noise budget:  123
+coord  (20, 27)
+output:  [252 252 252 ... 252 252 252]
+noise budget:  124
+coord  (20, 28)
+output:  [261 261 261 ... 261 261 261]
+noise budget:  123
+coord  (20, 29)
+output:  [270 270 270 ... 270 270 270]
+noise budget:  123
+coord  (21, 0)
+output:  [9 9 9 ... 9 9 9]
+noise budget:  123
+coord  (21, 1)
+output:  [18 18 18 ... 18 18 18]
+noise budget:  123
+coord  (21, 2)
+output:  [27 27 27 ... 27 27 27]
+noise budget:  124
+coord  (21, 3)
+output:  [36 36 36 ... 36 36 36]
+noise budget:  123
+coord  (21, 4)
+output:  [45 45 45 ... 45 45 45]
+noise budget:  124
+coord  (21, 5)
+output:  [54 54 54 ... 54 54 54]
+noise budget:  123
+coord  (21, 6)
+output:  [63 63 63 ... 63 63 63]
+noise budget:  124
+coord  (21, 7)
+output:  [72 72 72 ... 72 72 72]
+noise budget:  124
+coord  (21, 8)
+output:  [81 81 81 ... 81 81 81]
+noise budget:  123
+coord  (21, 9)
+output:  [90 90 90 ... 90 90 90]
+noise budget:  124
+coord  (21, 10)
+output:  [99 99 99 ... 99 99 99]
+noise budget:  123
+coord  (21, 11)
+output:  [108 108 108 ... 108 108 108]
+noise budget:  123
+coord  (21, 12)
+output:  [117 117 117 ... 117 117 117]
+noise budget:  123
+coord  (21, 13)
+output:  [126 126 126 ... 126 126 126]
+noise budget:  123
+coord  (21, 14)
+output:  [135 135 135 ... 135 135 135]
+noise budget:  123
+coord  (21, 15)
+output:  [144 144 144 ... 144 144 144]
+noise budget:  123
+coord  (21, 16)
+output:  [153 153 153 ... 153 153 153]
+noise budget:  122
+coord  (21, 17)
+output:  [162 162 162 ... 162 162 162]
+noise budget:  123
+coord  (21, 18)
+output:  [171 171 171 ... 171 171 171]
+noise budget:  123
+coord  (21, 19)
+output:  [180 180 180 ... 180 180 180]
+noise budget:  123
+coord  (21, 20)
+output:  [189 189 189 ... 189 189 189]
+noise budget:  123
+coord  (21, 21)
+output:  [198 198 198 ... 198 198 198]
+noise budget:  123
+coord  (21, 22)
+output:  [207 207 207 ... 207 207 207]
+noise budget:  124
+coord  (21, 23)
+output:  [216 216 216 ... 216 216 216]
+noise budget:  123
+coord  (21, 24)
+output:  [225 225 225 ... 225 225 225]
+noise budget:  124
+coord  (21, 25)
+output:  [234 234 234 ... 234 234 234]
+noise budget:  123
+coord  (21, 26)
+output:  [243 243 243 ... 243 243 243]
+noise budget:  123
+coord  (21, 27)
+output:  [252 252 252 ... 252 252 252]
+noise budget:  122
+coord  (21, 28)
+output:  [261 261 261 ... 261 261 261]
+noise budget:  124
+coord  (21, 29)
+output:  [270 270 270 ... 270 270 270]
+noise budget:  123
+coord  (22, 0)
+output:  [9 9 9 ... 9 9 9]
+noise budget:  124
+coord  (22, 1)
+output:  [18 18 18 ... 18 18 18]
+noise budget:  124
+coord  (22, 2)
+output:  [27 27 27 ... 27 27 27]
+noise budget:  123
+coord  (22, 3)
+output:  [36 36 36 ... 36 36 36]
+noise budget:  124
+coord  (22, 4)
+output:  [45 45 45 ... 45 45 45]
+noise budget:  124
+coord  (22, 5)
+output:  [54 54 54 ... 54 54 54]
+noise budget:  124
+coord  (22, 6)
+output:  [63 63 63 ... 63 63 63]
+noise budget:  124
+coord  (22, 7)
+output:  [72 72 72 ... 72 72 72]
+noise budget:  124
+coord  (22, 8)
+output:  [81 81 81 ... 81 81 81]
+noise budget:  123
+coord  (22, 9)
+output:  [90 90 90 ... 90 90 90]
+noise budget:  123
+coord  (22, 10)
+output:  [99 99 99 ... 99 99 99]
+noise budget:  123
+coord  (22, 11)
+output:  [108 108 108 ... 108 108 108]
+noise budget:  123
+coord  (22, 12)
+output:  [117 117 117 ... 117 117 117]
+noise budget:  124
+coord  (22, 13)
+output:  [126 126 126 ... 126 126 126]
+noise budget:  123
+coord  (22, 14)
+output:  [135 135 135 ... 135 135 135]
+noise budget:  123
+coord  (22, 15)
+output:  [144 144 144 ... 144 144 144]
+noise budget:  124
+coord  (22, 16)
+output:  [153 153 153 ... 153 153 153]
+noise budget:  124
+coord  (22, 17)
+output:  [162 162 162 ... 162 162 162]
+noise budget:  124
+coord  (22, 18)
+output:  [171 171 171 ... 171 171 171]
+noise budget:  123
+coord  (22, 19)
+output:  [180 180 180 ... 180 180 180]
+noise budget:  124
+coord  (22, 20)
+output:  [189 189 189 ... 189 189 189]
+noise budget:  124
+coord  (22, 21)
+output:  [198 198 198 ... 198 198 198]
+noise budget:  122
+coord  (22, 22)
+output:  [207 207 207 ... 207 207 207]
+noise budget:  123
+coord  (22, 23)
+output:  [216 216 216 ... 216 216 216]
+noise budget:  124
+coord  (22, 24)
+output:  [225 225 225 ... 225 225 225]
+noise budget:  123
+coord  (22, 25)
+output:  [234 234 234 ... 234 234 234]
+noise budget:  123
+coord  (22, 26)
+output:  [243 243 243 ... 243 243 243]
+noise budget:  124
+coord  (22, 27)
+output:  [252 252 252 ... 252 252 252]
+noise budget:  123
+coord  (22, 28)
+output:  [261 261 261 ... 261 261 261]
+noise budget:  123
+coord  (22, 29)
+output:  [270 270 270 ... 270 270 270]
+noise budget:  122
+coord  (23, 0)
+output:  [9 9 9 ... 9 9 9]
+noise budget:  123
+coord  (23, 1)
+output:  [18 18 18 ... 18 18 18]
+noise budget:  123
+coord  (23, 2)
+output:  [27 27 27 ... 27 27 27]
+noise budget:  123
+coord  (23, 3)
+output:  [36 36 36 ... 36 36 36]
+noise budget:  123
+coord  (23, 4)
+output:  [45 45 45 ... 45 45 45]
+noise budget:  124
+coord  (23, 5)
+output:  [54 54 54 ... 54 54 54]
+noise budget:  123
+coord  (23, 6)
+output:  [63 63 63 ... 63 63 63]
+noise budget:  124
+coord  (23, 7)
+output:  [72 72 72 ... 72 72 72]
+noise budget:  124
+coord  (23, 8)
+output:  [81 81 81 ... 81 81 81]
+noise budget:  124
+coord  (23, 9)
+output:  [90 90 90 ... 90 90 90]
+noise budget:  124
+coord  (23, 10)
+output:  [99 99 99 ... 99 99 99]
+noise budget:  123
+coord  (23, 11)
+output:  [108 108 108 ... 108 108 108]
+noise budget:  123
+coord  (23, 12)
+output:  [117 117 117 ... 117 117 117]
+noise budget:  123
+coord  (23, 13)
+output:  [126 126 126 ... 126 126 126]
+noise budget:  124
+coord  (23, 14)
+output:  [135 135 135 ... 135 135 135]
+noise budget:  123
+coord  (23, 15)
+output:  [144 144 144 ... 144 144 144]
+noise budget:  122
+coord  (23, 16)
+output:  [153 153 153 ... 153 153 153]
+noise budget:  123
+coord  (23, 17)
+output:  [162 162 162 ... 162 162 162]
+noise budget:  123
+coord  (23, 18)
+output:  [171 171 171 ... 171 171 171]
+noise budget:  123
+coord  (23, 19)
+output:  [180 180 180 ... 180 180 180]
+noise budget:  123
+coord  (23, 20)
+output:  [189 189 189 ... 189 189 189]
+noise budget:  123
+coord  (23, 21)
+output:  [198 198 198 ... 198 198 198]
+noise budget:  124
+coord  (23, 22)
+output:  [207 207 207 ... 207 207 207]
+noise budget:  123
+coord  (23, 23)
+output:  [216 216 216 ... 216 216 216]
+noise budget:  123
+coord  (23, 24)
+output:  [225 225 225 ... 225 225 225]
+noise budget:  123
+coord  (23, 25)
+output:  [234 234 234 ... 234 234 234]
+noise budget:  124
+coord  (23, 26)
+output:  [243 243 243 ... 243 243 243]
+noise budget:  124
+coord  (23, 27)
+output:  [252 252 252 ... 252 252 252]
+noise budget:  123
+coord  (23, 28)
+output:  [261 261 261 ... 261 261 261]
+noise budget:  124
+coord  (23, 29)
+output:  [270 270 270 ... 270 270 270]
+noise budget:  124
+coord  (24, 0)
+output:  [9 9 9 ... 9 9 9]
+noise budget:  124
+coord  (24, 1)
+output:  [18 18 18 ... 18 18 18]
+noise budget:  123
+coord  (24, 2)
+output:  [27 27 27 ... 27 27 27]
+noise budget:  123
+coord  (24, 3)
+output:  [36 36 36 ... 36 36 36]
+noise budget:  123
+coord  (24, 4)
+output:  [45 45 45 ... 45 45 45]
+noise budget:  124
+coord  (24, 5)
+output:  [54 54 54 ... 54 54 54]
+noise budget:  123
+coord  (24, 6)
+output:  [63 63 63 ... 63 63 63]
+noise budget:  123
+coord  (24, 7)
+output:  [72 72 72 ... 72 72 72]
+noise budget:  123
+coord  (24, 8)
+output:  [81 81 81 ... 81 81 81]
+noise budget:  124
+coord  (24, 9)
+output:  [90 90 90 ... 90 90 90]
+noise budget:  124
+coord  (24, 10)
+output:  [99 99 99 ... 99 99 99]
+noise budget:  123
+coord  (24, 11)
+output:  [108 108 108 ... 108 108 108]
+noise budget:  122
+coord  (24, 12)
+output:  [117 117 117 ... 117 117 117]
+noise budget:  123
+coord  (24, 13)
+output:  [126 126 126 ... 126 126 126]
+noise budget:  123
+coord  (24, 14)
+output:  [135 135 135 ... 135 135 135]
+noise budget:  124
+coord  (24, 15)
+output:  [144 144 144 ... 144 144 144]
+noise budget:  124
+coord  (24, 16)
+output:  [153 153 153 ... 153 153 153]
+noise budget:  123
+coord  (24, 17)
+output:  [162 162 162 ... 162 162 162]
+noise budget:  123
+coord  (24, 18)
+output:  [171 171 171 ... 171 171 171]
+noise budget:  124
+coord  (24, 19)
+output:  [180 180 180 ... 180 180 180]
+noise budget:  123
+coord  (24, 20)
+output:  [189 189 189 ... 189 189 189]
+noise budget:  124
+coord  (24, 21)
+output:  [198 198 198 ... 198 198 198]
+noise budget:  123
+coord  (24, 22)
+output:  [207 207 207 ... 207 207 207]
+noise budget:  124
+coord  (24, 23)
+output:  [216 216 216 ... 216 216 216]
+noise budget:  123
+coord  (24, 24)
+output:  [225 225 225 ... 225 225 225]
+noise budget:  123
+coord  (24, 25)
+output:  [234 234 234 ... 234 234 234]
+noise budget:  123
+coord  (24, 26)
+output:  [243 243 243 ... 243 243 243]
+noise budget:  123
+coord  (24, 27)
+output:  [252 252 252 ... 252 252 252]
+noise budget:  123
+coord  (24, 28)
+output:  [261 261 261 ... 261 261 261]
+noise budget:  123
+coord  (24, 29)
+output:  [270 270 270 ... 270 270 270]
+noise budget:  123
+coord  (25, 0)
+output:  [9 9 9 ... 9 9 9]
+noise budget:  124
+coord  (25, 1)
+output:  [18 18 18 ... 18 18 18]
+noise budget:  124
+coord  (25, 2)
+output:  [27 27 27 ... 27 27 27]
+noise budget:  123
+coord  (25, 3)
+output:  [36 36 36 ... 36 36 36]
+noise budget:  124
+coord  (25, 4)
+output:  [45 45 45 ... 45 45 45]
+noise budget:  123
+coord  (25, 5)
+output:  [54 54 54 ... 54 54 54]
+noise budget:  123
+coord  (25, 6)
+output:  [63 63 63 ... 63 63 63]
+noise budget:  123
+coord  (25, 7)
+output:  [72 72 72 ... 72 72 72]
+noise budget:  123
+coord  (25, 8)
+output:  [81 81 81 ... 81 81 81]
+noise budget:  123
+coord  (25, 9)
+output:  [90 90 90 ... 90 90 90]
+noise budget:  123
+coord  (25, 10)
+output:  [99 99 99 ... 99 99 99]
+noise budget:  123
+coord  (25, 11)
+output:  [108 108 108 ... 108 108 108]
+noise budget:  123
+coord  (25, 12)
+output:  [117 117 117 ... 117 117 117]
+noise budget:  124
+coord  (25, 13)
+output:  [126 126 126 ... 126 126 126]
+noise budget:  124
+coord  (25, 14)
+output:  [135 135 135 ... 135 135 135]
+noise budget:  123
+coord  (25, 15)
+output:  [144 144 144 ... 144 144 144]
+noise budget:  124
+coord  (25, 16)
+output:  [153 153 153 ... 153 153 153]
+noise budget:  123
+coord  (25, 17)
+output:  [162 162 162 ... 162 162 162]
+noise budget:  123
+coord  (25, 18)
+output:  [171 171 171 ... 171 171 171]
+noise budget:  123
+coord  (25, 19)
+output:  [180 180 180 ... 180 180 180]
+noise budget:  124
+coord  (25, 20)
+output:  [189 189 189 ... 189 189 189]
+noise budget:  123
+coord  (25, 21)
+output:  [198 198 198 ... 198 198 198]
+noise budget:  123
+coord  (25, 22)
+output:  [207 207 207 ... 207 207 207]
+noise budget:  124
+coord  (25, 23)
+output:  [216 216 216 ... 216 216 216]
+noise budget:  123
+coord  (25, 24)
+output:  [225 225 225 ... 225 225 225]
+noise budget:  124
+coord  (25, 25)
+output:  [234 234 234 ... 234 234 234]
+noise budget:  124
+coord  (25, 26)
+output:  [243 243 243 ... 243 243 243]
+noise budget:  122
+coord  (25, 27)
+output:  [252 252 252 ... 252 252 252]
+noise budget:  123
+coord  (25, 28)
+output:  [261 261 261 ... 261 261 261]
+noise budget:  123
+coord  (25, 29)
+output:  [270 270 270 ... 270 270 270]
+noise budget:  123
+coord  (26, 0)
+output:  [9 9 9 ... 9 9 9]
+noise budget:  123
+coord  (26, 1)
+output:  [18 18 18 ... 18 18 18]
+noise budget:  123
+coord  (26, 2)
+output:  [27 27 27 ... 27 27 27]
+noise budget:  123
+coord  (26, 3)
+output:  [36 36 36 ... 36 36 36]
+noise budget:  124
+coord  (26, 4)
+output:  [45 45 45 ... 45 45 45]
+noise budget:  124
+coord  (26, 5)
+output:  [54 54 54 ... 54 54 54]
+noise budget:  124
+coord  (26, 6)
+output:  [63 63 63 ... 63 63 63]
+noise budget:  123
+coord  (26, 7)
+output:  [72 72 72 ... 72 72 72]
+noise budget:  123
+coord  (26, 8)
+output:  [81 81 81 ... 81 81 81]
+noise budget:  123
+coord  (26, 9)
+output:  [90 90 90 ... 90 90 90]
+noise budget:  123
+coord  (26, 10)
+output:  [99 99 99 ... 99 99 99]
+noise budget:  123
+coord  (26, 11)
+output:  [108 108 108 ... 108 108 108]
+noise budget:  124
+coord  (26, 12)
+output:  [117 117 117 ... 117 117 117]
+noise budget:  123
+coord  (26, 13)
+output:  [126 126 126 ... 126 126 126]
+noise budget:  124
+coord  (26, 14)
+output:  [135 135 135 ... 135 135 135]
+noise budget:  123
+coord  (26, 15)
+output:  [144 144 144 ... 144 144 144]
+noise budget:  123
+coord  (26, 16)
+output:  [153 153 153 ... 153 153 153]
+noise budget:  123
+coord  (26, 17)
+output:  [162 162 162 ... 162 162 162]
+noise budget:  123
+coord  (26, 18)
+output:  [171 171 171 ... 171 171 171]
+noise budget:  124
+coord  (26, 19)
+output:  [180 180 180 ... 180 180 180]
+noise budget:  124
+coord  (26, 20)
+output:  [189 189 189 ... 189 189 189]
+noise budget:  123
+coord  (26, 21)
+output:  [198 198 198 ... 198 198 198]
+noise budget:  123
+coord  (26, 22)
+output:  [207 207 207 ... 207 207 207]
+noise budget:  123
+coord  (26, 23)
+output:  [216 216 216 ... 216 216 216]
+noise budget:  122
+coord  (26, 24)
+output:  [225 225 225 ... 225 225 225]
+noise budget:  123
+coord  (26, 25)
+output:  [234 234 234 ... 234 234 234]
+noise budget:  123
+coord  (26, 26)
+output:  [243 243 243 ... 243 243 243]
+noise budget:  123
+coord  (26, 27)
+output:  [252 252 252 ... 252 252 252]
+noise budget:  122
+coord  (26, 28)
+output:  [261 261 261 ... 261 261 261]
+noise budget:  122
+coord  (26, 29)
+output:  [270 270 270 ... 270 270 270]
+noise budget:  123
+coord  (27, 0)
+output:  [9 9 9 ... 9 9 9]
+noise budget:  123
+coord  (27, 1)
+output:  [18 18 18 ... 18 18 18]
+noise budget:  124
+coord  (27, 2)
+output:  [27 27 27 ... 27 27 27]
+noise budget:  123
+coord  (27, 3)
+output:  [36 36 36 ... 36 36 36]
+noise budget:  124
+coord  (27, 4)
+output:  [45 45 45 ... 45 45 45]
+noise budget:  123
+coord  (27, 5)
+output:  [54 54 54 ... 54 54 54]
+noise budget:  123
+coord  (27, 6)
+output:  [63 63 63 ... 63 63 63]
+noise budget:  123
+coord  (27, 7)
+output:  [72 72 72 ... 72 72 72]
+noise budget:  124
+coord  (27, 8)
+output:  [81 81 81 ... 81 81 81]
+noise budget:  123
+coord  (27, 9)
+output:  [90 90 90 ... 90 90 90]
+noise budget:  123
+coord  (27, 10)
+output:  [99 99 99 ... 99 99 99]
+noise budget:  124
+coord  (27, 11)
+output:  [108 108 108 ... 108 108 108]
+noise budget:  123
+coord  (27, 12)
+output:  [117 117 117 ... 117 117 117]
+noise budget:  122
+coord  (27, 13)
+output:  [126 126 126 ... 126 126 126]
+noise budget:  124
+coord  (27, 14)
+output:  [135 135 135 ... 135 135 135]
+noise budget:  124
+coord  (27, 15)
+output:  [144 144 144 ... 144 144 144]
+noise budget:  124
+coord  (27, 16)
+output:  [153 153 153 ... 153 153 153]
+noise budget:  124
+coord  (27, 17)
+output:  [162 162 162 ... 162 162 162]
+noise budget:  123
+coord  (27, 18)
+output:  [171 171 171 ... 171 171 171]
+noise budget:  124
+coord  (27, 19)
+output:  [180 180 180 ... 180 180 180]
+noise budget:  123
+coord  (27, 20)
+output:  [189 189 189 ... 189 189 189]
+noise budget:  123
+coord  (27, 21)
+output:  [198 198 198 ... 198 198 198]
+noise budget:  123
+coord  (27, 22)
+output:  [207 207 207 ... 207 207 207]
+noise budget:  124
+coord  (27, 23)
+output:  [216 216 216 ... 216 216 216]
+noise budget:  123
+coord  (27, 24)
+output:  [225 225 225 ... 225 225 225]
+noise budget:  123
+coord  (27, 25)
+output:  [234 234 234 ... 234 234 234]
+noise budget:  123
+coord  (27, 26)
+output:  [243 243 243 ... 243 243 243]
+noise budget:  123
+coord  (27, 27)
+output:  [252 252 252 ... 252 252 252]
+noise budget:  124
+coord  (27, 28)
+output:  [261 261 261 ... 261 261 261]
+noise budget:  123
+coord  (27, 29)
+output:  [270 270 270 ... 270 270 270]
+noise budget:  124
+coord  (28, 0)
+output:  [9 9 9 ... 9 9 9]
+noise budget:  124
+coord  (28, 1)
+output:  [18 18 18 ... 18 18 18]
+noise budget:  123
+coord  (28, 2)
+output:  [27 27 27 ... 27 27 27]
+noise budget:  123
+coord  (28, 3)
+output:  [36 36 36 ... 36 36 36]
+noise budget:  123
+coord  (28, 4)
+output:  [45 45 45 ... 45 45 45]
+noise budget:  124
+coord  (28, 5)
+output:  [54 54 54 ... 54 54 54]
+noise budget:  123
+coord  (28, 6)
+output:  [63 63 63 ... 63 63 63]
+noise budget:  123
+coord  (28, 7)
+output:  [72 72 72 ... 72 72 72]
+noise budget:  123
+coord  (28, 8)
+output:  [81 81 81 ... 81 81 81]
+noise budget:  123
+coord  (28, 9)
+output:  [90 90 90 ... 90 90 90]
+noise budget:  124
+coord  (28, 10)
+output:  [99 99 99 ... 99 99 99]
+noise budget:  124
+coord  (28, 11)
+output:  [108 108 108 ... 108 108 108]
+noise budget:  124
+coord  (28, 12)
+output:  [117 117 117 ... 117 117 117]
+noise budget:  123
+coord  (28, 13)
+output:  [126 126 126 ... 126 126 126]
+noise budget:  124
+coord  (28, 14)
+output:  [135 135 135 ... 135 135 135]
+noise budget:  124
+coord  (28, 15)
+output:  [144 144 144 ... 144 144 144]
+noise budget:  123
+coord  (28, 16)
+output:  [153 153 153 ... 153 153 153]
+noise budget:  123
+coord  (28, 17)
+output:  [162 162 162 ... 162 162 162]
+noise budget:  124
+coord  (28, 18)
+output:  [171 171 171 ... 171 171 171]
+noise budget:  124
+coord  (28, 19)
+output:  [180 180 180 ... 180 180 180]
+noise budget:  124
+coord  (28, 20)
+output:  [189 189 189 ... 189 189 189]
+noise budget:  124
+coord  (28, 21)
+output:  [198 198 198 ... 198 198 198]
+noise budget:  122
+coord  (28, 22)
+output:  [207 207 207 ... 207 207 207]
+noise budget:  124
+coord  (28, 23)
+output:  [216 216 216 ... 216 216 216]
+noise budget:  124
+coord  (28, 24)
+output:  [225 225 225 ... 225 225 225]
+noise budget:  123
+coord  (28, 25)
+output:  [234 234 234 ... 234 234 234]
+noise budget:  124
+coord  (28, 26)
+output:  [243 243 243 ... 243 243 243]
+noise budget:  124
+coord  (28, 27)
+output:  [252 252 252 ... 252 252 252]
+noise budget:  124
+coord  (28, 28)
+output:  [261 261 261 ... 261 261 261]
+noise budget:  123
+coord  (28, 29)
+output:  [270 270 270 ... 270 270 270]
+noise budget:  123
+coord  (29, 0)
+output:  [9 9 9 ... 9 9 9]
+noise budget:  124
+coord  (29, 1)
+output:  [18 18 18 ... 18 18 18]
+noise budget:  123
+coord  (29, 2)
+output:  [27 27 27 ... 27 27 27]
+noise budget:  123
+coord  (29, 3)
+output:  [36 36 36 ... 36 36 36]
+noise budget:  123
+coord  (29, 4)
+output:  [45 45 45 ... 45 45 45]
+noise budget:  123
+coord  (29, 5)
+output:  [54 54 54 ... 54 54 54]
+noise budget:  123
+coord  (29, 6)
+output:  [63 63 63 ... 63 63 63]
+noise budget:  123
+coord  (29, 7)
+output:  [72 72 72 ... 72 72 72]
+noise budget:  122
+coord  (29, 8)
+output:  [81 81 81 ... 81 81 81]
+noise budget:  124
+coord  (29, 9)
+output:  [90 90 90 ... 90 90 90]
+noise budget:  123
+coord  (29, 10)
+output:  [99 99 99 ... 99 99 99]
+noise budget:  124
+coord  (29, 11)
+output:  [108 108 108 ... 108 108 108]
+noise budget:  124
+coord  (29, 12)
+output:  [117 117 117 ... 117 117 117]
+noise budget:  123
+coord  (29, 13)
+output:  [126 126 126 ... 126 126 126]
+noise budget:  123
+coord  (29, 14)
+output:  [135 135 135 ... 135 135 135]
+noise budget:  123
+coord  (29, 15)
+output:  [144 144 144 ... 144 144 144]
+noise budget:  123
+coord  (29, 16)
+output:  [153 153 153 ... 153 153 153]
+noise budget:  123
+coord  (29, 17)
+output:  [162 162 162 ... 162 162 162]
+noise budget:  124
+coord  (29, 18)
+output:  [171 171 171 ... 171 171 171]
+noise budget:  123
+coord  (29, 19)
+output:  [180 180 180 ... 180 180 180]
+noise budget:  123
+coord  (29, 20)
+output:  [189 189 189 ... 189 189 189]
+noise budget:  123
+coord  (29, 21)
+output:  [198 198 198 ... 198 198 198]
+noise budget:  124
+coord  (29, 22)
+output:  [207 207 207 ... 207 207 207]
+noise budget:  123
+coord  (29, 23)
+output:  [216 216 216 ... 216 216 216]
+noise budget:  123
+coord  (29, 24)
+output:  [225 225 225 ... 225 225 225]
+noise budget:  123
+coord  (29, 25)
+output:  [234 234 234 ... 234 234 234]
+noise budget:  123
+coord  (29, 26)
+output:  [243 243 243 ... 243 243 243]
+noise budget:  123
+coord  (29, 27)
+output:  [252 252 252 ... 252 252 252]
+noise budget:  123
+coord  (29, 28)
+output:  [261 261 261 ... 261 261 261]
+noise budget:  123
+coord  (29, 29)
+output:  [270 270 270 ... 270 270 270]
+noise budget:  124
+exec duration: 15548ms

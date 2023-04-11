@@ -1,0 +1,770 @@
+init duration: 270.4896926879883ms
+coord  (0, 0)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (0, 1)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (0, 2)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (0, 3)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (0, 4)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (0, 5)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (0, 6)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (0, 7)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (0, 8)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (0, 9)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (0, 10)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  122
+coord  (0, 11)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (0, 12)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (0, 13)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (0, 14)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (0, 15)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (1, 0)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (1, 1)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (1, 2)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (1, 3)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (1, 4)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (1, 5)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (1, 6)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (1, 7)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (1, 8)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (1, 9)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (1, 10)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  122
+coord  (1, 11)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (1, 12)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (1, 13)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (1, 14)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (1, 15)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (2, 0)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (2, 1)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (2, 2)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (2, 3)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (2, 4)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (2, 5)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (2, 6)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (2, 7)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (2, 8)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (2, 9)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (2, 10)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  122
+coord  (2, 11)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (2, 12)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (2, 13)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (2, 14)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (2, 15)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (3, 0)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (3, 1)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (3, 2)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (3, 3)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (3, 4)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (3, 5)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (3, 6)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (3, 7)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (3, 8)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (3, 9)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (3, 10)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  122
+coord  (3, 11)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (3, 12)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (3, 13)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (3, 14)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (3, 15)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (4, 0)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (4, 1)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (4, 2)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (4, 3)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (4, 4)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (4, 5)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (4, 6)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (4, 7)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (4, 8)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (4, 9)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (4, 10)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  122
+coord  (4, 11)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (4, 12)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (4, 13)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (4, 14)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (4, 15)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (5, 0)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (5, 1)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (5, 2)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (5, 3)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (5, 4)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (5, 5)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (5, 6)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (5, 7)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (5, 8)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (5, 9)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (5, 10)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  122
+coord  (5, 11)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (5, 12)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (5, 13)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (5, 14)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (5, 15)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (6, 0)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (6, 1)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (6, 2)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (6, 3)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (6, 4)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (6, 5)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (6, 6)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (6, 7)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (6, 8)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (6, 9)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (6, 10)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  122
+coord  (6, 11)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (6, 12)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (6, 13)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (6, 14)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (6, 15)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (7, 0)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (7, 1)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (7, 2)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (7, 3)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (7, 4)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (7, 5)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (7, 6)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (7, 7)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (7, 8)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (7, 9)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (7, 10)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  122
+coord  (7, 11)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (7, 12)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (7, 13)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (7, 14)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (7, 15)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (8, 0)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (8, 1)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (8, 2)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (8, 3)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (8, 4)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (8, 5)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (8, 6)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (8, 7)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (8, 8)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (8, 9)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (8, 10)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  122
+coord  (8, 11)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (8, 12)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (8, 13)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (8, 14)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (8, 15)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (9, 0)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (9, 1)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (9, 2)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (9, 3)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (9, 4)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (9, 5)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (9, 6)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (9, 7)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (9, 8)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (9, 9)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (9, 10)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  122
+coord  (9, 11)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (9, 12)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (9, 13)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (9, 14)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (9, 15)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (10, 0)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (10, 1)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (10, 2)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (10, 3)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (10, 4)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (10, 5)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (10, 6)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (10, 7)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (10, 8)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (10, 9)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (10, 10)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  122
+coord  (10, 11)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (10, 12)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (10, 13)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (10, 14)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (10, 15)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (11, 0)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (11, 1)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (11, 2)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (11, 3)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (11, 4)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (11, 5)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (11, 6)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (11, 7)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (11, 8)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (11, 9)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (11, 10)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  122
+coord  (11, 11)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (11, 12)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (11, 13)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (11, 14)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (11, 15)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (12, 0)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (12, 1)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (12, 2)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (12, 3)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (12, 4)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (12, 5)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (12, 6)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (12, 7)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (12, 8)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (12, 9)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (12, 10)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  122
+coord  (12, 11)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (12, 12)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (12, 13)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (12, 14)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (12, 15)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (13, 0)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (13, 1)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (13, 2)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (13, 3)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (13, 4)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (13, 5)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (13, 6)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (13, 7)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (13, 8)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (13, 9)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (13, 10)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  122
+coord  (13, 11)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (13, 12)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (13, 13)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (13, 14)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (13, 15)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (14, 0)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (14, 1)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (14, 2)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (14, 3)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (14, 4)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (14, 5)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (14, 6)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (14, 7)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (14, 8)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (14, 9)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (14, 10)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  122
+coord  (14, 11)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (14, 12)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (14, 13)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (14, 14)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (14, 15)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (15, 0)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (15, 1)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (15, 2)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (15, 3)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (15, 4)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (15, 5)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (15, 6)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (15, 7)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (15, 8)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (15, 9)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (15, 10)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  122
+coord  (15, 11)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (15, 12)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (15, 13)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (15, 14)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+coord  (15, 15)
+output:  [2 2 2 ... 2 2 2]
+noise budget:  123
+exec duration: 5435ms

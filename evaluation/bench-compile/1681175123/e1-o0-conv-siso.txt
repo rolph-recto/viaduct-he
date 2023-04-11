@@ -1,0 +1,72 @@
+[2023-04-11T01:05:31Z INFO  he_vectorizer] parsing: 0ms
+[2023-04-11T01:05:31Z INFO  he_vectorizer] elaboration: 0ms
+[2023-04-11T01:05:31Z INFO  he_vectorizer::scheduling::scheduler] running scheduler with iter limit: None
+[2023-04-11T01:05:31Z INFO  he_vectorizer::scheduling::scheduler] starting scheduler epoch 1
+[2023-04-11T01:05:32Z INFO  he_vectorizer::scheduling::scheduler] iteration 1
+[2023-04-11T01:05:32Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 4
+[2023-04-11T01:05:32Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 4
+[2023-04-11T01:05:33Z INFO  he_vectorizer::scheduling::scheduler] iteration 2
+[2023-04-11T01:05:33Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 12
+[2023-04-11T01:05:33Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 12
+[2023-04-11T01:05:33Z INFO  he_vectorizer::scheduling::scheduler] iteration 3
+[2023-04-11T01:05:33Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 24
+[2023-04-11T01:05:33Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 24
+[2023-04-11T01:05:33Z INFO  he_vectorizer::scheduling::scheduler] iteration 4
+[2023-04-11T01:05:33Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 24
+[2023-04-11T01:05:33Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 0
+[2023-04-11T01:05:33Z INFO  he_vectorizer::scheduling::scheduler] iteration 5
+[2023-04-11T01:05:33Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 0
+[2023-04-11T01:05:33Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 0
+[2023-04-11T01:05:33Z INFO  he_vectorizer::scheduling::scheduler] inline scheduler 1 total visited schedules: 65
+[2023-04-11T01:05:33Z INFO  he_vectorizer] scheduling: 1282ms
+[2023-04-11T01:05:33Z INFO  he_vectorizer] circuit generation: 0ms
+[2023-04-11T01:05:33Z INFO  he_vectorizer] circuit optimization: 0ms
+[2023-04-11T01:05:33Z INFO  he_vectorizer] plaintext hoisting: 0ms
+[2023-04-11T01:05:33Z INFO  he_vectorizer] circuit lowering: 0ms
+[2023-04-11T01:05:33Z INFO  he_vectorizer] using pyseal backend for code generation
+[2023-04-11T01:05:33Z INFO  he_vectorizer] printed generated code to stdout
+def client_pre(wrapper):
+    wrapper.client_input("img")
+    v_img_1 = wrapper.build_vector("img", None, [0, 0], [FilledDim(0, 30, 1, 0, 2, 0, 0), FilledDim(0, 3, 1, 0, 1, 0, 0), FilledDim(1, 32, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_img_1", v_img_1)
+
+def client_post(wrapper):
+    __out = wrapper.client_recv("__out")
+    wrapper.client_output(__out)
+
+def server(wrapper):
+    wrapper.server_input("filter")
+    v_filter_1 = wrapper.build_vector("filter", None, [0, 0], [EmptyDim(30, 0, 0, 2), FilledDim(0, 3, 1, 0, 1, 0, 0), EmptyDim(30, 0, 0, 2)])
+    v_filter_2 = wrapper.build_vector("filter", None, [0, 1], [EmptyDim(30, 0, 0, 2), FilledDim(0, 3, 1, 0, 1, 0, 0), EmptyDim(30, 0, 0, 2)])
+    v_filter_3 = wrapper.build_vector("filter", None, [0, 2], [EmptyDim(30, 0, 0, 2), FilledDim(0, 3, 1, 0, 1, 0, 0), EmptyDim(30, 0, 0, 2)])
+    v_img_1 = wrapper.server_recv("v_img_1")
+    const_neg1 = wrapper.const(-1)
+    mask_1 = wrapper.mask([(32, 0, 30), (4, 0, 3), (32, 0, 30)])
+    wrapper.start_server_exec()
+    wrapper.encode(v_filter_3, [])
+    wrapper.encode(v_filter_2, [])
+    wrapper.encode(v_filter_1, [])
+    wrapper.encode(mask_1, [])
+    wrapper.encode(const_neg1, [])
+    pt2 = wrapper.plaintext_array([3], 0)
+    wrapper.set(pt2, [0], v_filter_1.get())
+    wrapper.set(pt2, [1], v_filter_2.get())
+    wrapper.set(pt2, [2], v_filter_3.get())
+    __out = wrapper.ciphertext_array([], 0)
+    __reduce_1 = wrapper.ciphertext_array([], 0)
+    for i5 in range(3):
+        instr1 = wrapper.rotate_rows((0 + (-1 * i5)), v_img_1.get())
+        wrapper.multiply_plain_inplace(instr1, mask_1.get())
+        wrapper.multiply_plain_inplace(instr1, pt2.get([i5]))
+        wrapper.add_inplace(instr1, __reduce_1.get())
+        wrapper.set(__reduce_1, [], instr1)
+    
+    instr8 = wrapper.rotate_rows(-64, __reduce_1.get())
+    wrapper.add_inplace(instr8, __reduce_1.get())
+    instr10 = wrapper.rotate_rows(-32, instr8)
+    wrapper.add_inplace(instr8, instr10)
+    wrapper.set(__out, [], instr8)
+    wrapper.end_server_exec()
+    wrapper.server_send("__out", __out)
+[2023-04-11T01:05:33Z INFO  he_vectorizer] code generation: 0ms
+[2023-04-11T01:05:33Z INFO  he_vectorizer] total compile time: 1283ms

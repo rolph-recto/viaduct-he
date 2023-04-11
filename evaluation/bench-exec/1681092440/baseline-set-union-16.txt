@@ -1,0 +1,4 @@
+init duration: 1901.4928340911865ms
+output:  [136 136 136 ... 136 136 136]
+noise budget:  359
+exec duration: 94035ms

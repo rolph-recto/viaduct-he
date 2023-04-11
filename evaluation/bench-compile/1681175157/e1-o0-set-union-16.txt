@@ -1,0 +1,112 @@
+[2023-04-11T01:06:10Z INFO  he_vectorizer] parsing: 0ms
+[2023-04-11T01:06:10Z INFO  he_vectorizer] elaboration: 0ms
+[2023-04-11T01:06:10Z INFO  he_vectorizer::scheduling::scheduler] running scheduler with iter limit: None
+[2023-04-11T01:06:10Z INFO  he_vectorizer::scheduling::scheduler] starting scheduler epoch 1
+[2023-04-11T01:06:10Z INFO  he_vectorizer::scheduling::scheduler] iteration 1
+[2023-04-11T01:06:10Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 4
+[2023-04-11T01:06:10Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 4
+[2023-04-11T01:06:10Z INFO  he_vectorizer::scheduling::scheduler] iteration 2
+[2023-04-11T01:06:10Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 17
+[2023-04-11T01:06:10Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 17
+[2023-04-11T01:06:10Z INFO  he_vectorizer::scheduling::scheduler] iteration 3
+[2023-04-11T01:06:10Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 32
+[2023-04-11T01:06:10Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 28
+[2023-04-11T01:06:10Z INFO  he_vectorizer::scheduling::scheduler] iteration 4
+[2023-04-11T01:06:10Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 22
+[2023-04-11T01:06:10Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 14
+[2023-04-11T01:06:10Z INFO  he_vectorizer::scheduling::scheduler] iteration 5
+[2023-04-11T01:06:10Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 4
+[2023-04-11T01:06:10Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 0
+[2023-04-11T01:06:10Z INFO  he_vectorizer::scheduling::scheduler] iteration 6
+[2023-04-11T01:06:10Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 0
+[2023-04-11T01:06:10Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 0
+[2023-04-11T01:06:10Z INFO  he_vectorizer::scheduling::scheduler] inline scheduler 1 total visited schedules: 80
+[2023-04-11T01:06:10Z INFO  he_vectorizer] scheduling: 64ms
+[2023-04-11T01:06:10Z INFO  he_vectorizer] circuit generation: 0ms
+[2023-04-11T01:06:10Z INFO  he_vectorizer] circuit optimization: 0ms
+[2023-04-11T01:06:10Z INFO  he_vectorizer] plaintext hoisting: 0ms
+[2023-04-11T01:06:10Z INFO  he_vectorizer] circuit lowering: 0ms
+[2023-04-11T01:06:10Z INFO  he_vectorizer] using pyseal backend for code generation
+[2023-04-11T01:06:10Z INFO  he_vectorizer] printed generated code to stdout
+def client_pre(wrapper):
+    wrapper.client_input("b_id")
+    wrapper.client_input("b_data")
+    wrapper.client_input("a_id")
+    wrapper.client_input("a_data")
+    v_a_id_1 = wrapper.build_vector("a_id", None, [0, 0], [FilledDim(0, 16, 1, 0, 0, 0, 0), FilledDim(1, 4, 1, 0, 0, 0, 0), EmptyDim(16, 0, 0, 0)])
+    wrapper.client_send("v_a_id_1", v_a_id_1)
+    v_b_data_1 = wrapper.build_vector("b_data", None, [0], [FilledDim(0, 16, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_b_data_1", v_b_data_1)
+    v_a_data_1 = wrapper.build_vector("a_data", None, [0], [FilledDim(0, 16, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_a_data_1", v_a_data_1)
+    v_b_id_1 = wrapper.build_vector("b_id", None, [0, 0], [EmptyDim(16, 0, 0, 0), FilledDim(1, 4, 1, 0, 0, 0, 0), FilledDim(0, 16, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_b_id_1", v_b_id_1)
+
+def client_post(wrapper):
+    __out = wrapper.client_recv("__out")
+    wrapper.client_output(__out)
+
+def server(wrapper):
+    v_a_id_1 = wrapper.server_recv("v_a_id_1")
+    v_b_data_1 = wrapper.server_recv("v_b_data_1")
+    v_a_data_1 = wrapper.server_recv("v_a_data_1")
+    v_b_id_1 = wrapper.server_recv("v_b_id_1")
+    const_1 = wrapper.const(1)
+    const_neg1 = wrapper.const(-1)
+    wrapper.start_server_exec()
+    wrapper.encode(const_1, [])
+    wrapper.encode(const_neg1, [])
+    b_sum = wrapper.ciphertext_array([], 0)
+    instr4 = wrapper.subtract(v_a_id_1.get(), v_b_id_1.get())
+    wrapper.multiply_inplace(instr4, instr4)
+    wrapper.relinearize_inplace(instr4)
+    wrapper.multiply_plain_inplace(instr4, const_neg1.get())
+    wrapper.add_plain_inplace(instr4, const_1.get())
+    instr8 = wrapper.rotate_rows(-32, instr4)
+    wrapper.multiply_inplace(instr4, instr8)
+    wrapper.relinearize_inplace(instr4)
+    instr10 = wrapper.rotate_rows(-16, instr4)
+    wrapper.multiply_inplace(instr4, instr10)
+    wrapper.relinearize_inplace(instr4)
+    wrapper.multiply_plain_inplace(instr4, const_neg1.get())
+    wrapper.add_plain_inplace(instr4, const_1.get())
+    instr14 = wrapper.rotate_rows(-512, instr4)
+    wrapper.multiply_inplace(instr4, instr14)
+    wrapper.relinearize_inplace(instr4)
+    instr16 = wrapper.rotate_rows(-256, instr4)
+    wrapper.multiply_inplace(instr4, instr16)
+    wrapper.relinearize_inplace(instr4)
+    instr18 = wrapper.rotate_rows(-128, instr4)
+    wrapper.multiply_inplace(instr4, instr18)
+    wrapper.relinearize_inplace(instr4)
+    instr20 = wrapper.rotate_rows(-64, instr4)
+    wrapper.multiply_inplace(instr4, instr20)
+    wrapper.relinearize_inplace(instr4)
+    wrapper.multiply_inplace(instr4, v_b_data_1.get())
+    wrapper.relinearize_inplace(instr4)
+    instr23 = wrapper.rotate_rows(-8, instr4)
+    wrapper.add_inplace(instr4, instr23)
+    instr25 = wrapper.rotate_rows(-4, instr4)
+    wrapper.add_inplace(instr4, instr25)
+    instr27 = wrapper.rotate_rows(-2, instr4)
+    wrapper.add_inplace(instr4, instr27)
+    instr29 = wrapper.rotate_rows(-1, instr4)
+    wrapper.add_inplace(instr4, instr29)
+    wrapper.set(b_sum, [], instr4)
+    a_sum = wrapper.ciphertext_array([], 0)
+    instr32 = wrapper.rotate_rows(-8, v_a_data_1.get())
+    wrapper.add_inplace(instr32, v_a_data_1.get())
+    instr34 = wrapper.rotate_rows(-4, instr32)
+    wrapper.add_inplace(instr32, instr34)
+    instr36 = wrapper.rotate_rows(-2, instr32)
+    wrapper.add_inplace(instr32, instr36)
+    instr38 = wrapper.rotate_rows(-1, instr32)
+    wrapper.add_inplace(instr32, instr38)
+    wrapper.set(a_sum, [], instr32)
+    __out = wrapper.ciphertext_array([], 0)
+    instr42 = wrapper.add(a_sum.get(), b_sum.get())
+    wrapper.set(__out, [], instr42)
+    wrapper.end_server_exec()
+    wrapper.server_send("__out", __out)
+[2023-04-11T01:06:10Z INFO  he_vectorizer] code generation: 0ms
+[2023-04-11T01:06:10Z INFO  he_vectorizer] total compile time: 65ms

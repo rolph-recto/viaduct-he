@@ -1,0 +1,86 @@
+[2023-04-11T01:21:29Z INFO  he_vectorizer] parsing: 0ms
+[2023-04-11T01:21:29Z INFO  he_vectorizer] elaboration: 0ms
+[2023-04-11T01:21:29Z INFO  he_vectorizer::scheduling::scheduler] running scheduler with iter limit: None
+[2023-04-11T01:21:29Z INFO  he_vectorizer::scheduling::scheduler] starting scheduler epoch 1
+[2023-04-11T01:21:29Z INFO  he_vectorizer::scheduling::scheduler] iteration 1
+[2023-04-11T01:21:29Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 2
+[2023-04-11T01:21:29Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 2
+[2023-04-11T01:21:29Z INFO  he_vectorizer::scheduling::scheduler] iteration 2
+[2023-04-11T01:21:29Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 10
+[2023-04-11T01:21:29Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 4
+[2023-04-11T01:21:29Z INFO  he_vectorizer::scheduling::scheduler] iteration 3
+[2023-04-11T01:21:29Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 0
+[2023-04-11T01:21:29Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 0
+[2023-04-11T01:21:29Z INFO  he_vectorizer::scheduling::scheduler] starting scheduler epoch 2
+[2023-04-11T01:21:29Z INFO  he_vectorizer::scheduling::scheduler] iteration 4
+[2023-04-11T01:21:29Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 29
+[2023-04-11T01:21:29Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 5
+[2023-04-11T01:21:35Z INFO  he_vectorizer::scheduling::scheduler] iteration 5
+[2023-04-11T01:21:35Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 68
+[2023-04-11T01:21:35Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 44
+[2023-04-11T01:21:36Z INFO  he_vectorizer::scheduling::scheduler] iteration 6
+[2023-04-11T01:21:36Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 58
+[2023-04-11T01:21:36Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 58
+[2023-04-11T01:21:36Z INFO  he_vectorizer::scheduling::scheduler] iteration 7
+[2023-04-11T01:21:36Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 0
+[2023-04-11T01:21:36Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 0
+[2023-04-11T01:21:36Z INFO  he_vectorizer::scheduling::scheduler] inline scheduler 1 total visited schedules: 168
+[2023-04-11T01:21:36Z INFO  he_vectorizer] scheduling: 6275ms
+[2023-04-11T01:21:36Z INFO  he_vectorizer] circuit generation: 0ms
+[2023-04-11T01:21:36Z INFO  he_vectorizer] circuit optimization: 0ms
+[2023-04-11T01:21:36Z INFO  he_vectorizer] plaintext hoisting: 0ms
+[2023-04-11T01:21:36Z INFO  he_vectorizer] circuit lowering: 0ms
+[2023-04-11T01:21:36Z INFO  he_vectorizer] using pyseal backend for code generation
+[2023-04-11T01:21:36Z INFO  he_vectorizer] printed generated code to stdout
+def client_pre(wrapper):
+    wrapper.client_input("point")
+    v_point_1 = wrapper.build_vector("point", None, [0], [EmptyDim(64, 0, 0, 0), FilledDim(0, 32, 2, 0, 0, 0, 0)])
+    wrapper.client_send("v_point_1", v_point_1)
+    v_point_2 = wrapper.build_vector("point", None, [1], [EmptyDim(64, 0, 0, 0), FilledDim(0, 32, 2, 0, 0, 0, 0)])
+    wrapper.client_send("v_point_2", v_point_2)
+
+def client_post(wrapper):
+    __out = wrapper.client_recv("__out")
+    wrapper.client_output(__out)
+
+def server(wrapper):
+    wrapper.server_input("tests")
+    v_tests_1 = wrapper.build_vector("tests", None, [0, 0], [FilledDim(0, 64, 1, 0, 0, 0, 0), FilledDim(1, 32, 2, 0, 0, 0, 0)])
+    v_tests_2 = wrapper.build_vector("tests", None, [0, 1], [FilledDim(0, 64, 1, 0, 0, 0, 0), FilledDim(1, 32, 2, 0, 0, 0, 0)])
+    v_point_1 = wrapper.server_recv("v_point_1")
+    v_point_2 = wrapper.server_recv("v_point_2")
+    const_neg1 = wrapper.const(-1)
+    wrapper.start_server_exec()
+    wrapper.encode(v_tests_1, [])
+    wrapper.encode(v_tests_2, [])
+    wrapper.encode(const_neg1, [])
+    ct1 = wrapper.ciphertext_array([2], 0)
+    wrapper.set(ct1, [0], v_point_1.get())
+    wrapper.set(ct1, [1], v_point_2.get())
+    pt1 = wrapper.plaintext_array([2], 0)
+    wrapper.set(pt1, [0], v_tests_1.get())
+    wrapper.set(pt1, [1], v_tests_2.get())
+    __out = wrapper.ciphertext_array([], 0)
+    __reduce_1 = wrapper.ciphertext_array([], 0)
+    for i5i in range(2):
+        instr2 = wrapper.subtract_plain(ct1.get([i5i]), pt1.get([i5i]))
+        wrapper.multiply_inplace(instr2, instr2)
+        wrapper.relinearize_inplace(instr2)
+        wrapper.add_inplace(instr2, __reduce_1.get())
+        wrapper.set(__reduce_1, [], instr2)
+    
+    instr6 = wrapper.rotate_rows(-16, __reduce_1.get())
+    wrapper.add_inplace(instr6, __reduce_1.get())
+    instr8 = wrapper.rotate_rows(-8, instr6)
+    wrapper.add_inplace(instr6, instr8)
+    instr10 = wrapper.rotate_rows(-4, instr6)
+    wrapper.add_inplace(instr6, instr10)
+    instr12 = wrapper.rotate_rows(-2, instr6)
+    wrapper.add_inplace(instr6, instr12)
+    instr14 = wrapper.rotate_rows(-1, instr6)
+    wrapper.add_inplace(instr6, instr14)
+    wrapper.set(__out, [], instr6)
+    wrapper.end_server_exec()
+    wrapper.server_send("__out", __out)
+[2023-04-11T01:21:36Z INFO  he_vectorizer] code generation: 0ms
+[2023-04-11T01:21:36Z INFO  he_vectorizer] total compile time: 6277ms
