@@ -1,0 +1,9 @@
+{
+    "conv-siso": ["e1-o0"],
+    "conv-simo": ["e1-o0"],
+    "distance": ["e1-o0"],
+    "retrieval-256": ["e1-o0"],
+    "retrieval-1024": ["e1-o0"],
+    "matmul-2": ["e1-o0"],
+    "set-union-16": ["e1-o0"]
+}
