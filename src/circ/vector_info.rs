@@ -1499,4 +1499,64 @@ mod tests {
         let res = vec1.join(&vec2);
         assert!(res.is_none());
     }
+
+    #[test]
+    fn test_vector_join5() {
+        // different nonvectorized dim offsets, should not join
+        let mut offset1: OffsetMap<isize> = OffsetMap::new(1);
+        offset1.set(0, 0);
+        let vec1 = VectorInfo {
+            array: String::from("query"),
+            preprocessing: None,
+            offset_map: offset1,
+            dims: im::vector![
+                VectorDimContent::FilledDim {
+                    dim: 0,
+                    stride: 1,
+                    extent: 8,
+                    pad_left: 0,
+                    pad_right: 0,
+                    oob_left: 0,
+                    oob_right: 0,
+                },
+                VectorDimContent::EmptyDim {
+                    extent: 1024,
+                    pad_left: 0,
+                    pad_right: 0,
+                    oob_right: 0,
+                },
+            ],
+        };
+
+        let mut offset2: OffsetMap<isize> = OffsetMap::new(1);
+        offset2.set(0, 5);
+        let vec2 = VectorInfo {
+            array: String::from("query"),
+            preprocessing: None,
+            offset_map: offset2,
+            dims: im::vector![
+                VectorDimContent::FilledDim {
+                    dim: 0,
+                    stride: 1,
+                    extent: 2,
+                    pad_left: 0,
+                    pad_right: 5,
+                    oob_left: 0,
+                    oob_right: 0,
+                },
+                VectorDimContent::EmptyDim {
+                    extent: 1024,
+                    pad_left: 0,
+                    pad_right: 0,
+                    oob_right: 0,
+                },
+            ],
+        };
+
+        let res = vec1.join(&vec2);
+        assert!(res.is_none());
+
+        let res2 = vec2.join(&vec1);
+        assert!(res2.is_none());
+    }
 }

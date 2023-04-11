@@ -94,14 +94,20 @@ impl VectorDeriver {
             let time_registration = Instant::now();
 
             for coord in coord_system.coord_iter() {
+                let index_map =
+                    coord_system.coord_as_index_map(coord.clone());
+
                 let vector = VectorInfo::get_input_vector_at_coord(
-                    coord_system.coord_as_index_map(coord.clone()),
+                    index_map.clone(),
                     array_shape,
                     schedule,
                     transform,
                     &indexed_offset_map_sym,
                     &transform_offset_map_sym,
                 );
+
+                // debug!("registered {} index_map {:?} indexed_offset {} transform_offset {}",
+                //     vector, index_map, indexed_offset_map_sym, transform_offset_map_sym);
 
                 self.register_vector(vector.clone());
             }

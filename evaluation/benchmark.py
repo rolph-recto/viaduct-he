@@ -17,12 +17,14 @@ compile_benchmarks = {
     "distance": [
         {
             "name": "e1-o0",
+            "backend": "pyseal",
             "size": 4096,
             "epochs": 1,
             "opt_duration": 0,
         },
         {
             "name": "e2-o0",
+            "backend": "pyseal",
             "size": 4096,
             "epochs": 2,
             "opt_duration": 0,
@@ -71,8 +73,16 @@ def get_trials(out_path, from_dir, to_dir):
 
 
 def bench_compile(args):
+    print("benchmarking compilation time")
+
+    cfg_path = Path(args.cfg_file)
+    with open(cfg_path) as cfg_file:
+      compile_benchmarks = json.loads(cfg_file.read())
+
+    in_dir = Path(args.in_path)
+
     timestamps = []
-    benchmarks = sorted(exec_benchmarks.keys())
+    benchmarks = sorted(compile_benchmarks.keys())
     for trial in range(args.trials):
         timestamp = str(int(time.time()))
         timestamps.append(timestamp)
@@ -87,13 +97,14 @@ def bench_compile(args):
             for cfg in compile_benchmarks[bench]:
                 cfg_name = cfg["name"]
                 benchfile = Path(args.in_path, f"{bench}.tlhe")
+                backend = cfg["backend"]
                 size = cfg["size"]
                 opt_duration = cfg["opt_duration"]
                 epochs = cfg["epochs"]
                 
                 print(f"compiling {cfg_name}-{bench}")
 
-                cmd = f"./he_vectorizer -b pyseal -s {size} -e {epochs} -d {opt_duration} {benchfile}"
+                cmd = f"./he_vectorizer -b {backend} -s {size} -e {epochs} -d {opt_duration} {benchfile}"
 
                 compile_proc = subprocess.run(
                     cmd.split(),
@@ -112,9 +123,23 @@ def bench_compile(args):
 
         print(f"finished trial {trial+1}")
 
+    with open(args.exp_file, "w") as exp_file:
+        out_dirs = [str(Path(args.out_path, timestamp)) for timestamp in timestamps]
+        exp_data = {
+            "benchmarks": compile_benchmarks,
+            "trials": out_dirs
+        }
+        exp_file.write(json.dumps(exp_data, indent=4))
+
+    print(f"saved experiment metadata at {args.exp_file}")
+
 
 def collect_compile(args):
-    trials = get_trials(args.out_path, args.from_dir, args.to_dir)
+    with open(args.exp_file) as exp_file:
+        exp_data = json.loads(exp_file.read())
+
+    compile_benchmarks = exp_data["benchmarks"]
+    trials = exp_data["trials"]
     n = len(trials)
     if n == 0:
         print("no trials found in that time interval")
@@ -133,7 +158,7 @@ def collect_compile(args):
     ]
     writer = csv.DictWriter(csv_out, fieldnames=fields)
     writer.writeheader()
-    benchmarks = sorted(exec_benchmarks.keys())
+    benchmarks = sorted(compile_benchmarks.keys())
     for bench in benchmarks:
         for cfg in compile_benchmarks[bench]:
             cfg_name = cfg["name"]
@@ -250,8 +275,6 @@ def bench_exec(args):
 
         print(f"finished trial {trial+1}")
 
-    print("created trial directories from {} to {}".format(timestamps[0], timestamps[-1]))
-
     with open(args.exp_file, "w") as exp_file:
         out_dirs = [str(Path(args.out_path, timestamp)) for timestamp in timestamps]
         exp_data = {
@@ -259,6 +282,8 @@ def bench_exec(args):
             "trials": out_dirs
         }
         exp_file.write(json.dumps(exp_data, indent=4))
+
+    print(f"saved experiment metadata at {args.exp_file}")
 
 def collect_exec(args):
     with open(args.exp_file) as exp_file:
@@ -319,6 +344,14 @@ def argument_parser():
     bench_compile_parser.set_defaults(func=bench_compile)
 
     bench_compile_parser.add_argument(
+        "-c", "--config", dest="cfg_file", type=str, required=True,
+        help="configuration of benchmarks to execute")
+
+    bench_compile_parser.add_argument(
+        "-e", "--experiment", dest="exp_file", type=str, required=True,
+        help="name of file to dump experiment metadata")
+
+    bench_compile_parser.add_argument(
         "-t", "--trials", dest="trials", type=int, default=1,
         help="number of times to compile each benchmark")
 
@@ -335,16 +368,8 @@ def argument_parser():
     collect_compile_parser.set_defaults(func=collect_compile)
 
     collect_compile_parser.add_argument(
-        "-f" "--from", dest="from_dir", type=str,
-        help="timestamp of start folder")
-
-    collect_compile_parser.add_argument(
-        "-t" "--to", dest="to_dir", type=str,
-        help="timestamp of end folder")
-
-    collect_compile_parser.add_argument(
-        "-o", "--outpath", dest="out_path", type=str, default="bench-compile",
-        help="base path to retrieve trial information")
+        "-e" "--exp", dest="exp_file", type=str,
+        help="name of experiment file")
 
     # benchmark execution data
     bench_exec_parser = subparsers.add_parser("bench-exec", help="benchmark execution time")

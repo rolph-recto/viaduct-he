@@ -1,0 +1,26 @@
+{
+    "benchmarks": {
+        "distance": [
+            {
+                "name": "e1-o0",
+                "backend": "pyseal",
+                "size": 4096,
+                "epochs": 1,
+                "opt_duration": 0
+            }
+        ],
+        "matmul-2": [
+            {
+                "name": "e1-o0",
+                "backend": "pyseal",
+                "size": 4096,
+                "epochs": 1,
+                "opt_duration": 0
+            }
+        ]
+    },
+    "trials": [
+        "bench-compile/1681174925",
+        "bench-compile/1681174926"
+    ]
+}

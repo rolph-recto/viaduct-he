@@ -40,7 +40,7 @@ impl TransformerUtil {
     ) -> usize {
         schedule.schedule_map.iter()
         .filter(|(_, isched)| {
-            isched.get_tiling().iter().any(|dim| dim.len() > 1) ||
+            isched.get_tiling_extents().iter().any(|dim| dim.len() > 1) ||
             isched.vectorized_dims.len() > 0
         })
         .fold(0, |acc, (site, _)| {
@@ -94,43 +94,114 @@ impl ScheduleTransformer for VectorizeDimTransformer {
             }
         }
 
-        for (class, stride, extent) in candidate_dims {
+        'cand: for (class, stride, extent) in candidate_dims {
+            // vectorize the exploded dim
+            // the extent must be a power of 2, because the compiler
+            // assumes that it can apply reduce-and-rotate uniformly
+            let vec_extent = util::get_nearest_pow2(extent);
             let mut new_schedule_map: im::HashMap<IndexingId, IndexingSiteSchedule> = im::HashMap::new();
             for (site, ischedule) in schedule.schedule_map.iter() {
-                let mut new_site_schedule =
-                    IndexingSiteSchedule {
-                        preprocessing: ischedule.preprocessing,
-                        exploded_dims: im::Vector::new(),
-                        vectorized_dims: ischedule.vectorized_dims.clone(),
-                    };
+                let cand_index_opt =
+                    ischedule.exploded_dims.iter().find(|edim| {
+                        let eclass = self.dim_classes[&(site.clone(), edim.index)];
+                        class == eclass && edim.stride == stride && edim.extent == extent
+                    }).map(|dim| dim.index);
 
-                for edim in ischedule.exploded_dims.iter() {
-                    let eclass = self.dim_classes[&(site.clone(), edim.index)];
+                // candidate is part of this indexing site
+                if let Some(index) = cand_index_opt {
+                    let has_vectorized_outer_tilings =
+                        ischedule.vectorized_dims.iter().any(|vdim| {
+                            vdim.index == index && vdim.stride > stride
+                        });
 
-                    // vectorize the exploded dim
-                    // the extent must be a power of 2, otherwise the result
-                    // of the computation might be wrong because of OOB values!
-                    let vec_extent = util::get_nearest_pow2(extent);
-                    // if class == eclass && edim.stride == stride
-                    //     && edim.extent == extent && vec_extent == extent
-                    if class == eclass && edim.stride == stride && edim.extent == extent
-                    {
-                        let new_sched_dim = ScheduleDim {
-                            index: edim.index,
-                            stride,
-                            extent: vec_extent,
-                            name: edim.name.clone(),
-                            pad_left: edim.pad_left,
-                            pad_right: edim.pad_right,
-                        };
-                        new_site_schedule.vectorized_dims.push_back(new_sched_dim);
-
-                    } else { // keep the exploded dim in the same place
-                        new_site_schedule.exploded_dims.push_back(edim.clone());
+                    // if vec_extent != extent, then we have extended the size of this
+                    // sched dimension. all tilings of greater stride must be updated
+                    // but if a tile is vectorized, we can't update its stride, so
+                    // vectorizing the current dim is invalid
+                    if vec_extent != extent && has_vectorized_outer_tilings {
+                        continue 'cand;
                     }
-                }
 
-                new_schedule_map.insert(site.clone(), new_site_schedule);
+                    let mut new_ischedule =
+                        IndexingSiteSchedule {
+                            preprocessing: ischedule.preprocessing,
+                            exploded_dims: im::Vector::new(),
+                            vectorized_dims: ischedule.vectorized_dims.clone(),
+                        };
+
+                    let tilings: Vec<Vec<(usize,usize)>> = ischedule.get_tiling();
+                    let tiling: &Vec<(usize, usize)> = tilings.get(index).unwrap();
+
+                    // create updated tilings of the current schedule dim
+                    // the strides of the dim's outer tilings have to be updated if the 
+                    // extent of the tile to be vectorized has been elongated
+                    // to be a power of 2 (i.e. vec_extent != extent)
+                    let mut new_tiling: Vec<(usize, usize)> = Vec::new();
+
+                    if vec_extent != extent {
+                        let mut cur_block_size = 1;
+                        for (cur_stride, cur_extent) in tiling.iter() {
+                            let new_extent = 
+                                if *cur_stride == stride && *cur_extent == extent {
+                                    vec_extent
+
+                                } else {
+                                    *cur_extent
+                                };
+
+                            let new_stride = cur_block_size;
+                            new_tiling.push((new_stride, new_extent));
+                            cur_block_size *= new_extent;
+                        }
+                    }
+
+                    for edim in ischedule.exploded_dims.iter() {
+                        // this is the candidate tile to be vectorized
+                        if edim.index == index && edim.stride == stride && edim.extent == extent {
+                            let new_sched_dim = ScheduleDim {
+                                index: edim.index,
+                                stride,
+                                extent: vec_extent,
+                                name: edim.name.clone(),
+                                pad_left: edim.pad_left,
+                                pad_right: edim.pad_right,
+                            };
+                            new_ischedule.vectorized_dims.push_back(new_sched_dim);
+
+                        // update the strides of exploded outer tilings, if any
+                        } else if edim.index == index && vec_extent != extent {
+                            let tile_index =
+                                tiling.iter()
+                                .position(|(cur_stride, cur_extent)| {
+                                    *cur_stride == edim.stride && *cur_extent == edim.extent
+                                }).unwrap();
+
+                            let (new_stride, new_extent): (usize, usize) =
+                                *new_tiling.get(tile_index).unwrap();
+
+                            let new_sched_dim = ScheduleDim {
+                                index: edim.index,
+                                stride: new_stride,
+                                extent: new_extent,
+                                name: edim.name.clone(),
+                                pad_left: edim.pad_left,
+                                pad_right: edim.pad_right,
+                            };
+                            new_ischedule.exploded_dims.push_back(new_sched_dim);
+                            
+                        // keep the exploded dim in the same place
+                        } else { 
+                            new_ischedule.exploded_dims.push_back(edim.clone());
+                        }
+                    }
+
+                    new_schedule_map.insert(site.clone(), new_ischedule);
+
+                // candidate is not a part of this indexing site, just clone
+                // the existing indexing site schedule
+                } else {
+                    new_schedule_map.insert(site.clone(), ischedule.clone());
+                }
             }
 
             neighbors.insert(
@@ -169,7 +240,7 @@ impl ScheduleTransformer for SplitDimTransformer {
             schedule.schedule_map.iter()
             .fold(0, |acc,(_, isched)| {
                 let isched_tiled_dims =
-                    isched.get_tiling().iter().filter(|t| t.len() > 1).count();
+                    isched.get_tiling_extents().iter().filter(|t| t.len() > 1).count();
 
                 acc + isched_tiled_dims
             });
@@ -188,7 +259,7 @@ impl ScheduleTransformer for SplitDimTransformer {
         // find candidate dims to be vectorized
         let mut candidate_dims: HashSet<(usize, usize, usize)> = HashSet::new();
         for (site, ischedule) in schedule.schedule_map.iter() {
-            let tiling = ischedule.get_tiling();
+            let tiling = ischedule.get_tiling_extents();
 
             if self.indexing_levels[site] >= cur_level && ischedule.preprocessing.is_none() {
                 for edim in ischedule.exploded_dims.iter() {
@@ -300,7 +371,7 @@ impl ScheduleTransformer for RollTransformer {
 
         let mut candidate_pairs: Vec<(usize, usize)> = Vec::new();
         for (site, ischedule) in schedule.schedule_map.iter() {
-            let tiling = ischedule.get_tiling();
+            let tiling = ischedule.get_tiling_extents();
             if self.indexing_levels[site] >= cur_level && ischedule.vectorized_dims.len() > 0 {
                 let vdim = ischedule.vectorized_dims.head().unwrap();
                 let vdim_valid_tiling = tiling[vdim.index].len() == 1;

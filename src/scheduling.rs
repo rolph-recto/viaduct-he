@@ -107,7 +107,8 @@ pub trait HasExplodedDims {
                     let new_offset = OffsetExpr::Add(
                         Box::new(cur_offset),
                         Box::new(OffsetExpr::Mul(
-                            Box::new(OffsetExpr::Literal(*stride as isize)),
+                            // Box::new(OffsetExpr::Literal(*stride as isize)),
+                            Box::new(OffsetExpr::Literal((*stride * sched_dim.stride) as isize)),
                             Box::new(OffsetExpr::Var(sched_dim.name.clone())),
                         )),
                     );
@@ -186,7 +187,7 @@ impl IndexingSiteSchedule {
         sdims.into_iter().map(|(_, extent)| extent).collect()
     }
 
-    pub fn get_tiling(&self) -> Vec<Vec<usize>> {
+    pub fn get_tiling(&self) -> Vec<Vec<(usize,usize)>> {
         let mut sdims_map: IndexMap<DimIndex, Vec<(usize, usize)>> = IndexMap::new();
 
         let mut dims_index: Vec<DimIndex> =
@@ -215,7 +216,13 @@ impl IndexingSiteSchedule {
 
         sdims_map.into_iter().map(|(_, mut dims_list)| {
             dims_list.sort_by(|(s1, _), (s2, _)| s1.cmp(s2));
-            dims_list.into_iter().map(|(_, extent)| extent).collect()
+            dims_list
+        }).collect()
+    }
+
+    pub fn get_tiling_extents(&self) -> Vec<Vec<usize>> {
+        self.get_tiling().into_iter().map(|dim_list| {
+            dim_list.into_iter().map(|(_, e)| e).collect()
         }).collect()
     }
 
