@@ -1,0 +1,172 @@
+[2023-04-12T04:20:23Z INFO  he_vectorizer] parsing: 0ms
+[2023-04-12T04:20:23Z INFO  he_vectorizer] elaboration: 0ms
+[2023-04-12T04:20:23Z INFO  he_vectorizer::scheduling::scheduler] running scheduler with iter limit: None
+[2023-04-12T04:20:23Z INFO  he_vectorizer::scheduling::scheduler] starting scheduler epoch 1
+[2023-04-12T04:20:28Z INFO  he_vectorizer::scheduling::scheduler] iteration 1
+[2023-04-12T04:20:28Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 5
+[2023-04-12T04:20:28Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 5
+[2023-04-12T04:20:33Z INFO  he_vectorizer::scheduling::scheduler] iteration 2
+[2023-04-12T04:20:33Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 24
+[2023-04-12T04:20:33Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 22
+[2023-04-12T04:20:34Z INFO  he_vectorizer::scheduling::scheduler] iteration 3
+[2023-04-12T04:20:34Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 70
+[2023-04-12T04:20:34Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 66
+[2023-04-12T04:20:34Z INFO  he_vectorizer::scheduling::scheduler] iteration 4
+[2023-04-12T04:20:34Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 136
+[2023-04-12T04:20:34Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 55
+[2023-04-12T04:20:34Z INFO  he_vectorizer::scheduling::scheduler] iteration 5
+[2023-04-12T04:20:34Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 140
+[2023-04-12T04:20:34Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 0
+[2023-04-12T04:20:34Z INFO  he_vectorizer::scheduling::scheduler] iteration 6
+[2023-04-12T04:20:34Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 0
+[2023-04-12T04:20:34Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 0
+[2023-04-12T04:20:34Z INFO  he_vectorizer::scheduling::scheduler] starting scheduler epoch 2
+[2023-04-12T04:20:40Z INFO  he_vectorizer::scheduling::scheduler] iteration 7
+[2023-04-12T04:20:40Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 1024
+[2023-04-12T04:20:40Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 71
+[2023-04-12T04:21:25Z INFO  he_vectorizer::scheduling::scheduler] iteration 8
+[2023-04-12T04:21:25Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 2439
+[2023-04-12T04:21:25Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 718
+[2023-04-12T04:21:58Z INFO  he_vectorizer::scheduling::scheduler] iteration 9
+[2023-04-12T04:21:58Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 2671
+[2023-04-12T04:21:58Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 997
+[2023-04-12T04:22:07Z INFO  he_vectorizer::scheduling::scheduler] iteration 10
+[2023-04-12T04:22:07Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 2278
+[2023-04-12T04:22:07Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 839
+[2023-04-12T04:22:09Z INFO  he_vectorizer::scheduling::scheduler] iteration 11
+[2023-04-12T04:22:09Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 1568
+[2023-04-12T04:22:09Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 468
+[2023-04-12T04:22:09Z INFO  he_vectorizer::scheduling::scheduler] iteration 12
+[2023-04-12T04:22:09Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 672
+[2023-04-12T04:22:09Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 97
+[2023-04-12T04:22:09Z INFO  he_vectorizer::scheduling::scheduler] iteration 13
+[2023-04-12T04:22:09Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 0
+[2023-04-12T04:22:09Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 0
+[2023-04-12T04:22:09Z INFO  he_vectorizer::scheduling::scheduler] inline scheduler 1 total visited schedules: 11028
+[2023-04-12T04:22:09Z INFO  he_vectorizer] scheduling: 105963ms
+[2023-04-12T04:22:09Z INFO  he_vectorizer] circuit generation: 0ms
+[2023-04-12T04:22:09Z INFO  he_vectorizer::circ::optimizer] Runner report
+    =============
+      Stop reason: Saturated
+      Iterations: 5
+      Egraph size: 46 nodes, 20 classes, 76 memo
+      Rebuilds: 6
+      Total time: 0.000357529
+        Search:  (0.31) 0.000111803
+        Apply:   (0.54) 0.000191541
+        Rebuild: (0.15) 0.000053217
+    
+[2023-04-12T04:22:09Z INFO  he_vectorizer::circ::optimizer] equality saturation: 0ms
+[2023-04-12T04:22:09Z INFO  he_vectorizer::circ::optimizer] using LP extractor to derive optimized program...
+[/home/rolph/.cargo/registry/src/index.crates.io-6f17d22bba15001f/egg-0.9.0/src/lp_extract.rs:137] max_order = 460.0
+Welcome to the CBC MILP Solver 
+Version: 2.10.3 
+Build Date: Mar 24 2020 
+
+command line - Cbc_C_Interface -solve -quit (default strategy 1)
+Continuous objective value is 97.7333 - 0.00 seconds
+Cgl0003I 6 fixed, 0 tightened bounds, 5 strengthened rows, 0 substitutions
+Cgl0003I 0 fixed, 0 tightened bounds, 5 strengthened rows, 1 substitutions
+Cgl0003I 0 fixed, 0 tightened bounds, 5 strengthened rows, 0 substitutions
+Cgl0003I 0 fixed, 4 tightened bounds, 1 strengthened rows, 0 substitutions
+Cgl0004I processed model has 14 rows, 17 columns (17 integer (17 of which binary)) and 32 elements
+Cutoff increment increased from 1e-05 to 0.9999
+Cbc0038I Initial state - 0 integers unsatisfied sum - 0
+Cbc0038I Solution found of 204
+Cbc0038I Before mini branch and bound, 17 integers at bound fixed and 0 continuous
+Cbc0038I Mini branch and bound did not improve solution (0.00 seconds)
+Cbc0038I After 0.00 seconds - Feasibility pump exiting with objective of 204 - took 0.00 seconds
+Cbc0012I Integer solution of 204 found by feasibility pump after 0 iterations and 0 nodes (0.00 seconds)
+Cbc0001I Search completed - best objective 204, took 0 iterations and 0 nodes (0.00 seconds)
+Cbc0035I Maximum depth 0, 0 variables fixed on reduced cost
+Cuts at root node changed objective from 204 to 204
+Probing was tried 0 times and created 0 cuts of which 0 were active after adding rounds of cuts (0.000 seconds)
+Gomory was tried 0 times and created 0 cuts of which 0 were active after adding rounds of cuts (0.000 seconds)
+Knapsack was tried 0 times and created 0 cuts of which 0 were active after adding rounds of cuts (0.000 seconds)
+Clique was tried 0 times and created 0 cuts of which 0 were active after adding rounds of cuts (0.000 seconds)
+MixedIntegerRounding2 was tried 0 times and created 0 cuts of which 0 were active after adding rounds of cuts (0.000 seconds)
+FlowCover was tried 0 times and created 0 cuts of which 0 were active after adding rounds of cuts (0.000 seconds)
+TwoMirCuts was tried 0 times and created 0 cuts of which 0 were active after adding rounds of cuts (0.000 seconds)
+ZeroHalf was tried 0 times and created 0 cuts of which 0 were active after adding rounds of cuts (0.000 seconds)
+
+Result - Optimal solution found
+
+Objective value:                204.00000000
+Enumerated nodes:               0
+Total iterations:               0
+Time (CPU seconds):             0.00
+Time (Wallclock seconds):       0.01
+
+Total time (CPU seconds):       0.00   (Wallclock seconds):       0.01
+
+[2023-04-12T04:22:09Z INFO  he_vectorizer::circ::optimizer] extraction: 16ms
+[2023-04-12T04:22:09Z INFO  he_vectorizer] circuit optimization: 17ms
+[2023-04-12T04:22:09Z INFO  he_vectorizer] plaintext hoisting: 0ms
+[2023-04-12T04:22:09Z INFO  he_vectorizer] circuit lowering: 0ms
+[2023-04-12T04:22:09Z INFO  he_vectorizer] using pyseal backend for code generation
+[2023-04-12T04:22:09Z INFO  he_vectorizer] printed generated code to stdout
+def client_pre(wrapper):
+    wrapper.client_input("img")
+    v_img_1 = wrapper.build_vector("img", None, [0, 0], [FilledDim(0, 32, 1, 0, 0, 0, 0), EmptyDim(4, 0, 0, 0), FilledDim(1, 32, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_img_1", v_img_1)
+
+def client_post(wrapper):
+    __out = wrapper.client_recv("__out")
+    wrapper.client_output(__out)
+
+def server(wrapper):
+    wrapper.server_input("filter")
+    v_filter_1 = wrapper.build_vector("filter", None, [0, 2, 2], [EmptyDim(30, 0, 0, 2), FilledDim(0, 4, 1, 0, 0, 0, 0), EmptyDim(30, 0, 0, 2)])
+    v_filter_2 = wrapper.build_vector("filter", None, [0, 1, 0], [EmptyDim(30, 0, 0, 2), FilledDim(0, 4, 1, 0, 0, 0, 0), EmptyDim(30, 0, 0, 2)])
+    v_filter_3 = wrapper.build_vector("filter", None, [0, 0, 2], [EmptyDim(30, 0, 0, 2), FilledDim(0, 4, 1, 0, 0, 0, 0), EmptyDim(30, 0, 0, 2)])
+    v_filter_4 = wrapper.build_vector("filter", None, [0, 1, 2], [EmptyDim(30, 0, 0, 2), FilledDim(0, 4, 1, 0, 0, 0, 0), EmptyDim(30, 0, 0, 2)])
+    v_filter_5 = wrapper.build_vector("filter", None, [0, 2, 0], [EmptyDim(30, 0, 0, 2), FilledDim(0, 4, 1, 0, 0, 0, 0), EmptyDim(30, 0, 0, 2)])
+    v_filter_6 = wrapper.build_vector("filter", None, [0, 2, 1], [EmptyDim(30, 0, 0, 2), FilledDim(0, 4, 1, 0, 0, 0, 0), EmptyDim(30, 0, 0, 2)])
+    v_filter_7 = wrapper.build_vector("filter", None, [0, 1, 1], [EmptyDim(30, 0, 0, 2), FilledDim(0, 4, 1, 0, 0, 0, 0), EmptyDim(30, 0, 0, 2)])
+    v_filter_8 = wrapper.build_vector("filter", None, [0, 0, 1], [EmptyDim(30, 0, 0, 2), FilledDim(0, 4, 1, 0, 0, 0, 0), EmptyDim(30, 0, 0, 2)])
+    v_filter_9 = wrapper.build_vector("filter", None, [0, 0, 0], [EmptyDim(30, 0, 0, 2), FilledDim(0, 4, 1, 0, 0, 0, 0), EmptyDim(30, 0, 0, 2)])
+    v_img_1 = wrapper.server_recv("v_img_1")
+    const_neg1 = wrapper.const(-1)
+    mask_1 = wrapper.mask([(32, 0, 30), (4, 0, 3), (32, 0, 30)])
+    wrapper.start_server_exec()
+    pt1 = wrapper.plaintext_array([3, 3], 0)
+    wrapper.set(pt1, [0, 0], v_filter_9.get())
+    wrapper.set(pt1, [0, 1], v_filter_2.get())
+    wrapper.set(pt1, [0, 2], v_filter_5.get())
+    wrapper.set(pt1, [1, 0], v_filter_8.get())
+    wrapper.set(pt1, [1, 1], v_filter_7.get())
+    wrapper.set(pt1, [1, 2], v_filter_6.get())
+    wrapper.set(pt1, [2, 0], v_filter_3.get())
+    wrapper.set(pt1, [2, 1], v_filter_4.get())
+    wrapper.set(pt1, [2, 2], v_filter_1.get())
+    __partial_1 = wrapper.native_array([3, 3], 0)
+    for i3 in range(3):
+        for i7 in range(3):
+            instr2 = wrapper.multiply_native(pt1.get([i7, i3]), mask_1.get())
+            wrapper.set(__partial_1, [i3, i7], instr2)
+        
+    
+    wrapper.encode(const_neg1, [])
+    for i3 in range(3):
+        for i7 in range(3):
+            wrapper.encode(__partial_1, [i3, i7])
+        
+    
+    __out = wrapper.ciphertext_array([], 0)
+    __reduce_2 = wrapper.ciphertext_array([], 0)
+    for i3 in range(3):
+        __reduce_1 = wrapper.ciphertext_array([], 0)
+        for i7 in range(3):
+            instr4 = wrapper.rotate_rows(((-128 * i3) + (-1 * i7)), v_img_1.get())
+            wrapper.multiply_plain_inplace(instr4, __partial_1.get([i3, i7]))
+            wrapper.add_inplace(instr4, __reduce_1.get())
+            wrapper.set(__reduce_1, [], instr4)
+        
+        instr9 = wrapper.add(__reduce_2.get(), __reduce_1.get())
+        wrapper.set(__reduce_2, [], instr9)
+    
+    wrapper.set(__out, [], __reduce_2.get())
+    wrapper.end_server_exec()
+    wrapper.server_send("__out", __out)
+[2023-04-12T04:22:09Z INFO  he_vectorizer] code generation: 0ms
+[2023-04-12T04:22:09Z INFO  he_vectorizer] total compile time: 105982ms

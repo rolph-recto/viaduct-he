@@ -1,0 +1,9 @@
+bench,cfg,trials,scheduling,scheduling_sterror,scheduling_error_pct,optimization,optimization_sterror,optimization_error_pct,total,total_sterror,total_error_pct
+conv-simo,e2-o0,5,100025.8,2032.35,0.02,0,0,0,100027.4,2032.25,0.02
+conv-siso,e2-o0,5,14092.2,297.84,0.02,0,0,0,14094,297.82,0.02
+distance,e2-o0,5,6279.8,18.77,0.0,0,0,0,6281,18.89,0.0
+matmul-2,e2-o0,5,5895.6,23.33,0.0,0,0,0,5896.8,23.39,0.0
+retrieval-1024,e2-o0,5,16991.2,89.26,0.01,0,0,0,16992.8,89.1,0.01
+retrieval-256,e2-o0,5,801,3.92,0.0,0,0,0,803,3.92,0.0
+set-union-16,e2-o0,5,1656.4,37.74,0.02,0,0,0,1658.2,37.66,0.02
+

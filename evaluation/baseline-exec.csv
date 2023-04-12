@@ -1,0 +1,9 @@
+bench,cfg,trials,exec_time,sterror,error_pct
+conv,baseline,5,15582.2,20.09,0.0
+conv-multioutput,baseline,5,62206.4,21.86,0.0
+distance,baseline,5,540,0.55,0.0
+matmul-2,baseline,5,5452.8,4.35,0.0
+retrieval-1024,baseline,5,585080,252.64,0.0
+retrieval-256,baseline,5,120122.6,120.73,0.0
+set-union-16,baseline,5,93975,47.45,0.0
+

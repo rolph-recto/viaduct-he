@@ -66,9 +66,12 @@ struct HEArguments {
     #[clap(short = 's', long = "size", value_parser, default_value_t = 4096)]
     size: usize,
 
-    /// don't inline instructions
-    #[clap(short = 'n', long = "noinplace")]
+    #[clap(long = "noinplace")]
     noinplace: bool,
+
+    /// max size of e-graph before stopping 
+    #[clap(short = 'n', long = "nodes", value_parser, default_value_t = 500)]
+    node_limit: usize,
 
     /// number of epochs to run scheduler
     #[clap(short = 'e', long = "epochs", value_parser, default_value_t = 1)]
@@ -163,7 +166,14 @@ fn main() {
             let (opt_exprs, context) = circuit.to_opt_circuit();
             let (res_opt_exprs, opt_roots) =
                 Optimizer::new(args.size)
-                .optimize(opt_exprs, context, args.duration, args.extractor, args.size);
+                .optimize(
+                    opt_exprs,
+                    context,
+                    args.duration,
+                    args.node_limit,
+                    args.extractor,
+                    args.size
+                );
 
             let opt_circuit = circuit.from_opt_circuit(res_opt_exprs, opt_roots);
             info!("circuit optimization: {}ms", time_circopt.elapsed().as_millis());
@@ -175,7 +185,14 @@ fn main() {
             let (opt_exprs, context) = circuit.to_opt_circuit();
             let (res_opt_exprs, opt_roots) =
                 Optimizer::new(args.size)
-                .optimize(opt_exprs, context, args.duration, args.extractor, args.size);
+                .optimize(
+                    opt_exprs,
+                    context,
+                    args.duration,
+                    args.node_limit,
+                    args.extractor, 
+                    args.size
+                );
 
             info!("circuit optimization: 0ms");
             circuit.from_opt_circuit(res_opt_exprs, opt_roots)

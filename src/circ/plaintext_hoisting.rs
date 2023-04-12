@@ -90,8 +90,10 @@ impl PlaintextHoisting {
 
                         new_registry.set_pt_var_value(new_var.clone(), new_circval);
 
+                        let new_body_id = new_registry.clone_circuit(new_id2);
+
                         native_expr_list.push(
-                            (new_array, dims.clone(), new_id2)
+                            (new_array, dims.clone(), new_body_id)
                         );
 
                         let pt_var_id =
@@ -141,8 +143,10 @@ impl PlaintextHoisting {
 
                         new_registry.set_pt_var_value(new_var.clone(), new_circval);
 
+                        let new_body_id = new_registry.clone_circuit(new_id1);
+
                         native_expr_list.push(
-                            (new_array, dims.clone(), new_id1)
+                            (new_array, dims.clone(), new_body_id)
                         );
 
                         let pt_var_id =
