@@ -1,0 +1,4 @@
+bench,cfg,trials,exec_time,sterror,error_pct
+matmul-2,e2-o0,5,42,0.0,0.0
+matmul-2,chet,5,60.6,0.24,0.0
+

@@ -1,0 +1,385 @@
+[2023-04-12T18:50:39Z INFO  he_vectorizer] parsing: 0ms
+[2023-04-12T18:50:39Z INFO  he_vectorizer] elaboration: 0ms
+[2023-04-12T18:50:40Z INFO  he_vectorizer::scheduling::scheduler] running scheduler with iter limit: None
+[2023-04-12T18:50:40Z INFO  he_vectorizer::scheduling::scheduler] starting scheduler epoch 1
+[2023-04-12T18:50:43Z INFO  he_vectorizer::scheduling::scheduler] iteration 1
+[2023-04-12T18:50:43Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 4
+[2023-04-12T18:50:43Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 4
+[2023-04-12T18:50:46Z INFO  he_vectorizer::scheduling::scheduler] iteration 2
+[2023-04-12T18:50:46Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 17
+[2023-04-12T18:50:46Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 17
+[2023-04-12T18:50:46Z INFO  he_vectorizer::scheduling::scheduler] iteration 3
+[2023-04-12T18:50:46Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 32
+[2023-04-12T18:50:46Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 22
+[2023-04-12T18:50:46Z INFO  he_vectorizer::scheduling::scheduler] iteration 4
+[2023-04-12T18:50:46Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 22
+[2023-04-12T18:50:46Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 8
+[2023-04-12T18:50:46Z INFO  he_vectorizer::scheduling::scheduler] iteration 5
+[2023-04-12T18:50:46Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 4
+[2023-04-12T18:50:46Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 0
+[2023-04-12T18:50:46Z INFO  he_vectorizer::scheduling::scheduler] iteration 6
+[2023-04-12T18:50:46Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 0
+[2023-04-12T18:50:46Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 0
+[2023-04-12T18:50:46Z INFO  he_vectorizer::scheduling::scheduler] starting scheduler epoch 2
+[2023-04-12T18:50:53Z INFO  he_vectorizer::scheduling::scheduler] iteration 7
+[2023-04-12T18:50:53Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 301
+[2023-04-12T18:50:53Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 51
+[2023-04-12T18:58:57Z INFO  he_vectorizer::scheduling::scheduler] iteration 8
+[2023-04-12T18:58:57Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 837
+[2023-04-12T18:58:57Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 267
+[2023-04-12T19:04:06Z INFO  he_vectorizer::scheduling::scheduler] iteration 9
+[2023-04-12T19:04:06Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 1258
+[2023-04-12T19:04:06Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 570
+[2023-04-12T19:04:32Z INFO  he_vectorizer::scheduling::scheduler] iteration 10
+[2023-04-12T19:04:32Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 1357
+[2023-04-12T19:04:32Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 704
+[2023-04-12T19:04:33Z INFO  he_vectorizer::scheduling::scheduler] iteration 11
+[2023-04-12T19:04:33Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 698
+[2023-04-12T19:04:33Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 288
+[2023-04-12T19:04:33Z INFO  he_vectorizer::scheduling::scheduler] iteration 12
+[2023-04-12T19:04:33Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 96
+[2023-04-12T19:04:33Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 0
+[2023-04-12T19:04:33Z INFO  he_vectorizer::scheduling::scheduler] iteration 13
+[2023-04-12T19:04:33Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 0
+[2023-04-12T19:04:33Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 0
+[2023-04-12T19:04:33Z INFO  he_vectorizer::scheduling::scheduler] inline scheduler 1 total visited schedules: 4627
+[2023-04-12T19:04:33Z INFO  he_vectorizer] scheduling: 834258ms
+[2023-04-12T19:04:33Z INFO  he_vectorizer] circuit generation: 0ms
+[2023-04-12T19:04:33Z INFO  he_vectorizer::circ::optimizer] Runner report
+    =============
+      Stop reason: NodeLimit(551)
+      Iterations: 2
+      Egraph size: 539 nodes, 279 classes, 551 memo
+      Rebuilds: 0
+      Total time: 0.000709011
+        Search:  (0.26) 0.000180907
+        Apply:   (0.68) 0.000482306
+        Rebuild: (0.06) 0.000045273
+    
+[2023-04-12T19:04:33Z INFO  he_vectorizer::circ::optimizer] equality saturation: 0ms
+[2023-04-12T19:04:33Z INFO  he_vectorizer::circ::optimizer] using LP extractor to derive optimized program...
+[/home/rolph/.cargo/registry/src/index.crates.io-6f17d22bba15001f/egg-0.9.0/src/lp_extract.rs:137] max_order = 5390.0
+Welcome to the CBC MILP Solver 
+Version: 2.10.3 
+Build Date: Mar 24 2020 
+
+command line - Cbc_C_Interface -solve -quit (default strategy 1)
+Continuous objective value is 996.508 - 0.01 seconds
+Cgl0003I 0 fixed, 0 tightened bounds, 349 strengthened rows, 0 substitutions
+Cgl0003I 0 fixed, 0 tightened bounds, 257 strengthened rows, 0 substitutions
+Cgl0003I 0 fixed, 13 tightened bounds, 160 strengthened rows, 0 substitutions
+Cgl0003I 0 fixed, 14 tightened bounds, 113 strengthened rows, 0 substitutions
+Cgl0003I 0 fixed, 10 tightened bounds, 48 strengthened rows, 0 substitutions
+Cgl0003I 0 fixed, 10 tightened bounds, 35 strengthened rows, 0 substitutions
+Cgl0003I 0 fixed, 10 tightened bounds, 8 strengthened rows, 0 substitutions
+Cgl0003I 0 fixed, 0 tightened bounds, 8 strengthened rows, 0 substitutions
+Cgl0003I 0 fixed, 0 tightened bounds, 2 strengthened rows, 0 substitutions
+Cgl0004I processed model has 951 rows, 534 columns (534 integer (534 of which binary)) and 2525 elements
+Cutoff increment increased from 1e-05 to 0.9999
+Cbc0038I Initial state - 245 integers unsatisfied sum - 17.4129
+Cbc0038I Pass   1: suminf.   16.37622 (260) obj. 8471.72 iterations 114
+Cbc0038I Pass   2: suminf.   21.47873 (215) obj. 9929.71 iterations 67
+Cbc0038I Pass   3: suminf.   16.50629 (270) obj. 7233.2 iterations 77
+Cbc0038I Pass   4: suminf.   16.08407 (261) obj. 8448.33 iterations 60
+Cbc0038I Pass   5: suminf.   19.75045 (195) obj. 9033.57 iterations 77
+Cbc0038I Pass   6: suminf.   21.33333 (61) obj. 85613.5 iterations 234
+Cbc0038I Pass   7: suminf.    6.02222 (61) obj. 75039.9 iterations 124
+Cbc0038I Pass   8: suminf.    6.02222 (61) obj. 75039.9 iterations 6
+Cbc0038I Pass   9: suminf.    8.20000 (38) obj. 89476 iterations 25
+Cbc0038I Pass  10: suminf.    7.70000 (37) obj. 88476 iterations 9
+Cbc0038I Pass  11: suminf.    6.50000 (23) obj. 96871 iterations 24
+Cbc0038I Pass  12: suminf.    6.50000 (23) obj. 96871 iterations 1
+Cbc0038I Pass  13: suminf.    0.00000 (0) obj. 106871 iterations 31
+Cbc0038I Solution found of 106871
+Cbc0038I Rounding solution of 100733 is better than previous of 106871
+
+Cbc0038I Before mini branch and bound, 166 integers at bound fixed and 0 continuous
+Cbc0038I Full problem 951 rows 534 columns, reduced to 623 rows 339 columns - 47 fixed gives 293, 224 - ok now
+Cbc0038I Full problem 951 rows 534 columns, reduced to 292 rows 224 columns
+Cbc0038I Mini branch and bound improved solution from 100733 to 80115 (0.15 seconds)
+Cbc0038I Round again with cutoff of 72819.5
+Cbc0038I Pass  14: suminf.   16.37622 (260) obj. 8471.72 iterations 0
+Cbc0038I Pass  15: suminf.   18.33062 (211) obj. 7452.09 iterations 87
+Cbc0038I Pass  16: suminf.   16.50629 (270) obj. 7233.2 iterations 45
+Cbc0038I Pass  17: suminf.   16.08407 (261) obj. 8448.33 iterations 53
+Cbc0038I Pass  18: suminf.   16.77185 (260) obj. 8407.74 iterations 48
+Cbc0038I Pass  19: suminf.   16.28270 (281) obj. 8300.22 iterations 38
+Cbc0038I Pass  20: suminf.   43.26190 (206) obj. 43283 iterations 247
+Cbc0038I Pass  21: suminf.   21.13406 (129) obj. 43657.7 iterations 140
+Cbc0038I Pass  22: suminf.   19.38406 (144) obj. 43663.2 iterations 12
+Cbc0038I Pass  23: suminf.   19.38406 (144) obj. 43663.2 iterations 10
+Cbc0038I Pass  24: suminf.   15.46739 (120) obj. 46925.7 iterations 29
+Cbc0038I Pass  25: suminf.   14.13406 (112) obj. 46925.7 iterations 16
+Cbc0038I Pass  26: suminf.   14.13406 (112) obj. 46925.7 iterations 4
+Cbc0038I Pass  27: suminf.   11.73567 (66) obj. 72819.5 iterations 167
+Cbc0038I Pass  28: suminf.    6.67989 (75) obj. 72819.5 iterations 110
+Cbc0038I Pass  29: suminf.    9.94972 (64) obj. 72819.5 iterations 32
+Cbc0038I Pass  30: suminf.    9.22078 (60) obj. 72819.5 iterations 24
+Cbc0038I Pass  31: suminf.    7.00000 (65) obj. 66165.2 iterations 32
+Cbc0038I Pass  32: suminf.    6.18519 (74) obj. 66045.6 iterations 20
+Cbc0038I Pass  33: suminf.   10.20758 (56) obj. 72819.5 iterations 29
+Cbc0038I Pass  34: suminf.   34.39729 (76) obj. 72819.5 iterations 192
+Cbc0038I Pass  35: suminf.    6.05333 (66) obj. 61464.7 iterations 146
+Cbc0038I Pass  36: suminf.    6.05333 (66) obj. 61464.7 iterations 3
+Cbc0038I Pass  37: suminf.    9.07240 (58) obj. 72819.5 iterations 31
+Cbc0038I Pass  38: suminf.    8.19109 (52) obj. 72819.5 iterations 15
+Cbc0038I Pass  39: suminf.    9.37311 (35) obj. 72819.5 iterations 30
+Cbc0038I Pass  40: suminf.    7.87500 (42) obj. 72623.1 iterations 35
+Cbc0038I Pass  41: suminf.    7.87500 (42) obj. 72623.1 iterations 7
+Cbc0038I Pass  42: suminf.    7.79661 (47) obj. 72819.5 iterations 16
+Cbc0038I Pass  43: suminf.    7.65579 (51) obj. 72819.5 iterations 3
+Cbc0038I No solution found this major pass
+Cbc0038I Before mini branch and bound, 130 integers at bound fixed and 0 continuous
+Cbc0038I Full problem 951 rows 534 columns, reduced to 669 rows 366 columns - 111 fixed gives 146, 126 - ok now
+Cbc0038I Full problem 951 rows 534 columns, reduced to 0 rows 0 columns
+Cbc0038I Mini branch and bound improved solution from 80115 to 80113 (0.23 seconds)
+Cbc0038I Round again with cutoff of 59689.4
+Cbc0038I Pass  43: suminf.   16.37622 (260) obj. 8471.72 iterations 0
+Cbc0038I Pass  44: suminf.   21.19612 (212) obj. 9773.08 iterations 129
+Cbc0038I Pass  45: suminf.   16.38449 (268) obj. 7295.53 iterations 83
+Cbc0038I Pass  46: suminf.   15.98992 (257) obj. 8445.77 iterations 46
+Cbc0038I Pass  47: suminf.   15.84369 (246) obj. 8417.21 iterations 34
+Cbc0038I Pass  48: suminf.   18.71122 (215) obj. 7861.96 iterations 93
+Cbc0038I Pass  49: suminf.   16.68694 (231) obj. 7285.24 iterations 39
+Cbc0038I Pass  50: suminf.   16.07995 (264) obj. 8349.54 iterations 73
+Cbc0038I Pass  51: suminf.   23.53571 (150) obj. 24635 iterations 250
+Cbc0038I Pass  52: suminf.    8.62037 (116) obj. 26993.4 iterations 139
+Cbc0038I Pass  53: suminf.    8.62037 (116) obj. 26993.4 iterations 9
+Cbc0038I Pass  54: suminf.   10.48765 (111) obj. 38575.7 iterations 35
+Cbc0038I Pass  55: suminf.   10.32099 (101) obj. 37822.4 iterations 6
+Cbc0038I Pass  56: suminf.    9.65432 (99) obj. 37822.4 iterations 23
+Cbc0038I Pass  57: suminf.    9.49074 (105) obj. 34394.8 iterations 23
+Cbc0038I Pass  58: suminf.    8.56614 (112) obj. 28045 iterations 14
+Cbc0038I Pass  59: suminf.    8.35185 (124) obj. 28047.9 iterations 26
+Cbc0038I Pass  60: suminf.   10.97531 (96) obj. 48532.8 iterations 42
+Cbc0038I Pass  61: suminf.   10.97531 (96) obj. 48532.8 iterations 7
+Cbc0038I Pass  62: suminf.    7.13590 (95) obj. 59689.4 iterations 49
+Cbc0038I Pass  63: suminf.    6.70315 (96) obj. 59689.4 iterations 15
+Cbc0038I Pass  64: suminf.    7.02920 (80) obj. 59689.4 iterations 46
+Cbc0038I Pass  65: suminf.    9.84388 (78) obj. 59689.4 iterations 147
+Cbc0038I Pass  66: suminf.    7.53037 (81) obj. 59689.4 iterations 97
+Cbc0038I Pass  67: suminf.    7.03962 (99) obj. 59689.4 iterations 47
+Cbc0038I Pass  68: suminf.    7.46013 (78) obj. 59689.4 iterations 33
+Cbc0038I Pass  69: suminf.    9.62884 (82) obj. 59689.4 iterations 155
+Cbc0038I Pass  70: suminf.    8.41916 (81) obj. 59689.4 iterations 98
+Cbc0038I Pass  71: suminf.    7.38347 (71) obj. 59689.4 iterations 18
+Cbc0038I Pass  72: suminf.    7.38347 (71) obj. 59689.4 iterations 1
+Cbc0038I No solution found this major pass
+Cbc0038I Before mini branch and bound, 126 integers at bound fixed and 0 continuous
+Cbc0038I Full problem 951 rows 534 columns, reduced to 678 rows 369 columns - 109 fixed gives 150, 127 - ok now
+Cbc0038I Mini branch and bound did not improve solution (0.31 seconds)
+Cbc0038I After 0.31 seconds - Feasibility pump exiting with objective of 80113 - took 0.20 seconds
+Cbc0012I Integer solution of 80113 found by feasibility pump after 0 iterations and 0 nodes (0.31 seconds)
+Cbc0012I Integer solution of 69133 found by DiveCoefficient after 0 iterations and 0 nodes (0.34 seconds)
+Cbc0038I Full problem 951 rows 534 columns, reduced to 396 rows 215 columns
+Cbc0031I 55 added rows had average density of 90.181818
+Cbc0013I At root node, 55 cuts changed objective from 7168.9323 to 23479.145 in 100 passes
+Cbc0014I Cut generator 0 (Probing) - 169 row cuts average 7.2 elements, 2 column cuts (2 active)  in 0.166 seconds - new frequency is -100
+Cbc0014I Cut generator 1 (Gomory) - 3080 row cuts average 269.1 elements, 0 column cuts (0 active)  in 0.940 seconds - new frequency is 1
+Cbc0014I Cut generator 2 (Knapsack) - 0 row cuts average 0.0 elements, 0 column cuts (0 active)  in 0.036 seconds - new frequency is -100
+Cbc0014I Cut generator 3 (Clique) - 0 row cuts average 0.0 elements, 0 column cuts (0 active)  in 0.020 seconds - new frequency is -100
+Cbc0014I Cut generator 4 (MixedIntegerRounding2) - 7 row cuts average 44.4 elements, 0 column cuts (0 active)  in 0.413 seconds - new frequency is -100
+Cbc0014I Cut generator 5 (FlowCover) - 0 row cuts average 0.0 elements, 0 column cuts (0 active)  in 0.006 seconds - new frequency is -100
+Cbc0014I Cut generator 6 (TwoMirCuts) - 344 row cuts average 103.5 elements, 0 column cuts (0 active)  in 0.101 seconds - new frequency is 1
+Cbc0014I Cut generator 7 (ZeroHalf) - 705 row cuts average 10.9 elements, 0 column cuts (0 active)  in 0.569 seconds - new frequency is 1
+Cbc0010I After 0 nodes, 1 on tree, 69133 best solution, best possible 29201.025 (5.32 seconds)
+Cbc0016I Integer solution of 68481 found by strong branching after 27735 iterations and 37 nodes (7.86 seconds)
+Cbc0038I Full problem 951 rows 534 columns, reduced to 156 rows 93 columns
+Cbc0012I Integer solution of 67609 found by DiveCoefficient after 28283 iterations and 48 nodes (8.15 seconds)
+Cbc0016I Integer solution of 67581 found by strong branching after 28529 iterations and 52 nodes (8.23 seconds)
+Cbc0016I Integer solution of 67131 found by strong branching after 28687 iterations and 59 nodes (8.28 seconds)
+Cbc0001I Search completed - best objective 67131, took 30283 iterations and 81 nodes (8.83 seconds)
+Cbc0032I Strong branching done 1600 times (49641 iterations), fathomed 16 nodes and fixed 36 variables
+Cbc0035I Maximum depth 12, 324 variables fixed on reduced cost
+Cuts at root node changed objective from 7168.93 to 29201
+Probing was tried 100 times and created 171 cuts of which 0 were active after adding rounds of cuts (0.166 seconds)
+Gomory was tried 281 times and created 3606 cuts of which 0 were active after adding rounds of cuts (1.105 seconds)
+Knapsack was tried 100 times and created 0 cuts of which 0 were active after adding rounds of cuts (0.036 seconds)
+Clique was tried 100 times and created 0 cuts of which 0 were active after adding rounds of cuts (0.020 seconds)
+MixedIntegerRounding2 was tried 100 times and created 7 cuts of which 0 were active after adding rounds of cuts (0.413 seconds)
+FlowCover was tried 100 times and created 0 cuts of which 0 were active after adding rounds of cuts (0.006 seconds)
+TwoMirCuts was tried 281 times and created 1352 cuts of which 0 were active after adding rounds of cuts (0.290 seconds)
+ZeroHalf was tried 281 times and created 1045 cuts of which 0 were active after adding rounds of cuts (0.956 seconds)
+ImplicationCuts was tried 176 times and created 71 cuts of which 0 were active after adding rounds of cuts (0.088 seconds)
+
+Result - Optimal solution found
+
+Objective value:                67131.00000000
+Enumerated nodes:               81
+Total iterations:               30283
+Time (CPU seconds):             8.87
+Time (Wallclock seconds):       8.94
+
+Total time (CPU seconds):       8.87   (Wallclock seconds):       8.94
+
+[2023-04-12T19:04:42Z INFO  he_vectorizer::circ::optimizer] extraction: 8944ms
+[2023-04-12T19:04:42Z INFO  he_vectorizer] circuit optimization: 8945ms
+[2023-04-12T19:04:42Z INFO  he_vectorizer] plaintext hoisting: 0ms
+[2023-04-12T19:04:42Z INFO  he_vectorizer] circuit lowering: 0ms
+[2023-04-12T19:04:42Z INFO  he_vectorizer] using pyseal backend for code generation
+[2023-04-12T19:04:42Z INFO  he_vectorizer] printed generated code to stdout
+def client_pre(wrapper):
+    wrapper.client_input("b_data")
+    wrapper.client_input("a_data")
+    wrapper.client_input("b_id")
+    wrapper.client_input("a_id")
+    v_b_id_1 = wrapper.build_vector("b_id", None, [0, 2], [FilledDim(0, 128, 1, 0, 0, 0, 0), EmptyDim(128, 0, 0, 0)])
+    wrapper.client_send("v_b_id_1", v_b_id_1)
+    v_b_id_2 = wrapper.build_vector("b_id", None, [0, 1], [FilledDim(0, 128, 1, 0, 0, 0, 0), EmptyDim(128, 0, 0, 0)])
+    wrapper.client_send("v_b_id_2", v_b_id_2)
+    v_a_id_1 = wrapper.build_vector("a_id", None, [0, 2], [EmptyDim(128, 0, 0, 0), FilledDim(0, 128, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_a_id_1", v_a_id_1)
+    v_a_data_1 = wrapper.build_vector("a_data", None, [0], [FilledDim(0, 128, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_a_data_1", v_a_data_1)
+    v_a_id_2 = wrapper.build_vector("a_id", None, [0, 4], [EmptyDim(128, 0, 0, 0), FilledDim(0, 128, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_a_id_2", v_a_id_2)
+    v_a_id_3 = wrapper.build_vector("a_id", None, [0, 6], [EmptyDim(128, 0, 0, 0), FilledDim(0, 128, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_a_id_3", v_a_id_3)
+    v_b_id_3 = wrapper.build_vector("b_id", None, [0, 3], [FilledDim(0, 128, 1, 0, 0, 0, 0), EmptyDim(128, 0, 0, 0)])
+    wrapper.client_send("v_b_id_3", v_b_id_3)
+    v_b_id_4 = wrapper.build_vector("b_id", None, [0, 4], [FilledDim(0, 128, 1, 0, 0, 0, 0), EmptyDim(128, 0, 0, 0)])
+    wrapper.client_send("v_b_id_4", v_b_id_4)
+    v_a_id_4 = wrapper.build_vector("a_id", None, [0, 5], [EmptyDim(128, 0, 0, 0), FilledDim(0, 128, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_a_id_4", v_a_id_4)
+    v_b_id_5 = wrapper.build_vector("b_id", None, [0, 0], [FilledDim(0, 128, 1, 0, 0, 0, 0), EmptyDim(128, 0, 0, 0)])
+    wrapper.client_send("v_b_id_5", v_b_id_5)
+    v_a_id_5 = wrapper.build_vector("a_id", None, [0, 3], [EmptyDim(128, 0, 0, 0), FilledDim(0, 128, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_a_id_5", v_a_id_5)
+    v_b_id_6 = wrapper.build_vector("b_id", None, [0, 5], [FilledDim(0, 128, 1, 0, 0, 0, 0), EmptyDim(128, 0, 0, 0)])
+    wrapper.client_send("v_b_id_6", v_b_id_6)
+    v_b_id_7 = wrapper.build_vector("b_id", None, [0, 6], [FilledDim(0, 128, 1, 0, 0, 0, 0), EmptyDim(128, 0, 0, 0)])
+    wrapper.client_send("v_b_id_7", v_b_id_7)
+    v_a_id_6 = wrapper.build_vector("a_id", None, [0, 1], [EmptyDim(128, 0, 0, 0), FilledDim(0, 128, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_a_id_6", v_a_id_6)
+    v_b_data_1 = wrapper.build_vector("b_data", None, [0], [FilledDim(0, 128, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_b_data_1", v_b_data_1)
+    v_a_id_7 = wrapper.build_vector("a_id", None, [0, 0], [EmptyDim(128, 0, 0, 0), FilledDim(0, 128, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_a_id_7", v_a_id_7)
+
+def client_post(wrapper):
+    __out = wrapper.client_recv("__out")
+    wrapper.client_output(__out)
+
+def server(wrapper):
+    v_b_id_1 = wrapper.server_recv("v_b_id_1")
+    v_b_id_2 = wrapper.server_recv("v_b_id_2")
+    v_a_id_1 = wrapper.server_recv("v_a_id_1")
+    v_a_data_1 = wrapper.server_recv("v_a_data_1")
+    v_a_id_2 = wrapper.server_recv("v_a_id_2")
+    v_a_id_3 = wrapper.server_recv("v_a_id_3")
+    v_b_id_3 = wrapper.server_recv("v_b_id_3")
+    v_b_id_4 = wrapper.server_recv("v_b_id_4")
+    v_a_id_4 = wrapper.server_recv("v_a_id_4")
+    v_b_id_5 = wrapper.server_recv("v_b_id_5")
+    v_a_id_5 = wrapper.server_recv("v_a_id_5")
+    v_b_id_6 = wrapper.server_recv("v_b_id_6")
+    v_b_id_7 = wrapper.server_recv("v_b_id_7")
+    v_a_id_6 = wrapper.server_recv("v_a_id_6")
+    v_b_data_1 = wrapper.server_recv("v_b_data_1")
+    v_a_id_7 = wrapper.server_recv("v_a_id_7")
+    const_1 = wrapper.const(1)
+    const_neg1 = wrapper.const(-1)
+    wrapper.start_server_exec()
+    wrapper.encode(const_1, [])
+    wrapper.encode(const_neg1, [])
+    a_sum = wrapper.ciphertext_array([], 0)
+    instr1 = wrapper.rotate_rows(-64, v_a_data_1.get())
+    wrapper.add_inplace(instr1, v_a_data_1.get())
+    instr3 = wrapper.rotate_rows(-32, instr1)
+    wrapper.add_inplace(instr3, instr1)
+    instr5 = wrapper.rotate_rows(-16, instr3)
+    wrapper.add_inplace(instr5, instr3)
+    instr7 = wrapper.rotate_rows(-8, instr5)
+    wrapper.add_inplace(instr5, instr7)
+    instr9 = wrapper.rotate_rows(-4, instr5)
+    wrapper.add_inplace(instr5, instr9)
+    instr11 = wrapper.rotate_rows(-2, instr5)
+    wrapper.add_inplace(instr5, instr11)
+    instr13 = wrapper.rotate_rows(-1, instr5)
+    wrapper.add_inplace(instr5, instr13)
+    wrapper.set(a_sum, [], instr5)
+    ct4 = wrapper.ciphertext_array([7], 0)
+    wrapper.set(ct4, [0], v_b_id_5.get())
+    wrapper.set(ct4, [1], v_b_id_2.get())
+    wrapper.set(ct4, [2], v_b_id_1.get())
+    wrapper.set(ct4, [3], v_b_id_3.get())
+    wrapper.set(ct4, [4], v_b_id_4.get())
+    wrapper.set(ct4, [5], v_b_id_6.get())
+    wrapper.set(ct4, [6], v_b_id_7.get())
+    ct3 = wrapper.ciphertext_array([7], 0)
+    wrapper.set(ct3, [0], v_a_id_7.get())
+    wrapper.set(ct3, [1], v_a_id_6.get())
+    wrapper.set(ct3, [2], v_a_id_1.get())
+    wrapper.set(ct3, [3], v_a_id_5.get())
+    wrapper.set(ct3, [4], v_a_id_2.get())
+    wrapper.set(ct3, [5], v_a_id_4.get())
+    wrapper.set(ct3, [6], v_a_id_3.get())
+    b_sum = wrapper.ciphertext_array([], 0)
+    __reduce_1 = wrapper.ciphertext_array([7], 1)
+    for i4 in range(7):
+        instr19 = wrapper.subtract(ct3.get([i4]), ct4.get([i4]))
+        wrapper.multiply_inplace(instr19, instr19)
+        wrapper.relinearize_inplace(instr19)
+        wrapper.multiply_plain_inplace(instr19, const_neg1.get())
+        wrapper.add_plain_inplace(instr19, const_1.get())
+        wrapper.set(__reduce_1, [i4], instr19)
+    
+    instr24 = wrapper.multiply(__reduce_1.get([1]), __reduce_1.get([0]))
+    wrapper.relinearize_inplace(instr24)
+    instr25 = wrapper.multiply(__reduce_1.get([3]), __reduce_1.get([2]))
+    wrapper.relinearize_inplace(instr25)
+    instr26 = wrapper.multiply(__reduce_1.get([5]), __reduce_1.get([4]))
+    wrapper.relinearize_inplace(instr26)
+    wrapper.multiply_inplace(instr25, instr26)
+    wrapper.relinearize_inplace(instr25)
+    wrapper.multiply_inplace(instr24, instr25)
+    wrapper.relinearize_inplace(instr24)
+    wrapper.multiply_inplace(instr24, __reduce_1.get([6]))
+    wrapper.relinearize_inplace(instr24)
+    wrapper.multiply_plain_inplace(instr24, const_neg1.get())
+    wrapper.add_plain_inplace(instr24, const_1.get())
+    instr32 = wrapper.rotate_rows(-64, instr24)
+    wrapper.multiply_inplace(instr32, instr24)
+    wrapper.relinearize_inplace(instr32)
+    instr34 = wrapper.rotate_rows(-32, instr32)
+    wrapper.multiply_inplace(instr32, instr34)
+    wrapper.relinearize_inplace(instr32)
+    instr36 = wrapper.rotate_rows(-16, instr32)
+    wrapper.multiply_inplace(instr32, instr36)
+    wrapper.relinearize_inplace(instr32)
+    instr38 = wrapper.rotate_rows(-8, instr32)
+    wrapper.multiply_inplace(instr38, instr32)
+    wrapper.relinearize_inplace(instr38)
+    instr40 = wrapper.rotate_rows(-4, instr38)
+    wrapper.multiply_inplace(instr40, instr38)
+    wrapper.relinearize_inplace(instr40)
+    instr42 = wrapper.rotate_rows(-2, instr40)
+    wrapper.multiply_inplace(instr42, instr40)
+    wrapper.relinearize_inplace(instr42)
+    instr44 = wrapper.rotate_rows(-1, instr42)
+    wrapper.multiply_inplace(instr42, instr44)
+    wrapper.relinearize_inplace(instr42)
+    wrapper.multiply_inplace(instr42, v_b_data_1.get())
+    wrapper.relinearize_inplace(instr42)
+    instr47 = wrapper.rotate_rows(-64, instr42)
+    wrapper.add_inplace(instr47, instr42)
+    instr49 = wrapper.rotate_rows(-32, instr47)
+    wrapper.add_inplace(instr47, instr49)
+    instr51 = wrapper.rotate_rows(-16, instr47)
+    wrapper.add_inplace(instr47, instr51)
+    instr53 = wrapper.rotate_rows(-8, instr47)
+    wrapper.add_inplace(instr53, instr47)
+    instr55 = wrapper.rotate_rows(-4, instr53)
+    wrapper.add_inplace(instr53, instr55)
+    instr57 = wrapper.rotate_rows(-2, instr53)
+    wrapper.add_inplace(instr57, instr53)
+    instr59 = wrapper.rotate_rows(-1, instr57)
+    wrapper.add_inplace(instr57, instr59)
+    wrapper.set(b_sum, [], instr57)
+    __out = wrapper.ciphertext_array([], 0)
+    instr63 = wrapper.add(a_sum.get(), b_sum.get())
+    wrapper.set(__out, [], instr63)
+    wrapper.end_server_exec()
+    wrapper.server_send("__out", __out)
+[2023-04-12T19:04:42Z INFO  he_vectorizer] code generation: 0ms
+[2023-04-12T19:04:42Z INFO  he_vectorizer] total compile time: 843205ms

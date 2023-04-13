@@ -13,45 +13,6 @@ import statistics
 import math
 import json
 
-compile_benchmarks = {
-    "distance": [
-        {
-            "name": "e1-o0",
-            "backend": "pyseal",
-            "size": 4096,
-            "epochs": 1,
-            "opt_duration": 0,
-        },
-        {
-            "name": "e2-o0",
-            "backend": "pyseal",
-            "size": 4096,
-            "epochs": 2,
-            "opt_duration": 0,
-        },
-    ]
-}
-
-# exec_benchmarks = {
-#     "conv": ["baseline"],
-#     "conv-multioutput": ["baseline"],
-#     "distance": ["baseline"],
-#     "retrieval-256": ["baseline"],
-#     "retrieval-1024": ["baseline"],
-#     "matmul-2": ["baseline"],
-#     "set-union-16": ["baseline"],
-# }
-
-# exec_benchmarks = {
-#     "conv": ["e1-o0"],
-#     "conv-multioutput": ["e1-o0"],
-#     "distance": ["e1-o0"],
-#     "retrieval-256": ["e1-o0"],
-#     "retrieval-1024": ["e1-o0"],
-#     "matmul-2": ["e1-o0"],
-#     "set-union-16": ["e1-o0"],
-# }
-
 def get_trials(out_path, from_dir, to_dir):
     out_dir = Path(out_path)
     if not out_dir.is_dir():
@@ -100,11 +61,12 @@ def bench_compile(args):
                 backend = cfg["backend"]
                 size = cfg["size"]
                 opt_duration = cfg["opt_duration"]
+                node_limit = cfg.get("node_limit", 500)
                 epochs = cfg["epochs"]
                 
                 print(f"compiling {cfg_name}-{bench}")
 
-                cmd = f"./he_vectorizer -b {backend} -s {size} -e {epochs} -d {opt_duration} {benchfile}"
+                cmd = f"./he_vectorizer -b {backend} -s {size} -e {epochs} -d {opt_duration} -n {node_limit} {benchfile}"
 
                 compile_proc = subprocess.run(
                     cmd.split(),

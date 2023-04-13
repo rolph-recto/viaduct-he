@@ -1,0 +1,15 @@
+{
+    "benchmarks": {
+        "matmul-2": [
+            "e2-o0",
+            "chet"
+        ]
+    },
+    "trials": [
+        "bench-exec/1681345928",
+        "bench-exec/1681345931",
+        "bench-exec/1681345934",
+        "bench-exec/1681345936",
+        "bench-exec/1681345939"
+    ]
+}

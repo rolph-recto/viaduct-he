@@ -1,0 +1,195 @@
+[2023-04-12T17:51:11Z INFO  he_vectorizer] parsing: 0ms
+[2023-04-12T17:51:11Z INFO  he_vectorizer] elaboration: 0ms
+[2023-04-12T17:51:12Z INFO  he_vectorizer::scheduling::scheduler] running scheduler with iter limit: None
+[2023-04-12T17:51:12Z INFO  he_vectorizer::scheduling::scheduler] starting scheduler epoch 1
+[2023-04-12T17:51:15Z INFO  he_vectorizer::scheduling::scheduler] iteration 1
+[2023-04-12T17:51:15Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 4
+[2023-04-12T17:51:15Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 4
+[2023-04-12T17:51:18Z INFO  he_vectorizer::scheduling::scheduler] iteration 2
+[2023-04-12T17:51:18Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 17
+[2023-04-12T17:51:18Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 17
+[2023-04-12T17:51:19Z INFO  he_vectorizer::scheduling::scheduler] iteration 3
+[2023-04-12T17:51:19Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 32
+[2023-04-12T17:51:19Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 22
+[2023-04-12T17:51:19Z INFO  he_vectorizer::scheduling::scheduler] iteration 4
+[2023-04-12T17:51:19Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 22
+[2023-04-12T17:51:19Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 8
+[2023-04-12T17:51:19Z INFO  he_vectorizer::scheduling::scheduler] iteration 5
+[2023-04-12T17:51:19Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 4
+[2023-04-12T17:51:19Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 0
+[2023-04-12T17:51:19Z INFO  he_vectorizer::scheduling::scheduler] iteration 6
+[2023-04-12T17:51:19Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 0
+[2023-04-12T17:51:19Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 0
+[2023-04-12T17:51:19Z INFO  he_vectorizer::scheduling::scheduler] inline scheduler 1 total visited schedules: 80
+[2023-04-12T17:51:19Z INFO  he_vectorizer] scheduling: 7615ms
+[2023-04-12T17:51:19Z INFO  he_vectorizer] circuit generation: 0ms
+[2023-04-12T17:51:19Z INFO  he_vectorizer] circuit optimization: 0ms
+[2023-04-12T17:51:19Z INFO  he_vectorizer] plaintext hoisting: 0ms
+[2023-04-12T17:51:19Z INFO  he_vectorizer] circuit lowering: 0ms
+[2023-04-12T17:51:19Z INFO  he_vectorizer] using pyseal backend for code generation
+[2023-04-12T17:51:19Z INFO  he_vectorizer] printed generated code to stdout
+def client_pre(wrapper):
+    wrapper.client_input("a_id")
+    wrapper.client_input("a_data")
+    wrapper.client_input("b_id")
+    wrapper.client_input("b_data")
+    v_b_id_1 = wrapper.build_vector("b_id", None, [0, 1], [FilledDim(0, 128, 1, 0, 0, 0, 0), EmptyDim(128, 0, 0, 0)])
+    wrapper.client_send("v_b_id_1", v_b_id_1)
+    v_b_id_2 = wrapper.build_vector("b_id", None, [0, 5], [FilledDim(0, 128, 1, 0, 0, 0, 0), EmptyDim(128, 0, 0, 0)])
+    wrapper.client_send("v_b_id_2", v_b_id_2)
+    v_a_id_1 = wrapper.build_vector("a_id", None, [0, 4], [EmptyDim(128, 0, 0, 0), FilledDim(0, 128, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_a_id_1", v_a_id_1)
+    v_b_id_3 = wrapper.build_vector("b_id", None, [0, 0], [FilledDim(0, 128, 1, 0, 0, 0, 0), EmptyDim(128, 0, 0, 0)])
+    wrapper.client_send("v_b_id_3", v_b_id_3)
+    v_b_id_4 = wrapper.build_vector("b_id", None, [0, 4], [FilledDim(0, 128, 1, 0, 0, 0, 0), EmptyDim(128, 0, 0, 0)])
+    wrapper.client_send("v_b_id_4", v_b_id_4)
+    v_b_data_1 = wrapper.build_vector("b_data", None, [0], [FilledDim(0, 128, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_b_data_1", v_b_data_1)
+    v_a_id_2 = wrapper.build_vector("a_id", None, [0, 2], [EmptyDim(128, 0, 0, 0), FilledDim(0, 128, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_a_id_2", v_a_id_2)
+    v_a_id_3 = wrapper.build_vector("a_id", None, [0, 3], [EmptyDim(128, 0, 0, 0), FilledDim(0, 128, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_a_id_3", v_a_id_3)
+    v_a_id_4 = wrapper.build_vector("a_id", None, [0, 1], [EmptyDim(128, 0, 0, 0), FilledDim(0, 128, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_a_id_4", v_a_id_4)
+    v_b_id_5 = wrapper.build_vector("b_id", None, [0, 3], [FilledDim(0, 128, 1, 0, 0, 0, 0), EmptyDim(128, 0, 0, 0)])
+    wrapper.client_send("v_b_id_5", v_b_id_5)
+    v_a_id_5 = wrapper.build_vector("a_id", None, [0, 6], [EmptyDim(128, 0, 0, 0), FilledDim(0, 128, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_a_id_5", v_a_id_5)
+    v_b_id_6 = wrapper.build_vector("b_id", None, [0, 6], [FilledDim(0, 128, 1, 0, 0, 0, 0), EmptyDim(128, 0, 0, 0)])
+    wrapper.client_send("v_b_id_6", v_b_id_6)
+    v_a_id_6 = wrapper.build_vector("a_id", None, [0, 5], [EmptyDim(128, 0, 0, 0), FilledDim(0, 128, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_a_id_6", v_a_id_6)
+    v_a_id_7 = wrapper.build_vector("a_id", None, [0, 0], [EmptyDim(128, 0, 0, 0), FilledDim(0, 128, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_a_id_7", v_a_id_7)
+    v_a_data_1 = wrapper.build_vector("a_data", None, [0], [FilledDim(0, 128, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_a_data_1", v_a_data_1)
+    v_b_id_7 = wrapper.build_vector("b_id", None, [0, 2], [FilledDim(0, 128, 1, 0, 0, 0, 0), EmptyDim(128, 0, 0, 0)])
+    wrapper.client_send("v_b_id_7", v_b_id_7)
+
+def client_post(wrapper):
+    __out = wrapper.client_recv("__out")
+    wrapper.client_output(__out)
+
+def server(wrapper):
+    v_b_id_1 = wrapper.server_recv("v_b_id_1")
+    v_b_id_2 = wrapper.server_recv("v_b_id_2")
+    v_a_id_1 = wrapper.server_recv("v_a_id_1")
+    v_b_id_3 = wrapper.server_recv("v_b_id_3")
+    v_b_id_4 = wrapper.server_recv("v_b_id_4")
+    v_b_data_1 = wrapper.server_recv("v_b_data_1")
+    v_a_id_2 = wrapper.server_recv("v_a_id_2")
+    v_a_id_3 = wrapper.server_recv("v_a_id_3")
+    v_a_id_4 = wrapper.server_recv("v_a_id_4")
+    v_b_id_5 = wrapper.server_recv("v_b_id_5")
+    v_a_id_5 = wrapper.server_recv("v_a_id_5")
+    v_b_id_6 = wrapper.server_recv("v_b_id_6")
+    v_a_id_6 = wrapper.server_recv("v_a_id_6")
+    v_a_id_7 = wrapper.server_recv("v_a_id_7")
+    v_a_data_1 = wrapper.server_recv("v_a_data_1")
+    v_b_id_7 = wrapper.server_recv("v_b_id_7")
+    const_1 = wrapper.const(1)
+    const_neg1 = wrapper.const(-1)
+    wrapper.start_server_exec()
+    wrapper.encode(const_1, [])
+    wrapper.encode(const_neg1, [])
+    ct3 = wrapper.ciphertext_array([7], 0)
+    wrapper.set(ct3, [0], v_b_id_3.get())
+    wrapper.set(ct3, [1], v_b_id_1.get())
+    wrapper.set(ct3, [2], v_b_id_7.get())
+    wrapper.set(ct3, [3], v_b_id_5.get())
+    wrapper.set(ct3, [4], v_b_id_4.get())
+    wrapper.set(ct3, [5], v_b_id_2.get())
+    wrapper.set(ct3, [6], v_b_id_6.get())
+    ct2 = wrapper.ciphertext_array([7], 0)
+    wrapper.set(ct2, [0], v_a_id_7.get())
+    wrapper.set(ct2, [1], v_a_id_4.get())
+    wrapper.set(ct2, [2], v_a_id_2.get())
+    wrapper.set(ct2, [3], v_a_id_3.get())
+    wrapper.set(ct2, [4], v_a_id_1.get())
+    wrapper.set(ct2, [5], v_a_id_6.get())
+    wrapper.set(ct2, [6], v_a_id_5.get())
+    b_sum = wrapper.ciphertext_array([], 0)
+    __reduce_1 = wrapper.ciphertext_array([7], 1)
+    for i0 in range(7):
+        instr4 = wrapper.subtract(ct2.get([i0]), ct3.get([i0]))
+        wrapper.multiply_inplace(instr4, instr4)
+        wrapper.relinearize_inplace(instr4)
+        wrapper.multiply_plain_inplace(instr4, const_neg1.get())
+        wrapper.add_plain_inplace(instr4, const_1.get())
+        wrapper.set(__reduce_1, [i0], instr4)
+    
+    instr9 = wrapper.multiply(__reduce_1.get([1]), __reduce_1.get([0]))
+    wrapper.relinearize_inplace(instr9)
+    instr10 = wrapper.multiply(__reduce_1.get([3]), __reduce_1.get([2]))
+    wrapper.relinearize_inplace(instr10)
+    instr11 = wrapper.multiply(__reduce_1.get([5]), __reduce_1.get([4]))
+    wrapper.relinearize_inplace(instr11)
+    wrapper.multiply_inplace(instr10, instr11)
+    wrapper.relinearize_inplace(instr10)
+    wrapper.multiply_inplace(instr9, instr10)
+    wrapper.relinearize_inplace(instr9)
+    wrapper.multiply_inplace(instr9, __reduce_1.get([6]))
+    wrapper.relinearize_inplace(instr9)
+    wrapper.multiply_plain_inplace(instr9, const_neg1.get())
+    wrapper.add_plain_inplace(instr9, const_1.get())
+    instr17 = wrapper.rotate_rows(-64, instr9)
+    wrapper.multiply_inplace(instr9, instr17)
+    wrapper.relinearize_inplace(instr9)
+    instr19 = wrapper.rotate_rows(-32, instr9)
+    wrapper.multiply_inplace(instr9, instr19)
+    wrapper.relinearize_inplace(instr9)
+    instr21 = wrapper.rotate_rows(-16, instr9)
+    wrapper.multiply_inplace(instr9, instr21)
+    wrapper.relinearize_inplace(instr9)
+    instr23 = wrapper.rotate_rows(-8, instr9)
+    wrapper.multiply_inplace(instr9, instr23)
+    wrapper.relinearize_inplace(instr9)
+    instr25 = wrapper.rotate_rows(-4, instr9)
+    wrapper.multiply_inplace(instr9, instr25)
+    wrapper.relinearize_inplace(instr9)
+    instr27 = wrapper.rotate_rows(-2, instr9)
+    wrapper.multiply_inplace(instr9, instr27)
+    wrapper.relinearize_inplace(instr9)
+    instr29 = wrapper.rotate_rows(-1, instr9)
+    wrapper.multiply_inplace(instr9, instr29)
+    wrapper.relinearize_inplace(instr9)
+    wrapper.multiply_inplace(instr9, v_b_data_1.get())
+    wrapper.relinearize_inplace(instr9)
+    instr32 = wrapper.rotate_rows(-64, instr9)
+    wrapper.add_inplace(instr9, instr32)
+    instr34 = wrapper.rotate_rows(-32, instr9)
+    wrapper.add_inplace(instr9, instr34)
+    instr36 = wrapper.rotate_rows(-16, instr9)
+    wrapper.add_inplace(instr9, instr36)
+    instr38 = wrapper.rotate_rows(-8, instr9)
+    wrapper.add_inplace(instr9, instr38)
+    instr40 = wrapper.rotate_rows(-4, instr9)
+    wrapper.add_inplace(instr9, instr40)
+    instr42 = wrapper.rotate_rows(-2, instr9)
+    wrapper.add_inplace(instr9, instr42)
+    instr44 = wrapper.rotate_rows(-1, instr9)
+    wrapper.add_inplace(instr9, instr44)
+    wrapper.set(b_sum, [], instr9)
+    a_sum = wrapper.ciphertext_array([], 0)
+    instr47 = wrapper.rotate_rows(-64, v_a_data_1.get())
+    wrapper.add_inplace(instr47, v_a_data_1.get())
+    instr49 = wrapper.rotate_rows(-32, instr47)
+    wrapper.add_inplace(instr47, instr49)
+    instr51 = wrapper.rotate_rows(-16, instr47)
+    wrapper.add_inplace(instr47, instr51)
+    instr53 = wrapper.rotate_rows(-8, instr47)
+    wrapper.add_inplace(instr47, instr53)
+    instr55 = wrapper.rotate_rows(-4, instr47)
+    wrapper.add_inplace(instr47, instr55)
+    instr57 = wrapper.rotate_rows(-2, instr47)
+    wrapper.add_inplace(instr47, instr57)
+    instr59 = wrapper.rotate_rows(-1, instr47)
+    wrapper.add_inplace(instr47, instr59)
+    wrapper.set(a_sum, [], instr47)
+    __out = wrapper.ciphertext_array([], 0)
+    instr63 = wrapper.add(a_sum.get(), b_sum.get())
+    wrapper.set(__out, [], instr63)
+    wrapper.end_server_exec()
+    wrapper.server_send("__out", __out)
+[2023-04-12T17:51:19Z INFO  he_vectorizer] code generation: 0ms
+[2023-04-12T17:51:19Z INFO  he_vectorizer] total compile time: 7617ms

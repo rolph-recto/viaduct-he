@@ -1,0 +1,81 @@
+{
+    "benchmarks": {
+        "conv-siso": [
+            {
+                "name": "e2-o1",
+                "backend": "pyseal",
+                "size": 4096,
+                "epochs": 2,
+                "opt_duration": 60,
+                "node_limit": 500
+            }
+        ],
+        "conv-simo": [
+            {
+                "name": "e2-o1",
+                "backend": "pyseal",
+                "size": 4096,
+                "epochs": 2,
+                "opt_duration": 60,
+                "node_limit": 500
+            }
+        ],
+        "distance": [
+            {
+                "name": "e2-o1",
+                "backend": "pyseal",
+                "size": 2048,
+                "epochs": 2,
+                "opt_duration": 60,
+                "node_limit": 500
+            }
+        ],
+        "retrieval-256": [
+            {
+                "name": "e2-o1",
+                "backend": "pyseal",
+                "size": 8192,
+                "epochs": 2,
+                "opt_duration": 60,
+                "node_limit": 500
+            }
+        ],
+        "retrieval-1024": [
+            {
+                "name": "e2-o1",
+                "backend": "pyseal",
+                "size": 8192,
+                "epochs": 2,
+                "opt_duration": 60,
+                "node_limit": 500
+            }
+        ],
+        "matmul-2": [
+            {
+                "name": "e2-o1",
+                "backend": "pyseal",
+                "size": 4096,
+                "epochs": 2,
+                "opt_duration": 60,
+                "node_limit": 500
+            }
+        ],
+        "set-union-16": [
+            {
+                "name": "e2-o1",
+                "backend": "pyseal",
+                "size": 8192,
+                "epochs": 2,
+                "opt_duration": 60,
+                "node_limit": 500
+            }
+        ]
+    },
+    "trials": [
+        "bench-compile/1681282567",
+        "bench-compile/1681283042",
+        "bench-compile/1681283526",
+        "bench-compile/1681283851",
+        "bench-compile/1681284124"
+    ]
+}
