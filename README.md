@@ -1,3 +1,3 @@
-# TLHE Compiler
+# Viaduct-HE
 
-A compiler from a tensor language to vectorized homomorphic encryption.
+A compiler from array programs to vectorized homomorphic encryption.
