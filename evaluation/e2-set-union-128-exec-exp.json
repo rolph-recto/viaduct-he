@@ -1,0 +1,10 @@
+{
+    "benchmarks": {
+        "set-union-128": [
+            "e2-o0"
+        ]
+    },
+    "trials": [
+        "bench-exec/1681332550"
+    ]
+}

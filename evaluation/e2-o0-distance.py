@@ -508,6 +508,7 @@ def client_pre(wrapper):
 def client_post(wrapper):
     __out = wrapper.client_recv("__out")
     wrapper.client_output(__out)
+    # pass
 
 def server(wrapper):
     wrapper.server_input("tests")
@@ -515,6 +516,11 @@ def server(wrapper):
     v_tests_2 = wrapper.build_vector("tests", None, [0, 0], [FilledDim(0, 64, 1, 0, 0, 0, 0), FilledDim(1, 32, 1, 0, 0, 0, 0)])
     v_point_1 = wrapper.server_recv("v_point_1")
     v_point_2 = wrapper.server_recv("v_point_2")
+
+    # wrapper.set_party("client")
+    # wrapper.client_output(v_point_1.get())
+    # wrapper.client_output(v_point_2.get())
+
     const_neg1 = wrapper.const(-1)
     wrapper.start_server_exec()
     wrapper.encode(v_tests_2, [])

@@ -1,0 +1,339 @@
+[2023-04-12T07:14:20Z INFO  he_vectorizer] parsing: 0ms
+[2023-04-12T07:14:20Z INFO  he_vectorizer] elaboration: 0ms
+[2023-04-12T07:14:20Z INFO  he_vectorizer::scheduling::scheduler] running scheduler with iter limit: None
+[2023-04-12T07:14:20Z INFO  he_vectorizer::scheduling::scheduler] starting scheduler epoch 1
+[2023-04-12T07:14:20Z INFO  he_vectorizer::scheduling::scheduler] iteration 1
+[2023-04-12T07:14:20Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 6
+[2023-04-12T07:14:20Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 1
+[2023-04-12T07:14:20Z INFO  he_vectorizer::scheduling::scheduler] iteration 2
+[2023-04-12T07:14:20Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 44
+[2023-04-12T07:14:20Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 3
+[2023-04-12T07:14:21Z INFO  he_vectorizer::scheduling::scheduler] iteration 3
+[2023-04-12T07:14:21Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 141
+[2023-04-12T07:14:21Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 5
+[2023-04-12T07:14:21Z INFO  he_vectorizer::scheduling::scheduler] iteration 4
+[2023-04-12T07:14:21Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 403
+[2023-04-12T07:14:21Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 6
+[2023-04-12T07:14:21Z INFO  he_vectorizer::scheduling::scheduler] iteration 5
+[2023-04-12T07:14:21Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 605
+[2023-04-12T07:14:21Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 6
+[2023-04-12T07:14:21Z INFO  he_vectorizer::scheduling::scheduler] iteration 6
+[2023-04-12T07:14:21Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 309
+[2023-04-12T07:14:21Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 6
+[2023-04-12T07:14:21Z INFO  he_vectorizer::scheduling::scheduler] iteration 7
+[2023-04-12T07:14:21Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 0
+[2023-04-12T07:14:21Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 0
+[2023-04-12T07:14:21Z INFO  he_vectorizer::scheduling::scheduler] starting scheduler epoch 2
+[2023-04-12T07:14:21Z INFO  he_vectorizer::scheduling::scheduler] iteration 8
+[2023-04-12T07:14:21Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 3095
+[2023-04-12T07:14:21Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 23
+[2023-04-12T07:14:23Z INFO  he_vectorizer::scheduling::scheduler] iteration 9
+[2023-04-12T07:14:23Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 8840
+[2023-04-12T07:14:23Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 29
+[2023-04-12T07:14:24Z INFO  he_vectorizer::scheduling::scheduler] iteration 10
+[2023-04-12T07:14:24Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 16924
+[2023-04-12T07:14:24Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 15
+[2023-04-12T07:14:24Z INFO  he_vectorizer::scheduling::scheduler] iteration 11
+[2023-04-12T07:14:24Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 20196
+[2023-04-12T07:14:24Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 24
+[2023-04-12T07:14:25Z INFO  he_vectorizer::scheduling::scheduler] iteration 12
+[2023-04-12T07:14:25Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 18218
+[2023-04-12T07:14:25Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 5
+[2023-04-12T07:14:26Z INFO  he_vectorizer::scheduling::scheduler] iteration 13
+[2023-04-12T07:14:26Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 13183
+[2023-04-12T07:14:26Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 14
+[2023-04-12T07:14:26Z INFO  he_vectorizer::scheduling::scheduler] iteration 14
+[2023-04-12T07:14:26Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 4508
+[2023-04-12T07:14:26Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 0
+[2023-04-12T07:14:26Z INFO  he_vectorizer::scheduling::scheduler] iteration 15
+[2023-04-12T07:14:26Z INFO  he_vectorizer::scheduling::scheduler] new schedules visited: 0
+[2023-04-12T07:14:26Z INFO  he_vectorizer::scheduling::scheduler] new valid schedules found: 0
+[2023-04-12T07:14:26Z INFO  he_vectorizer::scheduling::scheduler] inline scheduler 1 total visited schedules: 86475
+[2023-04-12T07:14:26Z INFO  he_vectorizer] scheduling: 5757ms
+[2023-04-12T07:14:26Z INFO  he_vectorizer] circuit generation: 0ms
+[2023-04-12T07:14:26Z INFO  he_vectorizer::circ::optimizer] Runner report
+    =============
+      Stop reason: NodeLimit(821)
+      Iterations: 3
+      Egraph size: 808 nodes, 380 classes, 821 memo
+      Rebuilds: 0
+      Total time: 0.000997754
+        Search:  (0.28) 0.000277533
+        Apply:   (0.65) 0.000647011
+        Rebuild: (0.07) 0.000072561
+    
+[2023-04-12T07:14:26Z INFO  he_vectorizer::circ::optimizer] equality saturation: 1ms
+[2023-04-12T07:14:26Z INFO  he_vectorizer::circ::optimizer] using LP extractor to derive optimized program...
+[/home/rolph/.cargo/registry/src/index.crates.io-6f17d22bba15001f/egg-0.9.0/src/lp_extract.rs:137] max_order = 8080.0
+Welcome to the CBC MILP Solver 
+Version: 2.10.3 
+Build Date: Mar 24 2020 
+
+command line - Cbc_C_Interface -solve -quit (default strategy 1)
+Continuous objective value is 22.4806 - 0.01 seconds
+Cgl0003I 0 fixed, 0 tightened bounds, 428 strengthened rows, 0 substitutions
+Cgl0003I 0 fixed, 0 tightened bounds, 295 strengthened rows, 0 substitutions
+Cgl0003I 0 fixed, 11 tightened bounds, 201 strengthened rows, 0 substitutions
+Cgl0003I 0 fixed, 5 tightened bounds, 119 strengthened rows, 0 substitutions
+Cgl0003I 0 fixed, 5 tightened bounds, 78 strengthened rows, 0 substitutions
+Cgl0003I 0 fixed, 4 tightened bounds, 61 strengthened rows, 0 substitutions
+Cgl0003I 0 fixed, 4 tightened bounds, 47 strengthened rows, 0 substitutions
+Cgl0003I 0 fixed, 2 tightened bounds, 41 strengthened rows, 0 substitutions
+Cgl0003I 0 fixed, 1 tightened bounds, 28 strengthened rows, 0 substitutions
+Cgl0004I processed model has 1532 rows, 848 columns (848 integer (848 of which binary)) and 4321 elements
+Cutoff increment increased from 1e-05 to 0.9999
+Cbc0038I Initial state - 158 integers unsatisfied sum - 13.2
+Cbc0038I Pass   1: suminf.   11.66667 (143) obj. 51.6667 iterations 217
+Cbc0038I Pass   2: suminf.   15.44167 (114) obj. 96.9447 iterations 227
+Cbc0038I Pass   3: suminf.   11.48242 (115) obj. 89.2267 iterations 112
+Cbc0038I Pass   4: suminf.    6.16667 (66) obj. 208.389 iterations 130
+Cbc0038I Pass   5: suminf.    5.26829 (76) obj. 203.415 iterations 93
+Cbc0038I Pass   6: suminf.    7.00000 (14) obj. 345 iterations 97
+Cbc0038I Pass   7: suminf.    7.00000 (14) obj. 345 iterations 16
+Cbc0038I Pass   8: suminf.    0.00000 (0) obj. 376 iterations 25
+Cbc0038I Solution found of 376
+Cbc0038I Rounding solution of 368 is better than previous of 376
+
+Cbc0038I Before mini branch and bound, 616 integers at bound fixed and 0 continuous
+Cbc0038I Full problem 1532 rows 848 columns, reduced to 358 rows 194 columns
+Cbc0038I Mini branch and bound improved solution from 368 to 258 (0.33 seconds)
+Cbc0038I Round again with cutoff of 235.932
+Cbc0038I Pass   9: suminf.   11.66667 (143) obj. 51.6667 iterations 0
+Cbc0038I Pass  10: suminf.   14.83333 (129) obj. 75.5037 iterations 232
+Cbc0038I Pass  11: suminf.   11.40667 (151) obj. 53.06 iterations 147
+Cbc0038I Pass  12: suminf.   12.70849 (148) obj. 74.9402 iterations 179
+Cbc0038I Pass  13: suminf.   10.93333 (114) obj. 85.2333 iterations 158
+Cbc0038I Pass  14: suminf.   13.57854 (120) obj. 133.862 iterations 166
+Cbc0038I Pass  15: suminf.   11.37557 (110) obj. 113.423 iterations 137
+Cbc0038I Pass  16: suminf.   10.56838 (110) obj. 109.645 iterations 62
+Cbc0038I Pass  17: suminf.    7.14286 (42) obj. 178.762 iterations 156
+Cbc0038I Pass  18: suminf.    5.26829 (76) obj. 167.415 iterations 130
+Cbc0038I Pass  19: suminf.   11.43851 (34) obj. 235.932 iterations 103
+Cbc0038I Pass  20: suminf.   11.12836 (33) obj. 235.932 iterations 18
+Cbc0038I Pass  21: suminf.    5.25000 (44) obj. 168.5 iterations 77
+Cbc0038I Pass  22: suminf.    5.05172 (67) obj. 169.552 iterations 25
+Cbc0038I Pass  23: suminf.   11.75624 (55) obj. 235.932 iterations 82
+Cbc0038I Pass  24: suminf.    9.16586 (44) obj. 235.932 iterations 27
+Cbc0038I Pass  25: suminf.    5.00000 (30) obj. 193.167 iterations 96
+Cbc0038I Pass  26: suminf.    4.81818 (49) obj. 192.182 iterations 64
+Cbc0038I Pass  27: suminf.    7.80083 (20) obj. 235.932 iterations 94
+Cbc0038I Pass  28: suminf.    4.12500 (29) obj. 215.5 iterations 96
+Cbc0038I Pass  29: suminf.    8.68856 (27) obj. 235.932 iterations 94
+Cbc0038I Pass  30: suminf.    4.25000 (15) obj. 225 iterations 91
+Cbc0038I Pass  31: suminf.    3.80000 (19) obj. 221.6 iterations 30
+Cbc0038I Pass  32: suminf.    7.43195 (23) obj. 235.932 iterations 118
+Cbc0038I Pass  33: suminf.    7.09536 (17) obj. 235.932 iterations 8
+Cbc0038I Pass  34: suminf.    4.83333 (23) obj. 201.333 iterations 67
+Cbc0038I Pass  35: suminf.    4.66667 (24) obj. 201.333 iterations 16
+Cbc0038I Pass  36: suminf.    6.27268 (16) obj. 235.932 iterations 70
+Cbc0038I Pass  37: suminf.    6.27268 (16) obj. 235.932 iterations 34
+Cbc0038I Pass  38: suminf.    4.83333 (23) obj. 201.333 iterations 72
+Cbc0038I No solution found this major pass
+Cbc0038I Before mini branch and bound, 555 integers at bound fixed and 0 continuous
+Cbc0038I Full problem 1532 rows 848 columns, reduced to 473 rows 254 columns
+Cbc0038I Mini branch and bound did not improve solution (0.60 seconds)
+Cbc0038I After 0.60 seconds - Feasibility pump exiting with objective of 258 - took 0.44 seconds
+Cbc0012I Integer solution of 258 found by feasibility pump after 0 iterations and 0 nodes (0.60 seconds)
+Cbc0038I Full problem 1532 rows 848 columns, reduced to 226 rows 120 columns
+Cbc0031I 20 added rows had average density of 287.65
+Cbc0013I At root node, 20 cuts changed objective from 46.32 to 68.807843 in 90 passes
+Cbc0014I Cut generator 0 (Probing) - 0 row cuts average 0.0 elements, 0 column cuts (1 active)  in 0.201 seconds - new frequency is -100
+Cbc0014I Cut generator 1 (Gomory) - 1827 row cuts average 317.0 elements, 0 column cuts (0 active)  in 0.710 seconds - new frequency is -100
+Cbc0014I Cut generator 2 (Knapsack) - 0 row cuts average 0.0 elements, 0 column cuts (0 active)  in 0.043 seconds - new frequency is -100
+Cbc0014I Cut generator 3 (Clique) - 0 row cuts average 0.0 elements, 0 column cuts (0 active)  in 0.012 seconds - new frequency is -100
+Cbc0014I Cut generator 4 (MixedIntegerRounding2) - 5 row cuts average 108.6 elements, 0 column cuts (0 active)  in 0.260 seconds - new frequency is -100
+Cbc0014I Cut generator 5 (FlowCover) - 0 row cuts average 0.0 elements, 0 column cuts (0 active)  in 0.007 seconds - new frequency is -100
+Cbc0014I Cut generator 6 (TwoMirCuts) - 342 row cuts average 131.7 elements, 0 column cuts (0 active)  in 0.130 seconds - new frequency is 1
+Cbc0010I After 0 nodes, 1 on tree, 258 best solution, best possible 69.95212 (4.43 seconds)
+Cbc0038I Full problem 1532 rows 848 columns, reduced to 256 rows 142 columns
+Cbc0038I Full problem 1532 rows 848 columns, reduced to 86 rows 60 columns
+Cbc0010I After 100 nodes, 47 on tree, 258 best solution, best possible 92.25259 (6.82 seconds)
+Cbc0038I Full problem 1532 rows 848 columns, reduced to 93 rows 61 columns
+Cbc0010I After 200 nodes, 49 on tree, 258 best solution, best possible 92.25259 (6.97 seconds)
+Cbc0038I Full problem 1532 rows 848 columns, reduced to 193 rows 105 columns
+Cbc0010I After 300 nodes, 79 on tree, 258 best solution, best possible 92.25259 (7.24 seconds)
+Cbc0038I Full problem 1532 rows 848 columns, reduced to 19 rows 18 columns
+Cbc0010I After 400 nodes, 110 on tree, 258 best solution, best possible 92.25259 (7.41 seconds)
+Cbc0010I After 500 nodes, 123 on tree, 258 best solution, best possible 92.25259 (7.56 seconds)
+Cbc0038I Full problem 1532 rows 848 columns, reduced to 54 rows 39 columns
+Cbc0010I After 600 nodes, 138 on tree, 258 best solution, best possible 92.25259 (7.70 seconds)
+Cbc0010I After 700 nodes, 136 on tree, 258 best solution, best possible 92.25259 (7.80 seconds)
+Cbc0038I Full problem 1532 rows 848 columns, reduced to 96 rows 60 columns
+Cbc0010I After 800 nodes, 160 on tree, 258 best solution, best possible 92.25259 (8.12 seconds)
+Cbc0038I Full problem 1532 rows 848 columns, reduced to 155 rows 83 columns
+Cbc0010I After 900 nodes, 175 on tree, 258 best solution, best possible 92.25259 (8.39 seconds)
+Cbc0038I Full problem 1532 rows 848 columns, reduced to 139 rows 81 columns
+Cbc0010I After 1000 nodes, 186 on tree, 258 best solution, best possible 92.25259 (8.82 seconds)
+Cbc0010I After 1100 nodes, 189 on tree, 258 best solution, best possible 92.25259 (9.30 seconds)
+Cbc0010I After 1200 nodes, 198 on tree, 258 best solution, best possible 92.25259 (9.57 seconds)
+Cbc0010I After 1300 nodes, 189 on tree, 258 best solution, best possible 92.25259 (9.96 seconds)
+Cbc0010I After 1400 nodes, 175 on tree, 258 best solution, best possible 92.25259 (10.45 seconds)
+Cbc0010I After 1500 nodes, 140 on tree, 258 best solution, best possible 92.25259 (10.73 seconds)
+Cbc0010I After 1600 nodes, 111 on tree, 258 best solution, best possible 92.25259 (11.15 seconds)
+Cbc0010I After 1700 nodes, 84 on tree, 258 best solution, best possible 92.25259 (11.62 seconds)
+Cbc0038I Full problem 1532 rows 848 columns, reduced to 157 rows 94 columns
+Cbc0010I After 1800 nodes, 74 on tree, 258 best solution, best possible 92.25259 (11.94 seconds)
+Cbc0010I After 1900 nodes, 75 on tree, 258 best solution, best possible 92.25259 (12.21 seconds)
+Cbc0010I After 2000 nodes, 72 on tree, 258 best solution, best possible 92.25259 (12.59 seconds)
+Cbc0010I After 2100 nodes, 69 on tree, 258 best solution, best possible 92.25259 (12.80 seconds)
+Cbc0010I After 2200 nodes, 65 on tree, 258 best solution, best possible 92.25259 (13.11 seconds)
+Cbc0010I After 2300 nodes, 55 on tree, 258 best solution, best possible 92.25259 (13.34 seconds)
+Cbc0038I Full problem 1532 rows 848 columns, reduced to 89 rows 58 columns
+Cbc0010I After 2400 nodes, 56 on tree, 258 best solution, best possible 92.25259 (13.78 seconds)
+Cbc0010I After 2500 nodes, 51 on tree, 258 best solution, best possible 92.25259 (14.44 seconds)
+Cbc0010I After 2600 nodes, 45 on tree, 258 best solution, best possible 92.25259 (15.49 seconds)
+Cbc0010I After 2700 nodes, 53 on tree, 258 best solution, best possible 92.25259 (15.89 seconds)
+Cbc0010I After 2800 nodes, 45 on tree, 258 best solution, best possible 92.25259 (16.22 seconds)
+Cbc0010I After 2900 nodes, 46 on tree, 258 best solution, best possible 92.25259 (16.89 seconds)
+Cbc0010I After 3000 nodes, 44 on tree, 258 best solution, best possible 92.25259 (17.36 seconds)
+Cbc0010I After 3100 nodes, 42 on tree, 258 best solution, best possible 92.25259 (18.04 seconds)
+Cbc0010I After 3200 nodes, 36 on tree, 258 best solution, best possible 92.25259 (18.45 seconds)
+Cbc0010I After 3300 nodes, 38 on tree, 258 best solution, best possible 92.25259 (18.89 seconds)
+Cbc0010I After 3400 nodes, 32 on tree, 258 best solution, best possible 92.25259 (19.43 seconds)
+Cbc0010I After 3500 nodes, 31 on tree, 258 best solution, best possible 92.25259 (20.01 seconds)
+Cbc0038I Full problem 1532 rows 848 columns, reduced to 84 rows 57 columns
+Cbc0010I After 3600 nodes, 32 on tree, 258 best solution, best possible 92.25259 (20.54 seconds)
+Cbc0010I After 3700 nodes, 30 on tree, 258 best solution, best possible 92.25259 (21.03 seconds)
+Cbc0010I After 3800 nodes, 27 on tree, 258 best solution, best possible 92.25259 (21.81 seconds)
+Cbc0010I After 3900 nodes, 28 on tree, 258 best solution, best possible 92.25259 (22.17 seconds)
+Cbc0010I After 4000 nodes, 25 on tree, 258 best solution, best possible 92.25259 (22.50 seconds)
+Cbc0010I After 4100 nodes, 24 on tree, 258 best solution, best possible 92.25259 (22.81 seconds)
+Cbc0038I Full problem 1532 rows 848 columns, reduced to 87 rows 54 columns
+Cbc0010I After 4200 nodes, 28 on tree, 258 best solution, best possible 92.25259 (23.33 seconds)
+Cbc0010I After 4300 nodes, 22 on tree, 258 best solution, best possible 92.25259 (23.79 seconds)
+Cbc0010I After 4400 nodes, 26 on tree, 258 best solution, best possible 92.25259 (24.15 seconds)
+Cbc0010I After 4500 nodes, 23 on tree, 258 best solution, best possible 92.25259 (24.44 seconds)
+Cbc0010I After 4600 nodes, 18 on tree, 258 best solution, best possible 92.25259 (25.00 seconds)
+Cbc0010I After 4700 nodes, 19 on tree, 258 best solution, best possible 92.25259 (25.95 seconds)
+Cbc0038I Full problem 1532 rows 848 columns, reduced to 155 rows 95 columns
+Cbc0010I After 4800 nodes, 15 on tree, 258 best solution, best possible 92.25259 (26.41 seconds)
+Cbc0010I After 4900 nodes, 13 on tree, 258 best solution, best possible 92.25259 (27.05 seconds)
+Cbc0010I After 5000 nodes, 15 on tree, 258 best solution, best possible 92.25259 (27.67 seconds)
+Cbc0010I After 5100 nodes, 21 on tree, 258 best solution, best possible 92.25259 (28.60 seconds)
+Cbc0010I After 5200 nodes, 15 on tree, 258 best solution, best possible 92.25259 (29.47 seconds)
+Cbc0010I After 5300 nodes, 11 on tree, 258 best solution, best possible 92.25259 (30.18 seconds)
+Cbc0038I Full problem 1532 rows 848 columns, reduced to 126 rows 77 columns
+Cbc0010I After 5400 nodes, 11 on tree, 258 best solution, best possible 92.25259 (30.68 seconds)
+Cbc0010I After 5500 nodes, 10 on tree, 258 best solution, best possible 92.25259 (31.68 seconds)
+Cbc0010I After 5600 nodes, 12 on tree, 258 best solution, best possible 92.25259 (32.34 seconds)
+Cbc0010I After 5700 nodes, 25 on tree, 258 best solution, best possible 92.25259 (32.61 seconds)
+Cbc0010I After 5800 nodes, 12 on tree, 258 best solution, best possible 92.25259 (32.90 seconds)
+Cbc0010I After 5900 nodes, 16 on tree, 258 best solution, best possible 92.25259 (33.18 seconds)
+Cbc0038I Full problem 1532 rows 848 columns, reduced to 93 rows 71 columns
+Cbc0010I After 6000 nodes, 15 on tree, 258 best solution, best possible 92.25259 (33.43 seconds)
+Cbc0010I After 6100 nodes, 12 on tree, 258 best solution, best possible 92.25259 (33.63 seconds)
+Cbc0010I After 6200 nodes, 15 on tree, 258 best solution, best possible 92.25259 (33.95 seconds)
+Cbc0010I After 6300 nodes, 10 on tree, 258 best solution, best possible 92.25259 (34.58 seconds)
+Cbc0010I After 6400 nodes, 11 on tree, 258 best solution, best possible 92.25259 (35.10 seconds)
+Cbc0010I After 6500 nodes, 13 on tree, 258 best solution, best possible 92.25259 (35.71 seconds)
+Cbc0038I Full problem 1532 rows 848 columns, reduced to 138 rows 86 columns
+Cbc0010I After 6600 nodes, 7 on tree, 258 best solution, best possible 92.25259 (35.97 seconds)
+Cbc0010I After 6700 nodes, 13 on tree, 258 best solution, best possible 92.25259 (36.24 seconds)
+Cbc0010I After 6800 nodes, 5 on tree, 258 best solution, best possible 92.25259 (36.45 seconds)
+Cbc0010I After 6900 nodes, 13 on tree, 258 best solution, best possible 92.25259 (37.11 seconds)
+Cbc0010I After 7000 nodes, 10 on tree, 258 best solution, best possible 92.25259 (37.29 seconds)
+Cbc0010I After 7100 nodes, 8 on tree, 258 best solution, best possible 92.25259 (37.47 seconds)
+Cbc0010I After 7200 nodes, 10 on tree, 258 best solution, best possible 92.25259 (37.74 seconds)
+Cbc0010I After 7300 nodes, 10 on tree, 258 best solution, best possible 92.25259 (38.09 seconds)
+Cbc0010I After 7400 nodes, 9 on tree, 258 best solution, best possible 92.25259 (38.33 seconds)
+Cbc0010I After 7500 nodes, 7 on tree, 258 best solution, best possible 92.25259 (38.53 seconds)
+Cbc0012I Integer solution of 244 found by DiveCoefficient after 330120 iterations and 7506 nodes (38.55 seconds)
+Cbc0004I Integer solution of 230 found after 331179 iterations and 7529 nodes (38.75 seconds)
+Cbc0010I After 7600 nodes, 17 on tree, 230 best solution, best possible 92.25259 (38.93 seconds)
+Cbc0010I After 7700 nodes, 11 on tree, 230 best solution, best possible 92.25259 (39.14 seconds)
+Cbc0038I Full problem 1532 rows 848 columns, reduced to 104 rows 56 columns
+Cbc0010I After 7800 nodes, 27 on tree, 230 best solution, best possible 92.25259 (39.70 seconds)
+Cbc0010I After 7900 nodes, 39 on tree, 230 best solution, best possible 92.25259 (40.10 seconds)
+Cbc0010I After 8000 nodes, 26 on tree, 230 best solution, best possible 92.25259 (40.35 seconds)
+Cbc0010I After 8100 nodes, 10 on tree, 230 best solution, best possible 92.25259 (40.89 seconds)
+Cbc0010I After 8200 nodes, 3 on tree, 230 best solution, best possible 92.25259 (42.14 seconds)
+Cbc0010I After 8300 nodes, 7 on tree, 230 best solution, best possible 92.25259 (42.68 seconds)
+Cbc0010I After 8400 nodes, 13 on tree, 230 best solution, best possible 92.25259 (43.24 seconds)
+Cbc0010I After 8500 nodes, 10 on tree, 230 best solution, best possible 92.25259 (43.96 seconds)
+Cbc0010I After 8600 nodes, 4 on tree, 230 best solution, best possible 92.25259 (44.40 seconds)
+Cbc0010I After 8700 nodes, 4 on tree, 230 best solution, best possible 159.00556 (45.36 seconds)
+Cbc0001I Search completed - best objective 230, took 376003 iterations and 8756 nodes (45.55 seconds)
+Cbc0032I Strong branching done 22862 times (385847 iterations), fathomed 873 nodes and fixed 2002 variables
+Cbc0035I Maximum depth 42, 88216 variables fixed on reduced cost
+Cuts at root node changed objective from 46.32 to 69.9521
+Probing was tried 90 times and created 0 cuts of which 1 were active after adding rounds of cuts (0.201 seconds)
+Gomory was tried 90 times and created 1827 cuts of which 0 were active after adding rounds of cuts (0.710 seconds)
+Knapsack was tried 90 times and created 0 cuts of which 0 were active after adding rounds of cuts (0.043 seconds)
+Clique was tried 90 times and created 0 cuts of which 0 were active after adding rounds of cuts (0.012 seconds)
+MixedIntegerRounding2 was tried 90 times and created 5 cuts of which 0 were active after adding rounds of cuts (0.260 seconds)
+FlowCover was tried 90 times and created 0 cuts of which 0 were active after adding rounds of cuts (0.007 seconds)
+TwoMirCuts was tried 5438 times and created 558 cuts of which 0 were active after adding rounds of cuts (1.618 seconds)
+ZeroHalf was tried 1 times and created 0 cuts of which 0 were active after adding rounds of cuts (0.004 seconds)
+
+Result - Optimal solution found
+
+Objective value:                230.00000000
+Enumerated nodes:               8756
+Total iterations:               376003
+Time (CPU seconds):             45.59
+Time (Wallclock seconds):       46.08
+
+Total time (CPU seconds):       45.59   (Wallclock seconds):       46.08
+
+[2023-04-12T07:15:12Z INFO  he_vectorizer::circ::optimizer] extraction: 46077ms
+[2023-04-12T07:15:12Z INFO  he_vectorizer] circuit optimization: 46078ms
+[2023-04-12T07:15:12Z INFO  he_vectorizer] plaintext hoisting: 0ms
+[2023-04-12T07:15:12Z INFO  he_vectorizer] circuit lowering: 0ms
+[2023-04-12T07:15:12Z INFO  he_vectorizer] using pyseal backend for code generation
+[2023-04-12T07:15:12Z INFO  he_vectorizer] printed generated code to stdout
+def client_pre(wrapper):
+    wrapper.client_input("B")
+    v_B_1 = wrapper.build_vector("B", None, [0, 0], [FilledDim(0, 16, 1, 0, 0, 0, 0), EmptyDim(16, 0, 0, 0), FilledDim(1, 16, 1, 0, 0, 0, 0)])
+    wrapper.client_send("v_B_1", v_B_1)
+
+def client_post(wrapper):
+    __out = wrapper.client_recv("__out")
+    wrapper.client_output(__out)
+
+def server(wrapper):
+    wrapper.server_input("A1")
+    wrapper.server_input("A2")
+    v_A1_1 = wrapper.build_vector("A1", None, [0, 0], [FilledDim(1, 16, 1, 0, 0, 0, 0), FilledDim(0, 16, 1, 0, 0, 0, 0), EmptyDim(16, 0, 0, 0)])
+    v_A2_1 = wrapper.build_vector("A2", None, [0, 0], [FilledDim(0, 16, 1, 0, 0, 0, 0), FilledDim(1, 16, 1, 0, 0, 0, 0), EmptyDim(16, 0, 0, 0)])
+    v_B_1 = wrapper.server_recv("v_B_1")
+    const_neg1 = wrapper.const(-1)
+    wrapper.start_server_exec()
+    __partial_1 = wrapper.native_array([], 0)
+    instr1 = wrapper.rotate_rows_native(-2048, v_A1_1.get())
+    wrapper.set(__partial_1, [], instr1)
+    __partial_2 = wrapper.native_array([], 0)
+    instr3 = wrapper.rotate_rows_native(-128, v_A2_1.get())
+    wrapper.set(__partial_2, [], instr3)
+    wrapper.encode(v_A1_1, [])
+    wrapper.encode(v_A2_1, [])
+    wrapper.encode(const_neg1, [])
+    wrapper.encode(__partial_2, [])
+    wrapper.encode(__partial_1, [])
+    res = wrapper.ciphertext_array([], 0)
+    instr6 = wrapper.multiply_plain(v_B_1.get(), v_A1_1.get())
+    instr7 = wrapper.rotate_rows(-2048, v_B_1.get())
+    wrapper.multiply_plain_inplace(instr7, __partial_1.get())
+    wrapper.add_inplace(instr6, instr7)
+    instr11 = wrapper.rotate_rows(-1024, instr6)
+    wrapper.add_inplace(instr6, instr11)
+    instr13 = wrapper.rotate_rows(-512, instr6)
+    wrapper.add_inplace(instr13, instr6)
+    instr15 = wrapper.rotate_rows(-256, instr13)
+    wrapper.add_inplace(instr13, instr15)
+    wrapper.set(res, [], instr13)
+    __out = wrapper.ciphertext_array([], 0)
+    instr19 = wrapper.rotate_rows(-128, res.get())
+    wrapper.multiply_plain_inplace(instr19, __partial_2.get())
+    instr22 = wrapper.multiply_plain(res.get(), v_A2_1.get())
+    wrapper.add_inplace(instr19, instr22)
+    instr24 = wrapper.rotate_rows(-64, instr19)
+    wrapper.add_inplace(instr19, instr24)
+    instr26 = wrapper.rotate_rows(-32, instr19)
+    wrapper.add_inplace(instr19, instr26)
+    instr28 = wrapper.rotate_rows(-16, instr19)
+    wrapper.add_inplace(instr19, instr28)
+    wrapper.set(__out, [], instr19)
+    wrapper.end_server_exec()
+    wrapper.server_send("__out", __out)
+[2023-04-12T07:15:12Z INFO  he_vectorizer] code generation: 0ms
+[2023-04-12T07:15:12Z INFO  he_vectorizer] total compile time: 51836ms

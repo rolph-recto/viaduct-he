@@ -41,18 +41,18 @@ impl CostFeatures {
                 input_plaintexts: 0,
                 output_ciphertexts: 12,
                 pt_rotations: 1,
-                pt_pt_add: 0,
-                pt_pt_mul: 0,
-                pt_pt_sub: 0,
+                pt_pt_add: 1,
+                pt_pt_mul: 1,
+                pt_pt_sub: 1,
                 ct_rotations: 12,
-                ct_ct_add: 1,
-                ct_pt_add: 1,
+                ct_ct_add: 2,
+                ct_pt_add: 2,
                 ct_ct_mul: 12,
                 ct_pt_mul: 2,
-                ct_ct_sub: 1,
-                ct_pt_sub: 1,
+                ct_ct_sub: 2,
+                ct_pt_sub: 2,
                 ct_ct_muldepth: 12,
-                ct_pt_muldepth: 1
+                ct_pt_muldepth: 0
             }
 
         } else if vec_size == 8192 {
@@ -61,18 +61,18 @@ impl CostFeatures {
                 input_plaintexts: 0,
                 output_ciphertexts: 60,
                 pt_rotations: 1,
-                pt_pt_add: 0,
-                pt_pt_mul: 0,
-                pt_pt_sub: 0,
+                pt_pt_add: 1,
+                pt_pt_mul: 1,
+                pt_pt_sub: 1,
                 ct_rotations: 60,
-                ct_ct_add: 1,
-                ct_pt_add: 1,
+                ct_ct_add: 2,
+                ct_pt_add: 2,
                 ct_ct_mul: 60,
                 ct_pt_mul: 8,
-                ct_ct_sub: 1,
-                ct_pt_sub: 1,
+                ct_ct_sub: 2,
+                ct_pt_sub: 2,
                 ct_ct_muldepth: 60,
-                ct_pt_muldepth: 1
+                ct_pt_muldepth: 0
             }
             
         } else if vec_size == 16384 {
@@ -81,9 +81,9 @@ impl CostFeatures {
                 input_plaintexts: 0,
                 output_ciphertexts: 450,
                 pt_rotations: 1,
-                pt_pt_add: 0,
-                pt_pt_mul: 0,
-                pt_pt_sub: 0,
+                pt_pt_add: 1,
+                pt_pt_mul: 1,
+                pt_pt_sub: 1,
                 ct_rotations: 450,
                 ct_ct_add: 2,
                 ct_pt_add: 2,
@@ -92,7 +92,7 @@ impl CostFeatures {
                 ct_ct_sub: 2,
                 ct_pt_sub: 2,
                 ct_ct_muldepth: 450,
-                ct_pt_muldepth: 1
+                ct_pt_muldepth: 0
             }
 
         } else {
@@ -102,17 +102,17 @@ impl CostFeatures {
                 output_ciphertexts: 1,
                 ct_rotations: 10,
                 pt_rotations: 1,
-                ct_ct_add: 1,
-                ct_pt_add: 1,
-                pt_pt_add: 0,
+                pt_pt_add: 1,
+                pt_pt_mul: 1,
+                pt_pt_sub: 1,
+                ct_ct_add: 2,
+                ct_pt_add: 2,
                 ct_ct_mul: 10,
-                ct_pt_mul: 1,
-                pt_pt_mul: 0,
-                ct_ct_sub: 1,
-                ct_pt_sub: 1,
-                pt_pt_sub: 0,
+                ct_pt_mul: 3,
+                ct_ct_sub: 2,
+                ct_pt_sub: 2,
                 ct_ct_muldepth: 10,
-                ct_pt_muldepth: 1
+                ct_pt_muldepth: 0
             }
         }
     }

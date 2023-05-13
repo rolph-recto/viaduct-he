@@ -1,0 +1,9 @@
+bench,cfg,trials,exec_time,sterror,error_pct
+conv-simo,e2-o0,5,105.2,0.2,0.0
+conv-siso,e2-o0,5,37.2,0.2,0.01
+distance,e2-o0,5,17,0.0,0.0
+matmul-2,e2-o0,5,42,0.0,0.0
+retrieval-1024,e2-o0,5,1014.6,0.75,0.0
+retrieval-256,e2-o0,5,693.6,0.4,0.0
+set-union-16,e2-o0,5,1015.4,1.03,0.0
+

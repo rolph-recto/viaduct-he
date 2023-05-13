@@ -1,0 +1,30 @@
+{
+    "set-union-128": [
+        {
+            "name": "e1-o0",
+            "backend": "pyseal",
+            "size": 16384,
+            "epochs": 1,
+            "opt_duration": 0,
+            "node_limit": 500
+        },
+
+        {
+            "name": "e2-o0",
+            "backend": "pyseal",
+            "size": 16384,
+            "epochs": 2,
+            "opt_duration": 0,
+            "node_limit": 500
+        },
+
+        {
+            "name": "e2-o1",
+            "backend": "pyseal",
+            "size": 16384,
+            "epochs": 2,
+            "opt_duration": 60,
+            "node_limit": 500
+        }
+    ]
+}

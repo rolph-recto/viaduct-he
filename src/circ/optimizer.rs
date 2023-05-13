@@ -673,6 +673,7 @@ impl Optimizer {
         exprs: Vec<RecExpr<HEOptCircuit>>,
         context: HEOptimizerContext,
         timeout: usize,
+        node_limit: usize,
         extractor_type: ExtractorType,
         vec_size: usize,
     ) -> (Vec<RecExpr<HEOptCircuit>>, Vec<egg::Id>) {
@@ -687,7 +688,7 @@ impl Optimizer {
         // the given expression and runs the given rules over it
         let mut runner: Runner<HEOptCircuit, HEAnalysis> =
             Runner::new(HEAnalysis { context })
-            .with_node_limit(30000)
+            .with_node_limit(node_limit)
             .with_time_limit(Duration::from_secs(timeout as u64));
 
         for expr in exprs {

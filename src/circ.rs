@@ -82,15 +82,15 @@ impl Display for ParamCircuitExpr {
             }
 
             ParamCircuitExpr::Op(op, expr1, expr2) => {
-                write!(f, "({} {} {})", expr1, op, expr2)
+                write!(f, "(&{} {} &{})", expr1, op, expr2)
             }
 
             ParamCircuitExpr::Rotate(offset, expr) => {
-                write!(f, "rot({}, {})", offset, expr)
+                write!(f, "rot({}, &{})", offset, expr)
             }
 
             ParamCircuitExpr::ReduceDim(index, _, op, expr) => {
-                write!(f, "reduce({}, {}, {})", index, op, expr)
+                write!(f, "reduce({}, {}, &{})", index, op, expr)
             }
         }
     }
@@ -560,6 +560,33 @@ impl CircuitObjectRegistry {
         self.cur_circuit_id += 1;
         self.circuit_map.insert(id, circuit);
         id
+    }
+
+    pub fn clone_circuit(&mut self, id: CircuitId) -> CircuitId {
+        let expr = self.get_circuit(id).clone();
+        match expr {
+            ParamCircuitExpr::CiphertextVar(_) |
+            ParamCircuitExpr::PlaintextVar(_) |
+            ParamCircuitExpr::Literal(_) => {
+                self.register_circuit(expr)
+            },
+
+            ParamCircuitExpr::Op(op, expr1, expr2) => {
+                let new_expr1 = self.clone_circuit(expr1);
+                let new_expr2 = self.clone_circuit(expr2);
+                self.register_circuit(ParamCircuitExpr::Op(op, new_expr1, new_expr2))
+            }
+
+            ParamCircuitExpr::Rotate(offset, body) => {
+                let new_body = self.clone_circuit(body);
+                self.register_circuit(ParamCircuitExpr::Rotate(offset.clone(), new_body))
+            },
+            
+            ParamCircuitExpr::ReduceDim(dim, extent, op, body) => {
+                let new_body = self.clone_circuit(body);
+                self.register_circuit(ParamCircuitExpr::ReduceDim(dim.clone(), extent, op, new_body))
+            }
+        }
     }
 
     pub fn get_circuit(&self, id: CircuitId) -> &ParamCircuitExpr {

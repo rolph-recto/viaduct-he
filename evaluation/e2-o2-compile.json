@@ -1,0 +1,78 @@
+{
+    "conv-siso": [
+        {
+            "name": "e2-o1",
+            "backend": "pyseal",
+            "size": 4096,
+            "epochs": 2,
+            "opt_duration": 60,
+            "node_limit": 1000
+        }
+    ],
+
+    "conv-simo": [
+        {
+            "name": "e2-o1",
+            "backend": "pyseal",
+            "size": 4096,
+            "epochs": 2,
+            "opt_duration": 60,
+            "node_limit": 1000
+        }
+    ],
+
+    "distance": [
+        {
+            "name": "e2-o1",
+            "backend": "pyseal",
+            "size": 2048,
+            "epochs": 2,
+            "opt_duration": 60,
+            "node_limit": 1000
+        }
+    ],
+
+    "retrieval-256": [
+        {
+            "name": "e2-o1",
+            "backend": "pyseal",
+            "size": 8192,
+            "epochs": 2,
+            "opt_duration": 60,
+            "node_limit": 1000
+        }
+    ],
+
+    "retrieval-1024": [
+        {
+            "name": "e2-o1",
+            "backend": "pyseal",
+            "size": 8192,
+            "epochs": 2,
+            "opt_duration": 60,
+            "node_limit": 1000
+        }
+    ],
+
+    "matmul-2": [
+        {
+            "name": "e2-o1",
+            "backend": "pyseal",
+            "size": 4096,
+            "epochs": 2,
+            "opt_duration": 60,
+            "node_limit": 1000
+        }
+    ],
+
+    "set-union-16": [
+        {
+            "name": "e2-o1",
+            "backend": "pyseal",
+            "size": 8192,
+            "epochs": 2,
+            "opt_duration": 60,
+            "node_limit": 1000
+        }
+    ]
+}

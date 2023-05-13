@@ -105,9 +105,9 @@ impl<'t> InlineScheduler<'t> {
                             }
                         }
 
-                        // if let Err(ScheduleDerivationFailure::MaybeTransformableToValid) | Ok(()) = valid {
-                        self.frontier.insert(neighbor.clone());
-                        // }
+                        if let Err(ScheduleDerivationFailure::MaybeTransformableToValid) | Ok(()) = valid {
+                            self.frontier.insert(neighbor.clone());
+                        }
 
                         self.visited.insert(neighbor);
                     }
