@@ -107,10 +107,10 @@ i3 = rot -32 i2
 i4 = i2 + i3
 i5 = rot -16 i4
 i6 = i4 + i5
-res = i6
+v_res = i6
 
 var v_out
-i9 = v_A2 * res
+i9 = v_A2 * v_res
 i10 = rot -2 i9
 i11 = i9 + i10
 i12 = rot -1 i11
