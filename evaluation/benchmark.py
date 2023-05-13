@@ -13,24 +13,24 @@ import statistics
 import math
 import json
 
-compile_benchmarks = {
-    "distance": [
-        {
-            "name": "e1-o0",
-            "backend": "pyseal",
-            "size": 4096,
-            "epochs": 1,
-            "opt_duration": 0,
-        },
-        {
-            "name": "e2-o0",
-            "backend": "pyseal",
-            "size": 4096,
-            "epochs": 2,
-            "opt_duration": 0,
-        },
-    ]
-}
+# compile_benchmarks = {
+#     "distance": [
+#         {
+#             "name": "e1-o0",
+#             "backend": "pyseal",
+#             "size": 4096,
+#             "epochs": 1,
+#             "opt_duration": 0,
+#         },
+#         {
+#             "name": "e2-o0",
+#             "backend": "pyseal",
+#             "size": 4096,
+#             "epochs": 2,
+#             "opt_duration": 0,
+#         },
+#     ]
+# }
 
 # exec_benchmarks = {
 #     "conv": ["baseline"],

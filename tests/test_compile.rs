@@ -1,4 +1,4 @@
-use he_vectorizer::{
+use viaducthe::{
     lang::{
         parser::ProgramParser,
         elaborated::Elaborator,

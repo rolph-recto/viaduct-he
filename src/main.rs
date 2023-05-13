@@ -1,17 +1,17 @@
 extern crate lalrpop_util;
 
-use std::{fs::File, io::Write, time::{Duration, Instant}};
+use std::{fs::File, time::Instant};
 
 /// main.rs
 /// Vectorizer for homomorphic encryption circuits
 use clap::Parser;
 use log::*;
 
-use he_vectorizer::{
+use viaducthe::{
     circ::{
         optimizer::{ExtractorType, Optimizer},
         materializer::{DefaultMaterializerFactory, MaterializerFactory},
-        plaintext_hoisting::PlaintextHoisting, cost::CostFeatures, pseudomaterializer::DefaultPseudoMaterializerFactory,
+        plaintext_hoisting::PlaintextHoisting, cost::CostFeatures,
     },
     lang::{
         index_elim::{IndexElimination, InlinedProgram},

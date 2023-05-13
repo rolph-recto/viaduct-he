@@ -247,12 +247,10 @@ dependencies = [
  "indexmap",
  "instant",
  "log",
- "serde",
  "smallvec",
  "symbol_table",
  "symbolic_expressions",
  "thiserror",
- "vectorize",
 ]
 
 [[package]]
@@ -368,35 +366,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db0d4cf898abf0081f964436dc980e96670a0f36863e4b83aaacdb65c9d7ccc3"
 dependencies = [
  "ahash",
- "serde",
-]
-
-[[package]]
-name = "he_vectorizer"
-version = "0.1.0"
-dependencies = [
- "bimap",
- "clap",
- "coin_cbc",
- "disjoint-sets",
- "egg",
- "env_logger",
- "gcollections",
- "good_lp",
- "handlebars",
- "im",
- "indexmap",
- "intervallum",
- "itertools 0.9.0",
- "lalrpop",
- "lalrpop-util",
- "log",
- "pretty",
- "priority-queue",
- "rand",
- "regex",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -429,7 +398,6 @@ dependencies = [
  "bitmaps",
  "rand_core",
  "rand_xoshiro",
- "serde",
  "sized-chunks",
  "typenum",
  "version_check",
@@ -443,7 +411,6 @@ checksum = "1885e79c1fc4b10f0e172c475f458b7f7b93061064d98c3293e98c5ba0c8b399"
 dependencies = [
  "autocfg",
  "hashbrown",
- "serde",
 ]
 
 [[package]]
@@ -950,7 +917,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9a870ced3953e40e68e922897faf8e43b4c507065c236e4d921b8c0aa0c67d68"
 dependencies = [
  "hashbrown",
- "serde",
 ]
 
 [[package]]
@@ -1068,19 +1034,37 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f962df74c8c05a667b5ee8bcf162993134c104e96440b663c8daa176dc772d8c"
 
 [[package]]
-name = "vectorize"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25e3bbfdfdcc4ea60ce183b1b45c936aacd69fe097ebf137984a32faf80e365b"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "version_check"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
+
+[[package]]
+name = "viaducthe"
+version = "0.1.0"
+dependencies = [
+ "bimap",
+ "clap",
+ "coin_cbc",
+ "disjoint-sets",
+ "egg",
+ "env_logger",
+ "gcollections",
+ "good_lp",
+ "handlebars",
+ "im",
+ "indexmap",
+ "intervallum",
+ "itertools 0.9.0",
+ "lalrpop",
+ "lalrpop-util",
+ "log",
+ "pretty",
+ "priority-queue",
+ "rand",
+ "regex",
+ "serde",
+]
 
 [[package]]
 name = "wasi"

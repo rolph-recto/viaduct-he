@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use he_vectorizer::lang::parser::ProgramParser;
+    use viaducthe::lang::parser::ProgramParser;
 
     #[test]
     fn test_parse_positive() {
