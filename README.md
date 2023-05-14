@@ -93,7 +93,7 @@ The result of the computation is stored in the `v_out` ciphertext, which is
 sent back to the client.
 
 ```
-// the vector() operation defines directives to pack array elements into a ciphertext
+// the vector() operation defines array elements are packed into a ciphertext
 val v_A2 = vector(A2[0, 0]<{0:4::1}, {4}, {1:4::1}>)
 val v_A1 = vector(A1[0, 0]<{1:4::1}, {4}, {0:4::1}>)
 val v_B = vector(B[0, 0]<{0:4::1}, {1:4::1}, {4}>)
